@@ -1,1 +1,9 @@
+# Private Instructions & Agent Skills
 ai_instructions.md
+.agents/
+
+# Private Documents
+Document/
+
+# OS metadata
+.DS_Store
