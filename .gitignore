@@ -5,5 +5,9 @@ ai_instructions.md
 # Private Documents
 Document/
 
+# Local Firestore Rules test dependencies
+node_modules/
+firestore-debug.log
+
 # OS metadata
 .DS_Store
