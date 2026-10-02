@@ -88,9 +88,21 @@ final class FirestoreService: FirestoreServiceProtocol {
     /// Tạo thông tin UserProfile mới trong collection "users"
     func createUserProfile(_ profile: UserProfile) async throws {
         let encoded = try Firestore.Encoder().encode(profile)
-        try await db.collection(Constants.FirestoreCollections.users)
-            .document(profile.id)
-            .setData(encoded)
+        let reference = db.collection(Constants.FirestoreCollections.users).document(profile.id)
+        _ = try await db.runTransaction { transaction, errorPointer -> Any? in
+            do {
+                let document = try transaction.getDocument(reference)
+                guard !document.exists else {
+                    errorPointer?.pointee = NSError(domain: "ReShare.Profile", code: 409, userInfo: [NSLocalizedDescriptionKey: "Hồ sơ đã tồn tại."])
+                    return nil
+                }
+                transaction.setData(encoded, forDocument: reference)
+                return true
+            } catch {
+                errorPointer?.pointee = error as NSError
+                return nil
+            }
+        }
     }
 
     /// Lấy thông tin UserProfile theo UID từ Firestore (Bảo vệ không tạo đè nếu lỗi mạng)
@@ -135,10 +147,28 @@ final class FirestoreService: FirestoreServiceProtocol {
     }
 
     func updateUserProfile(userId: String, displayName: String, phoneNumber: String) async throws -> UserProfile {
-        try await db.collection(Constants.FirestoreCollections.users)
-            .document(userId)
-            .updateData(["displayName": displayName, "phoneNumber": phoneNumber])
-        return try await fetchUserProfile(userId: userId)
+        let reference = db.collection(Constants.FirestoreCollections.users).document(userId)
+        let result = try await db.runTransaction { transaction, errorPointer -> Any? in
+            do {
+                let document = try transaction.getDocument(reference)
+                guard document.exists else {
+                    errorPointer?.pointee = NSError(domain: "ReShare.Profile", code: 404, userInfo: [NSLocalizedDescriptionKey: "Hồ sơ người dùng không tồn tại."])
+                    return nil
+                }
+                var profile = try document.data(as: UserProfile.self)
+                profile.displayName = displayName
+                profile.phoneNumber = phoneNumber
+                transaction.updateData(["displayName": displayName, "phoneNumber": phoneNumber], forDocument: reference)
+                return profile
+            } catch {
+                errorPointer?.pointee = error as NSError
+                return nil
+            }
+        }
+        guard let profile = result as? UserProfile else {
+            throw NSError(domain: "ReShare.Profile", code: 500, userInfo: [NSLocalizedDescriptionKey: "Không thể xác nhận hồ sơ đã lưu."])
+        }
+        return profile
     }
 
     // MARK: - Donation Operations (Kênh 2)
