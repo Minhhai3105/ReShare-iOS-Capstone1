@@ -77,8 +77,11 @@ test('private donation image requires donor or system admin plus attached intent
   const publicId = (await call('/v1/images/upload-intents', 'donor', { purpose: 'donation', recordId: donationId, clientImageId })).body.publicId;
   documents.set(`donations/${donationId}`, { donorId: 'donor', imageProvider: 'cloudinary', imagePublicIds: [publicId] });
   const request = { donationId, publicId };
+  documents.set('staff_assignments/admin', { uid: 'admin', role: 'system_admin', active: true, warehouseIds: [] });
   await assert.rejects(call('/v1/images/read-access', 'other', request), { status: 403 });
   await assert.rejects(call('/v1/images/read-access', 'warehouse', request), { status: 403 });
   assert.match((await call('/v1/images/read-access', 'donor', request)).body.url, /^https:/);
   assert.match((await call('/v1/images/read-access', 'admin', request)).body.url, /^https:/);
+  documents.set('staff_assignments/admin', { uid: 'admin', role: 'system_admin', active: false, warehouseIds: [] });
+  await assert.rejects(call('/v1/images/read-access', 'admin', request), { status: 403 });
 });

@@ -139,7 +139,14 @@ test('donor owns pending donation; warehouse admin is blocked until warehouse sc
     const donor = env.authenticatedContext('donor').firestore();
     const warehouse = env.authenticatedContext('warehouse', { role: 'warehouse_admin' }).firestore();
     const admin = env.authenticatedContext('admin', { role: 'system_admin' }).firestore();
+    const staleAdmin = env.authenticatedContext('stale-admin', { role: 'system_admin' }).firestore();
     const donation = { id: 'donation-test', donorId: 'donor', status: 'pending', createdAt: new Date() };
+
+    await env.withSecurityRulesDisabled(async context => {
+      await context.firestore().doc('staff_assignments/admin').set({
+        uid: 'admin', role: 'system_admin', active: true, warehouseIds: []
+      });
+    });
 
     await assertSucceeds(donor.runTransaction(async (transaction) => {
       const reference = donor.doc('donations/donation-test');
@@ -156,9 +163,14 @@ test('donor owns pending donation; warehouse admin is blocked until warehouse sc
     await assertFails(donor.doc('donations/invalid-status').set({ ...donation, id: 'invalid-status', status: 'approved' }));
     await assertFails(warehouse.doc('donations/donation-test').get());
     await assertFails(warehouse.doc('donations/donation-test').update({ status: 'approved' }));
+    await assertFails(staleAdmin.doc('donations/donation-test').get());
     await assertSucceeds(admin.doc('donations/donation-test').get());
     await assertSucceeds(admin.doc('donations/donation-test').update({ status: 'approved' }));
     await assertFails(admin.doc('donations/donation-test').delete());
+    await env.withSecurityRulesDisabled(async context => {
+      await context.firestore().doc('staff_assignments/admin').update({ active: false });
+    });
+    await assertFails(admin.doc('donations/donation-test').get());
   } finally {
     await env.cleanup();
   }

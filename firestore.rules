@@ -1,6 +1,46 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function activeStaffWithRole(role) {
+      let path = /databases/$(database)/documents/staff_assignments/$(request.auth.uid);
+      return request.auth != null
+        && exists(path)
+        && get(path).data.get('active', false) == true
+        && get(path).data.get('role', null) == role;
+    }
+
+    function isSystemAdmin() {
+      return activeStaffWithRole('system_admin');
+    }
+
+    function canReadWarehouse(warehouseId) {
+      let path = /databases/$(database)/documents/staff_assignments/$(request.auth.uid);
+      return isSystemAdmin() || (
+        activeStaffWithRole('warehouse_admin')
+        && get(path).data.get('warehouseIds', []) is list
+        && warehouseId in get(path).data.warehouseIds
+      );
+    }
+
+    // Quyền nhân sự chỉ do Admin SDK ghi; client được đọc để dựng UI, không tự cấp quyền.
+    match /staff_assignments/{staffId} {
+      allow get: if request.auth != null && (request.auth.uid == staffId || isSystemAdmin());
+      allow list: if isSystemAdmin();
+      allow write: if false;
+    }
+
+    match /staff_assignment_audit/{eventId} {
+      allow read: if isSystemAdmin();
+      allow write: if false;
+    }
+
+    // Nhân viên kho chỉ được lấy từng kho được gán; truy vấn toàn bộ dành cho System Admin.
+    match /warehouses/{warehouseId} {
+      allow get: if request.auth != null && canReadWarehouse(warehouseId);
+      allow list: if isSystemAdmin();
+      allow write: if false;
+    }
+
     function validCloudinaryImages(purpose, recordId) {
       let ids = request.resource.data.get('imagePublicIds', null);
       let provider = request.resource.data.get('imageProvider', null);
@@ -321,25 +361,25 @@ service cloud.firestore {
       allow get: if request.auth != null && (
         resource == null ||
         resource.data.donorId == request.auth.uid ||
-        request.auth.token.role == 'system_admin'
+        isSystemAdmin()
       );
       allow list: if request.auth != null && (
         resource.data.donorId == request.auth.uid ||
-        request.auth.token.role == 'system_admin'
+        isSystemAdmin()
       );
       allow create: if request.auth != null
         && request.resource.data.id == donationId
         && request.resource.data.donorId == request.auth.uid
         && request.resource.data.status == 'pending'
         && validCloudinaryImages('donation', donationId);
-      allow update: if request.auth != null && request.auth.token.role == 'system_admin';
+      allow update: if request.auth != null && isSystemAdmin();
       allow delete: if false;
     }
 
     // 5. Campaigns & Hubs (Chiến dịch & Trạm tiếp nhận - Công khai để xem)
     match /campaigns/{campaignId} {
       allow read: if true;
-      allow write: if request.auth != null && request.auth.token.role in ['warehouse_admin', 'system_admin'];
+      allow write: if request.auth != null && isSystemAdmin();
     }
 
     match /hubs/{hubId} {
