@@ -10,7 +10,7 @@ struct ContentView: View {
             if appState.isRestoringSession {
                 ProgressView("Đang kiểm tra tài khoản...")
             } else if appState.isAuthenticated {
-                UserProfileView()
+                MainTabView()
             } else if !hasSeenOnboarding {
                 OnboardingView { hasSeenOnboarding = true }
             } else {

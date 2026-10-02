@@ -2,6 +2,15 @@ import SwiftUI
 import Combine
 import FirebaseAuth
 import FirebaseCore
+import FirebaseFirestore
+
+struct InAppMessageNotification: Identifiable, Equatable {
+    let id: String = UUID().uuidString
+    let senderName: String
+    let itemTitle: String
+    let messageText: String
+    let chatId: String
+}
 
 /// Quản lý Global State (Trạng thái toàn cục) của ứng dụng ReShare
 /// Chịu trách nhiệm:
@@ -13,13 +22,27 @@ final class AppState: ObservableObject {
     @Published var isAuthenticated: Bool = false
 
     /// User ID của người dùng hiện tại (nếu đã đăng nhập)
-    @Published var currentUserId: String? = nil
+    @Published var currentUserId: String? = nil {
+        didSet {
+            if let userId = currentUserId, !userId.isEmpty {
+                startConversationsObservation(for: userId)
+            } else {
+                conversationsListener?.remove()
+                conversationsListener = nil
+            }
+        }
+    }
     @Published var currentUserProfile: UserProfile? = nil
     @Published var isRestoringSession: Bool = true
     @Published var sessionError: String? = nil
+    @Published var unreadMessagesCount: Int = 0
+    @Published var activeInAppNotification: InAppMessageNotification? = nil
 
     private var hasRestoredSession = false
     private var authStateListener: AuthStateDidChangeListenerHandle?
+    private var conversationsListener: ListenerRegistration?
+    private var knownMessageTimestamps: [String: Date] = [:]
+    private var hasInitializedConversations = false
 
     // Firebase Auth listener được đăng ký khi khôi phục phiên để nhận biết phiên bị thu hồi khi app đang mở.
 
@@ -115,6 +138,36 @@ final class AppState: ObservableObject {
         )
     }
 
+    private func startConversationsObservation(for userId: String) {
+        conversationsListener?.remove()
+        knownMessageTimestamps.removeAll()
+        hasInitializedConversations = false
+        conversationsListener = FirestoreService.shared.observeUserConversations(userId: userId) { [weak self] conversations in
+            Task { @MainActor [weak self] in
+                guard let self, self.currentUserId == userId else { return }
+                self.unreadMessagesCount = conversations.filter { $0.hasUnread(for: userId) }.count
+                for conversation in conversations {
+                    let previousTime = self.knownMessageTimestamps[conversation.id]
+                    let hasNewMessage = previousTime.map { conversation.lastMessageTime > $0 } ?? true
+                    if self.hasInitializedConversations,
+                       conversation.lastSenderId != userId,
+                       !conversation.lastSenderId.isEmpty,
+                       !conversation.lastMessage.isEmpty,
+                       hasNewMessage {
+                        self.activeInAppNotification = InAppMessageNotification(
+                            senderName: conversation.partnerName(currentUserId: userId),
+                            itemTitle: conversation.itemTitle,
+                            messageText: conversation.lastMessage,
+                            chatId: conversation.id
+                        )
+                    }
+                    self.knownMessageTimestamps[conversation.id] = conversation.lastMessageTime
+                }
+                self.hasInitializedConversations = true
+            }
+        }
+    }
+
     /// Đăng xuất và dọn dẹp state
     func logout() throws {
         try AuthService.shared.signOut()
@@ -126,5 +179,9 @@ final class AppState: ObservableObject {
         currentUserId = nil
         currentUserProfile = nil
         sessionError = message
+        unreadMessagesCount = 0
+        activeInAppNotification = nil
+        knownMessageTimestamps.removeAll()
+        hasInitializedConversations = false
     }
 }
