@@ -1,4 +1,5 @@
 import SwiftUI
+import FirebaseFirestore
 
 struct UserProfileView: View {
     @EnvironmentObject private var appState: AppState
@@ -69,7 +70,13 @@ struct UserProfileView: View {
                 try await appState.updateProfile(displayName: name, phoneNumber: phone)
                 successMessage = "Đã lưu hồ sơ."
             } catch {
-                errorMessage = "Không thể lưu hồ sơ. Vui lòng thử lại."
+                let nsError = error as NSError
+                if nsError.domain == FirestoreErrorDomain,
+                   [FirestoreErrorCode.unavailable.rawValue, FirestoreErrorCode.deadlineExceeded.rawValue].contains(nsError.code) {
+                    errorMessage = "Không có kết nối mạng. Hồ sơ chưa được lưu; vui lòng thử lại khi có mạng."
+                } else {
+                    errorMessage = "Không thể lưu hồ sơ. Vui lòng thử lại."
+                }
             }
         }
     }
