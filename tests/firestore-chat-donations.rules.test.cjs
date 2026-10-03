@@ -16,7 +16,12 @@ test('Cloudinary record requires three distinct image IDs from a server-owned ba
     const recordId = '6d4a2909-bb7f-459d-bbcd-2117d96ff7e1';
     const ids = [1, 2, 3].map(number => `donations/${recordId}/00000000-0000-4000-8000-00000000000${number}`);
     const donor = env.authenticatedContext('donor').firestore();
-    const donation = { id: recordId, donorId: 'donor', status: 'pending', imageProvider: 'cloudinary', imagePublicIds: ids };
+    const donation = {
+      id: recordId, donorId: 'donor', title: 'Sách giáo khoa', description: 'Còn sử dụng tốt',
+      category: 'books', condition: 'good', status: 'pending', createdAt: new Date(),
+      imageProvider: 'cloudinary', imagePublicIds: ids,
+    };
+    await assertFails(donor.doc(`donations/${recordId}`).set({ ...donation, imageProvider: null, imagePublicIds: null }));
     await assertFails(donor.doc(`donations/${recordId}`).set(donation));
     await env.withSecurityRulesDisabled(async context => {
       await context.firestore().doc(`image_upload_batches/donation_${recordId}`).set({
@@ -25,7 +30,9 @@ test('Cloudinary record requires three distinct image IDs from a server-owned ba
     });
     await assertFails(donor.doc(`donations/${recordId}`).set({ ...donation, imagePublicIds: ids.slice(0, 2) }));
     await assertFails(donor.doc(`donations/${recordId}`).set({ ...donation, imagePublicIds: [ids[0], ids[0], ids[1]] }));
+    await assertFails(donor.doc(`donations/${recordId}`).set({ ...donation, category: 'other' }));
     await assertSucceeds(donor.doc(`donations/${recordId}`).set(donation));
+    await assertFails(donor.doc(`donations/${recordId}`).set(donation));
 
     const catalogId = `cat_${recordId}`;
     const catalogIds = [1, 2, 3].map(number => `catalog_items/${catalogId}/10000000-0000-4000-8000-00000000000${number}`);
@@ -140,37 +147,58 @@ test('donor owns pending donation; warehouse admin is blocked until warehouse sc
     const warehouse = env.authenticatedContext('warehouse', { role: 'warehouse_admin' }).firestore();
     const admin = env.authenticatedContext('admin', { role: 'system_admin' }).firestore();
     const staleAdmin = env.authenticatedContext('stale-admin', { role: 'system_admin' }).firestore();
-    const donation = { id: 'donation-test', donorId: 'donor', status: 'pending', createdAt: new Date() };
+    const recordId = '6d4a2909-bb7f-459d-bbcd-2117d96ff7e1';
+    const ids = [1, 2, 3].map(number => `donations/${recordId}/00000000-0000-4000-8000-00000000000${number}`);
+    const donation = {
+      id: recordId, donorId: 'donor', title: 'Áo ấm', description: 'Đơn thử nghiệm',
+      category: 'clothing', condition: 'good', status: 'pending', createdAt: new Date(),
+      imageProvider: 'cloudinary', imagePublicIds: ids,
+    };
 
     await env.withSecurityRulesDisabled(async context => {
-      await context.firestore().doc('staff_assignments/admin').set({
+      const db = context.firestore();
+      await db.doc('staff_assignments/admin').set({
         uid: 'admin', role: 'system_admin', active: true, warehouseIds: []
+      });
+      await db.doc(`image_upload_batches/donation_${recordId}`).set({
+        ownerUid: 'donor', assets: { first: ids[0], second: ids[1], third: ids[2] },
       });
     });
 
     await assertSucceeds(donor.runTransaction(async (transaction) => {
-      const reference = donor.doc('donations/donation-test');
+      const reference = donor.doc(`donations/${recordId}`);
       const existing = await transaction.get(reference);
       if (!existing.exists) transaction.set(reference, donation);
     }));
     await assertSucceeds(donor.runTransaction(async (transaction) => {
-      const reference = donor.doc('donations/donation-test');
+      const reference = donor.doc(`donations/${recordId}`);
       const existing = await transaction.get(reference);
       if (!existing.exists) transaction.set(reference, donation);
     }));
-    await assertSucceeds(donor.doc('donations/donation-test').get());
+    await assertFails(env.authenticatedContext('other').firestore().doc('donations/other-record').set({
+      ...donation, id: 'other-record',
+    }));
+    await assertFails(env.authenticatedContext('other').firestore().doc(`donations/${recordId}`).get());
+    await assertSucceeds(donor.doc(`donations/${recordId}`).get());
     await assertSucceeds(donor.collection('donations').where('donorId', '==', 'donor').orderBy('createdAt', 'desc').get());
     await assertFails(donor.doc('donations/invalid-status').set({ ...donation, id: 'invalid-status', status: 'approved' }));
-    await assertFails(warehouse.doc('donations/donation-test').get());
-    await assertFails(warehouse.doc('donations/donation-test').update({ status: 'approved' }));
-    await assertFails(staleAdmin.doc('donations/donation-test').get());
-    await assertSucceeds(admin.doc('donations/donation-test').get());
-    await assertSucceeds(admin.doc('donations/donation-test').update({ status: 'approved' }));
-    await assertFails(admin.doc('donations/donation-test').delete());
+    await assertFails(warehouse.doc(`donations/${recordId}`).get());
+    await assertFails(warehouse.doc(`donations/${recordId}`).update({ status: 'approved' }));
+    await assertFails(staleAdmin.doc(`donations/${recordId}`).get());
+    await assertSucceeds(admin.doc(`donations/${recordId}`).get());
+    await assertSucceeds(admin.doc(`donations/${recordId}`).update({ status: 'approved' }));
+    await assertSucceeds(donor.runTransaction(async transaction => {
+      const reference = donor.doc(`donations/${recordId}`);
+      const existing = await transaction.get(reference);
+      if (!existing.exists) transaction.set(reference, donation);
+    }));
+    const afterRetry = await donor.doc(`donations/${recordId}`).get();
+    if (afterRetry.data().status !== 'approved') throw new Error('Retry overwrote the existing donation');
+    await assertFails(admin.doc(`donations/${recordId}`).delete());
     await env.withSecurityRulesDisabled(async context => {
       await context.firestore().doc('staff_assignments/admin').update({ active: false });
     });
-    await assertFails(admin.doc('donations/donation-test').get());
+    await assertFails(admin.doc(`donations/${recordId}`).get());
   } finally {
     await env.cleanup();
   }
