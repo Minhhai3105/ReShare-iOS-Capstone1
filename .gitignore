@@ -7,3 +7,14 @@ Document/
 
 # OS metadata
 .DS_Store
+
+# Local Firebase Rules test dependencies
+node_modules/
+firestore-debug.log
+
+# Image API credentials and installed packages
+backend/.env
+backend/.env.*
+!backend/.env.example
+backend/node_modules/
+backend/*service-account*.json
