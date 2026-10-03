@@ -1,0 +1,46 @@
+{
+  "metadata": {
+    "story": "US04 — Chuẩn bị dataset có thể tái lập",
+    "generated_at": "2026-10-02T15:11:07.052120",
+    "random_seed": 42,
+    "total_unique_images": 150,
+    "duplicate_images_removed": 0,
+    "classes": [
+      "books",
+      "clothing",
+      "household_items"
+    ],
+    "splits": [
+      "train",
+      "val",
+      "test"
+    ]
+  },
+  "distribution_matrix": {
+    "books": {
+      "train": 35,
+      "val": 8,
+      "test": 7
+    },
+    "clothing": {
+      "train": 35,
+      "val": 8,
+      "test": 7
+    },
+    "household_items": {
+      "train": 35,
+      "val": 8,
+      "test": 7
+    }
+  },
+  "split_totals": {
+    "train": 105,
+    "val": 24,
+    "test": 21
+  },
+  "class_totals": {
+    "books": 50,
+    "clothing": 50,
+    "household_items": 50
+  }
+}
