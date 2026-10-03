@@ -2,9 +2,9 @@
 import { computed, ref } from 'vue'
 import AuthShell from '../components/AuthShell.vue'
 import AuthIcon from '../components/AuthIcon.vue'
-import logoUrl from '../assets/reshare-logo.svg'
+import logoUrl from '../assets/reshare-logo.png'
 import { isAdminEmail, requestPasswordReset } from '../auth.service'
-import { ADMIN_EMAIL_DOMAIN, ADMIN_ROUTE, AUTH_ERROR, RESET_LINK_TTL_MINUTES } from '../auth.constants'
+import { ADMIN_ROUTE, AUTH_ERROR } from '../auth.constants'
 
 const email = ref('')
 const emailError = ref('')
@@ -17,7 +17,7 @@ const isEmailValid = computed(() => isAdminEmail(email.value.trim()))
 
 function onEmailBlur() {
   const value = email.value.trim()
-  emailError.value = !value || isAdminEmail(value) ? '' : `Vui lòng dùng email nội bộ ${ADMIN_EMAIL_DOMAIN}.`
+  emailError.value = !value || isAdminEmail(value) ? '' : 'Vui lòng nhập địa chỉ email hợp lệ.'
 }
 
 async function sendResetLink(targetEmail) {
@@ -31,7 +31,7 @@ async function sendResetLink(targetEmail) {
   } catch (error) {
     requestError.value =
       error.status === AUTH_ERROR.network
-        ? 'Không thể kết nối máy chủ. Kiểm tra mạng nội bộ (VPN / Wifi) và thử lại.'
+        ? 'Không thể kết nối dịch vụ xác thực. Kiểm tra mạng và thử lại.'
         : 'Máy chủ đang gặp sự cố, chưa gửi được liên kết. Vui lòng thử lại sau ít phút.'
   } finally {
     isSending.value = false
@@ -47,7 +47,7 @@ function onSubmit() {
 <template>
   <AuthShell :show-server-status="false">
     <div class="forgot-password">
-      <span class="auth-chip auth-mono"><span class="auth-dot" />Cổng kết nối nội bộ mã hóa v2.4.0-prod</span>
+      <span class="auth-chip auth-mono"><span class="auth-dot" />Cổng quản trị ReShare</span>
 
       <section class="forgot-password__card auth-card auth-card--accent-top" aria-labelledby="forgot-password-title">
         <div class="forgot-password__body">
@@ -64,8 +64,8 @@ function onSubmit() {
             <div class="forgot-password__heading">
               <h1 id="forgot-password-title">Đã gửi liên kết đặt lại</h1>
               <p>
-                Nếu <strong class="auth-mono">{{ sentEmail }}</strong> thuộc tài khoản quản trị, liên kết đặt lại mật khẩu
-                đã được gửi tới hộp thư này lúc {{ sentAt }}.
+                Nếu <strong class="auth-mono">{{ sentEmail }}</strong> có tài khoản Firebase, hãy kiểm tra hộp thư này.
+                Yêu cầu được gửi lúc {{ sentAt }}.
               </p>
             </div>
 
@@ -74,8 +74,7 @@ function onSubmit() {
               <div>
                 <p class="auth-note__title">Kiểm tra hộp thư</p>
                 <p>
-                  Mở thư mục <strong>Inbox</strong> và cả <strong>Spam</strong>. Liên kết có hiệu lực trong
-                  <strong>{{ RESET_LINK_TTL_MINUTES }} phút</strong> và chỉ dùng được một lần.
+                  Mở thư mục <strong>Inbox</strong> và cả <strong>Spam</strong>. Hãy làm theo thời hạn ghi trong email đặt lại mật khẩu.
                 </p>
               </div>
             </div>
@@ -101,8 +100,7 @@ function onSubmit() {
               <div>
                 <p class="auth-note__title">Lưu ý bảo mật</p>
                 <p>
-                  Liên kết đặt lại mật khẩu chỉ gửi đến email nhân sự đã được cấp quyền quản trị và có hiệu lực trong thời
-                  gian giới hạn.
+                  Chỉ tài khoản Firebase đã đăng ký mới có thể đặt lại mật khẩu. Quyền quản trị được kiểm tra riêng sau khi đăng nhập.
                 </p>
               </div>
             </div>
@@ -114,7 +112,7 @@ function onSubmit() {
                     <label for="reset-email" class="auth-field__label">
                       Email công vụ <span class="auth-field__required">*</span>
                     </label>
-                    <span class="auth-field__hint auth-mono">{{ ADMIN_EMAIL_DOMAIN }}</span>
+                    <span class="auth-field__hint">Email tài khoản</span>
                   </div>
                   <div class="auth-input" :class="{ 'is-invalid': emailError }">
                     <AuthIcon name="mail" />
@@ -133,7 +131,7 @@ function onSubmit() {
                     <AuthIcon name="alert-triangle" :size="16" />{{ emailError }}
                   </p>
                   <p v-else id="reset-email-message" class="auth-field__message auth-field__message--muted">
-                    Sử dụng hòm thư công vụ do bộ phận IT cấp phát
+                    Nhập email bạn dùng để đăng nhập ReShare
                   </p>
                 </div>
 
@@ -163,7 +161,7 @@ function onSubmit() {
       </section>
 
       <p class="forgot-password__security">
-        <AuthIcon name="lock" :size="16" />Phiên bảo mật: SSL 256-bit End-to-End Encryption
+        <AuthIcon name="lock" :size="16" />Yêu cầu đặt lại mật khẩu qua Firebase Authentication
       </p>
     </div>
   </AuthShell>

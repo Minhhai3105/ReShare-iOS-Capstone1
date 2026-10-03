@@ -1,7 +1,6 @@
 <script setup>
 import AuthIcon from './AuthIcon.vue'
-import logoUrl from '../assets/reshare-logo.svg'
-import { SUPPORT_EMAIL } from '../auth.constants'
+import logoUrl from '../assets/reshare-logo.png'
 
 defineProps({ showServerStatus: { type: Boolean, default: true } })
 
@@ -23,12 +22,10 @@ const currentYear = new Date().getFullYear()
         </span>
       </div>
       <div class="auth-shell__meta">
-        <span class="auth-shell__tls"><AuthIcon name="shield-check" :size="16" />Hệ thống bảo mật TLS 1.3</span>
+        <span class="auth-shell__tls"><AuthIcon name="shield-check" :size="16" />Truy cập theo vai trò được cấp</span>
         <span class="auth-shell__contact">
-          <AuthIcon name="headset" :size="16" />Hỗ trợ kỹ thuật:
-          <a class="auth-mono" :href="`mailto:${SUPPORT_EMAIL}`">{{ SUPPORT_EMAIL }}</a>
+          <AuthIcon name="headset" :size="16" />Liên hệ người quản trị hệ thống để được hỗ trợ
         </span>
-        <span class="auth-shell__contact auth-shell__hotline">Hotline nội bộ: <span class="auth-mono">1900 6868</span></span>
       </div>
     </header>
 
@@ -39,7 +36,7 @@ const currentYear = new Date().getFullYear()
     <footer class="auth-shell__footer">
       <span>© {{ currentYear }} ReShare Operations System. Cổng thông tin nội bộ dành riêng cho nhân sự được phân quyền.</span>
       <span v-if="showServerStatus" class="auth-shell__server">
-        <span class="auth-dot" />Hệ thống máy chủ: VN-SGN-01 (Ổn định)
+        <span class="auth-dot" />Xác thực qua Firebase Authentication
       </span>
     </footer>
   </div>

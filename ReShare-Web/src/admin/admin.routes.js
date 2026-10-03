@@ -1,18 +1,13 @@
-import { ADMIN_ROLES, ADMIN_ROUTE, FORBIDDEN_REASON, SESSION_EXPIRED_REASON } from './auth/auth.constants'
+import { ADMIN_ROLES, ADMIN_ROUTE, FORBIDDEN_REASON } from './auth/auth.constants'
 import {
   canAccessWarehouse,
   currentUser,
   getAccessDeniedReason,
   isAuthenticated,
-  isSessionExpired,
   restoreSession,
   setAccessChangedHandler,
-  setSessionExpiredHandler,
-  signOut,
   staffAssignment,
 } from './auth/auth.store'
-
-const SESSION_EXPIRED_LOCATION = { name: ADMIN_ROUTE.login, query: { reason: SESSION_EXPIRED_REASON } }
 
 export const adminRoutes = [
   { path: '/admin/login', name: ADMIN_ROUTE.login, component: () => import('./auth/views/AdminLogin.vue') },
@@ -51,10 +46,6 @@ export async function adminAuthGuard(to) {
   }
   if (!to.meta.requiresAuth) return true
   if (!currentUser.value) return { name: ADMIN_ROUTE.login, query: { redirect: to.fullPath } }
-  if (isSessionExpired()) {
-    signOut()
-    return SESSION_EXPIRED_LOCATION
-  }
   if (to.name === ADMIN_ROUTE.forbidden) return true
 
   const deniedReason = getAccessDeniedReason() ?? getRouteDeniedReason(to)
@@ -62,9 +53,6 @@ export async function adminAuthGuard(to) {
 }
 
 export function installAdminAuth(router) {
-  setSessionExpiredHandler(() => {
-    if (router.currentRoute.value.meta.requiresAuth) router.replace(SESSION_EXPIRED_LOCATION)
-  })
   // AC3: phân công đổi → kiểm tra lại trang đang mở theo quyền mới.
   setAccessChangedHandler(async () => {
     const route = router.currentRoute.value

@@ -1,27 +1,61 @@
 import { computed, reactive } from 'vue'
-import { requestSignIn, requestStaffAssignment, watchStaffAssignment } from './auth.service'
-import { ADMIN_ROLES, AUTH_ERROR, FORBIDDEN_REASON, SESSION_STORAGE_KEY, USER_ROLE } from './auth.constants'
+import { onAuthStateChanged } from 'firebase/auth'
+import { auth } from './firebase'
+import { requestSignIn, requestSignOut, requestStaffAssignment, watchStaffAssignment } from './auth.service'
+import { ADMIN_ROLES, FORBIDDEN_REASON, USER_ROLE } from './auth.constants'
 
-// session = { accessToken, user, expiresAt } được lưu vào sessionStorage.
-// staffAssignment KHÔNG lưu vào storage: luôn đọc lại từ nguồn tin cậy để không bị sửa ở trình duyệt.
-const state = reactive({ session: null, staffAssignment: null, isLoading: false })
-let expiryTimer = null
+const state = reactive({ user: null, staffAssignment: null, assignmentUnavailable: false, isLoading: false })
 let stopWatchingAssignment = null
 let restorePromise = null
-let onSessionExpired = null
 let onAccessChanged = null
 
-export const currentUser = computed(() => state.session?.user ?? null)
+export const currentUser = computed(() => state.user && ({
+  id: state.user.uid,
+  email: state.user.email,
+  displayName: state.user.displayName || state.user.email,
+}))
 export const staffAssignment = computed(() => state.staffAssignment)
-export const sessionExpiresAt = computed(() => state.session?.expiresAt ?? null)
 export const isLoading = computed(() => state.isLoading)
-export const isAuthenticated = computed(() => Boolean(state.session) && !isSessionExpired())
+export const isAuthenticated = computed(() => Boolean(state.user))
 
-export function isSessionExpired(session = state.session) {
-  return !session || Date.now() >= session.expiresAt
+function setUser(user) {
+  if (state.user?.uid === user?.uid) return
+  stopWatchingAssignment?.()
+  stopWatchingAssignment = null
+  state.user = user
+  state.staffAssignment = null
+  state.assignmentUnavailable = false
+  if (!user) onAccessChanged?.()
+}
+
+async function loadStaffAssignment(user) {
+  try {
+    const assignment = await requestStaffAssignment(user)
+    if (state.user?.uid !== user.uid) return
+    state.staffAssignment = assignment
+    state.assignmentUnavailable = false
+    onAccessChanged?.()
+    stopWatchingAssignment?.()
+    stopWatchingAssignment = watchStaffAssignment(user, (nextAssignment) => {
+      if (state.user?.uid !== user.uid) return
+      state.staffAssignment = nextAssignment
+      state.assignmentUnavailable = false
+      onAccessChanged?.()
+    }, () => {
+      if (state.user?.uid !== user.uid) return
+      state.staffAssignment = null
+      state.assignmentUnavailable = true
+      onAccessChanged?.()
+    })
+  } catch {
+    if (state.user?.uid !== user.uid) return
+    state.staffAssignment = null
+    state.assignmentUnavailable = true
+  }
 }
 
 export function getAccessDeniedReason() {
+  if (state.assignmentUnavailable) return FORBIDDEN_REASON.unavailable
   const assignment = state.staffAssignment
   if (!assignment || !ADMIN_ROLES.includes(assignment.role)) return FORBIDDEN_REASON.notStaff
   return assignment.active ? null : FORBIDDEN_REASON.revoked
@@ -30,50 +64,7 @@ export function getAccessDeniedReason() {
 export function canAccessWarehouse(warehouseId) {
   if (getAccessDeniedReason() || typeof warehouseId !== 'string') return false
   const { role, warehouseIds } = state.staffAssignment
-  return role === USER_ROLE.systemAdmin || warehouseIds.includes(warehouseId)
-}
-
-function saveSession(session) {
-  state.session = session
-  clearTimeout(expiryTimer)
-  try {
-    if (session) sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session))
-    else sessionStorage.removeItem(SESSION_STORAGE_KEY)
-  } catch {
-    // Trình duyệt chặn storage: phiên chỉ tồn tại trong bộ nhớ.
-  }
-  if (!session) {
-    stopWatchingAssignment?.()
-    stopWatchingAssignment = null
-    state.staffAssignment = null
-  }
-  // Phiên khôi phục đã hết hạn thì để route guard xử lý (giữ được lý do session_expired).
-  if (!isSessionExpired(session)) expiryTimer = setTimeout(expireSession, session.expiresAt - Date.now())
-}
-
-function expireSession() {
-  saveSession(null)
-  onSessionExpired?.()
-}
-
-async function loadStaffAssignment() {
-  const session = state.session
-  try {
-    const assignment = await requestStaffAssignment(session.accessToken)
-    if (state.session !== session) return
-    state.staffAssignment = assignment
-    stopWatchingAssignment?.()
-    stopWatchingAssignment = watchStaffAssignment(session.accessToken, (nextAssignment) => {
-      state.staffAssignment = nextAssignment
-      onAccessChanged?.()
-    })
-  } catch (error) {
-    if (error.status === AUTH_ERROR.invalidCredentials && state.session === session) saveSession(null)
-  }
-}
-
-export function setSessionExpiredHandler(handler) {
-  onSessionExpired = handler
+  return role === USER_ROLE.systemAdmin || (Array.isArray(warehouseIds) && warehouseIds.includes(warehouseId))
 }
 
 export function setAccessChangedHandler(handler) {
@@ -82,15 +73,14 @@ export function setAccessChangedHandler(handler) {
 
 export function restoreSession() {
   restorePromise ??= (async () => {
-    let storedSession = null
-    try {
-      storedSession = JSON.parse(sessionStorage.getItem(SESSION_STORAGE_KEY))
-    } catch {
-      return
-    }
-    if (!storedSession) return
-    saveSession(storedSession)
-    if (!isSessionExpired()) await loadStaffAssignment()
+    await auth.authStateReady()
+    setUser(auth.currentUser)
+    if (auth.currentUser) await loadStaffAssignment(auth.currentUser)
+    onAuthStateChanged(auth, (user) => {
+      if (state.user?.uid === user?.uid) return
+      setUser(user)
+      if (user) loadStaffAssignment(user)
+    })
   })()
   return restorePromise
 }
@@ -99,15 +89,16 @@ export async function signIn(email, password, { keepSignedIn = false } = {}) {
   if (state.isLoading) return null
   state.isLoading = true
   try {
-    const { accessToken, user, expiresIn } = await requestSignIn(email, password, keepSignedIn)
-    saveSession({ accessToken, user, expiresAt: Date.now() + expiresIn })
-    await loadStaffAssignment()
+    const user = await requestSignIn(email, password, keepSignedIn)
+    setUser(user)
+    await loadStaffAssignment(user)
     return user
   } finally {
     state.isLoading = false
   }
 }
 
-export function signOut() {
-  saveSession(null)
+export async function signOut() {
+  await requestSignOut()
+  setUser(null)
 }

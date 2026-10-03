@@ -17,6 +17,7 @@ export const FORBIDDEN_REASON = Object.freeze({
   revoked: 'revoked',
   role: 'role',
   warehouse: 'warehouse',
+  unavailable: 'unavailable',
 })
 
 export const ADMIN_ROUTE = Object.freeze({
@@ -32,12 +33,4 @@ export const AUTH_ERROR = Object.freeze({
   network: 'NETWORK_ERROR',
 })
 
-export const SESSION_STORAGE_KEY = 'reshare_admin_session'
 export const SESSION_EXPIRED_REASON = 'session_expired'
-export const SESSION_DURATION_MS = 30 * 60 * 1000
-export const EXTENDED_SESSION_DURATION_MS = 8 * 60 * 60 * 1000
-
-export const ADMIN_EMAIL_DOMAIN = '@reshare.vn'
-export const MAX_SIGN_IN_ATTEMPTS = 5
-export const RESET_LINK_TTL_MINUTES = 15
-export const SUPPORT_EMAIL = 'support@reshare.vn'

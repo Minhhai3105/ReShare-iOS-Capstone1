@@ -24,6 +24,10 @@ const FORBIDDEN_CONTENT = {
     title: 'Không có quyền với kho này',
     message: 'Bạn không được phân công kho này nên không thể xem dữ liệu của kho.',
   },
+  [FORBIDDEN_REASON.unavailable]: {
+    title: 'Chưa kiểm tra được quyền truy cập',
+    message: 'Không thể tải phân quyền từ máy chủ. Kiểm tra kết nối mạng rồi tải lại trang.',
+  },
 }
 
 const route = useRoute()
@@ -33,8 +37,8 @@ const content = computed(() => FORBIDDEN_CONTENT[route.query.reason] ?? FORBIDDE
 // Nhân sự còn hiệu lực chỉ bị chặn một chức năng/kho thì vẫn quay về được trang quản trị.
 const canReturnHome = computed(() => [FORBIDDEN_REASON.role, FORBIDDEN_REASON.warehouse].includes(route.query.reason))
 
-function onSignOutClick() {
-  signOut()
+async function onSignOutClick() {
+  await signOut()
   router.replace({ name: ADMIN_ROUTE.login })
 }
 </script>

@@ -4,18 +4,17 @@ import { useRouter } from 'vue-router'
 import AuthShell from './auth/components/AuthShell.vue'
 import AuthIcon from './auth/components/AuthIcon.vue'
 import AuthAccountInfo from './auth/components/AuthAccountInfo.vue'
-import { currentUser, sessionExpiresAt, signOut, staffAssignment } from './auth/auth.store'
+import { currentUser, signOut, staffAssignment } from './auth/auth.store'
 import { ADMIN_ROUTE, USER_ROLE } from './auth/auth.constants'
 
 const router = useRouter()
 
-const expiresAtLabel = computed(() => new Date(sessionExpiresAt.value).toLocaleString('vi-VN'))
 const warehousesLabel = computed(() =>
   staffAssignment.value.role === USER_ROLE.systemAdmin ? 'Toàn hệ thống' : staffAssignment.value.warehouseIds.join(', '),
 )
 
-function onSignOutClick() {
-  signOut()
+async function onSignOutClick() {
+  await signOut()
   router.replace({ name: ADMIN_ROUTE.login })
 }
 </script>
@@ -31,10 +30,6 @@ function onSignOutClick() {
         <div>
           <dt>Kho được giao</dt>
           <dd class="auth-mono">{{ warehousesLabel }}</dd>
-        </div>
-        <div>
-          <dt>Phiên hết hạn lúc</dt>
-          <dd>{{ expiresAtLabel }}</dd>
         </div>
       </AuthAccountInfo>
 

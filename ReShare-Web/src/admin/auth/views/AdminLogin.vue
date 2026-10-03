@@ -7,40 +7,34 @@ import heroImage from '../assets/login-hero.jpg'
 import { isLoading, signIn } from '../auth.store'
 import { isAdminEmail } from '../auth.service'
 import {
-  ADMIN_EMAIL_DOMAIN,
   ADMIN_ROUTE,
   AUTH_ERROR,
-  EXTENDED_SESSION_DURATION_MS,
-  MAX_SIGN_IN_ATTEMPTS,
-  SESSION_DURATION_MS,
   SESSION_EXPIRED_REASON,
-  SUPPORT_EMAIL,
 } from '../auth.constants'
 
-const APP_VERSION = 'v2.14.0'
 const HIGHLIGHTS = [
-  { label: 'Đơn xử lý/ngày', value: '14,820+' },
-  { label: 'Tiêu chuẩn kiểm soát', value: 'ISO 27001', isAccent: true },
-  { label: 'Phiên xác thực', value: '256-bit' },
+  { label: 'Xác thực tài khoản', value: 'Firebase Auth' },
+  { label: 'Quyền truy cập', value: 'Theo vai trò', isAccent: true },
+  { label: 'Phạm vi thao tác', value: 'Theo kho' },
 ]
 const CONNECTION_ERROR = {
   [AUTH_ERROR.network]: {
     badge: 'Hệ thống ngoại tuyến',
     title: 'Không thể kết nối đến máy chủ',
     message:
-      'Hệ thống không thể thiết lập kết nối an toàn tới máy chủ xác thực ReShare. Vui lòng kiểm tra lại đường truyền mạng nội bộ (VPN / Wifi) của bạn và thử lại.',
-    code: 'NET_TIMEOUT_ERR',
-    networkStatus: 'Chưa phản hồi',
-    serverStatus: 'Mất kết nối',
+      'Không thể kết nối dịch vụ xác thực. Vui lòng kiểm tra mạng của thiết bị và thử lại.',
+    code: 'NETWORK_ERROR',
+    networkStatus: 'Chưa xác định',
+    serverStatus: 'Chưa phản hồi',
   },
   [AUTH_ERROR.server]: {
     badge: 'Máy chủ gặp sự cố',
     title: 'Máy chủ xác thực đang gặp sự cố',
     message:
-      'Máy chủ xác thực ReShare phản hồi lỗi khi xử lý yêu cầu đăng nhập. Vui lòng thử lại sau ít phút hoặc liên hệ bộ phận kỹ thuật.',
-    code: 'ERR_SERVER_500',
-    networkStatus: 'Đã kết nối',
-    serverStatus: 'Lỗi 500',
+      'Dịch vụ xác thực chưa xử lý được yêu cầu. Vui lòng thử lại sau ít phút.',
+    code: 'AUTH_ERROR',
+    networkStatus: 'Chưa xác định',
+    serverStatus: 'Chưa xác định',
   },
 }
 const timeFormatter = new Intl.DateTimeFormat('vi-VN', {
@@ -59,15 +53,11 @@ const fieldErrors = reactive({ email: '', password: '' })
 const isPasswordVisible = ref(false)
 const failedAttempts = ref(0)
 const connectionError = ref(null) // { status, isOnline, checkedAt }
-const notice = ref('')
 const isSessionExpiredNotice = ref(route.query.reason === SESSION_EXPIRED_REASON)
 
 const hasInvalidCredentials = computed(() => failedAttempts.value > 0)
-const remainingAttempts = computed(() => Math.max(MAX_SIGN_IN_ATTEMPTS - failedAttempts.value, 0))
-const isLocked = computed(() => remainingAttempts.value === 0)
 const submitLabel = computed(() => {
   if (isLoading.value) return 'Đang xác thực…'
-  if (isLocked.value) return 'Tạm khóa đăng nhập'
   return hasInvalidCredentials.value ? 'Thực Hiện Đăng Nhập Lại' : 'Đăng Nhập'
 })
 const emailMessage = computed(
@@ -76,13 +66,10 @@ const emailMessage = computed(
 const connectionErrorText = computed(
   () => CONNECTION_ERROR[connectionError.value?.status] ?? CONNECTION_ERROR[AUTH_ERROR.server],
 )
-const extendedSessionHours = EXTENDED_SESSION_DURATION_MS / 3_600_000
-const sessionMinutes = SESSION_DURATION_MS / 60_000
-
 function validateForm() {
   const email = form.email.trim()
   if (!email) fieldErrors.email = 'Vui lòng nhập email nhân sự.'
-  else fieldErrors.email = isAdminEmail(email) ? '' : `Vui lòng dùng email nội bộ ${ADMIN_EMAIL_DOMAIN}.`
+  else fieldErrors.email = isAdminEmail(email) ? '' : 'Vui lòng nhập địa chỉ email hợp lệ.'
   fieldErrors.password = form.password ? '' : 'Vui lòng nhập mật khẩu.'
   return !fieldErrors.email && !fieldErrors.password
 }
@@ -97,8 +84,7 @@ function toConnectionError(status) {
 }
 
 async function onSubmit() {
-  if (isLoading.value || isLocked.value || !validateForm()) return
-  notice.value = ''
+  if (isLoading.value || !validateForm()) return
   isSessionExpiredNotice.value = false
   try {
     await signIn(form.email.trim(), form.password, { keepSignedIn: form.keepSignedIn })
@@ -118,9 +104,6 @@ function onCheckNetworkClick() {
   connectionError.value = toConnectionError(connectionError.value.status)
 }
 
-function onSsoClick() {
-  notice.value = 'Đăng nhập SSO Google chưa được hỗ trợ ở phiên bản này. Vui lòng dùng email và mật khẩu nhân sự.'
-}
 </script>
 
 <template>
@@ -138,7 +121,7 @@ function onSsoClick() {
 
         <div class="connection-error__diagnostic">
           <div class="connection-error__diagnostic-header">
-            <span><AuthIcon name="terminal" :size="16" />Chẩn đoán nội bộ</span>
+            <span><AuthIcon name="terminal" :size="16" />Thông tin kết nối</span>
             <span class="auth-mono">Thời gian: {{ connectionError.checkedAt }} UTC+7</span>
           </div>
           <p class="connection-error__code auth-mono" role="alert">
@@ -153,12 +136,12 @@ function onSsoClick() {
               </dd>
             </div>
             <div>
-              <dt>Mạng nội bộ / VPN</dt>
+              <dt>Kết nối dịch vụ</dt>
               <dd class="is-muted"><span class="auth-dot" />{{ connectionErrorText.networkStatus }}</dd>
             </div>
             <div>
-              <dt>Auth server</dt>
-              <dd class="is-error"><span class="auth-dot auth-dot--danger" />{{ connectionErrorText.serverStatus }}</dd>
+              <dt>Xác thực</dt>
+              <dd class="is-muted"><span class="auth-dot" />{{ connectionErrorText.serverStatus }}</dd>
             </div>
           </dl>
         </div>
@@ -169,7 +152,7 @@ function onSsoClick() {
             {{ isLoading ? 'Đang thử lại…' : 'Thử lại ngay' }}
           </button>
           <button type="button" class="auth-btn auth-btn--soft" :disabled="isLoading" @click="onCheckNetworkClick">
-            <AuthIcon name="wifi" :size="18" />Kiểm tra trạng thái mạng
+            <AuthIcon name="wifi" :size="18" />Kiểm tra mạng thiết bị
           </button>
           <button type="button" class="auth-btn auth-btn--link" :disabled="isLoading" @click="connectionError = null">
             <AuthIcon name="arrow-left" :size="18" />Quay lại
@@ -177,24 +160,21 @@ function onSsoClick() {
         </div>
       </div>
 
-      <div class="connection-error__help">
-        <span><AuthIcon name="help-circle" :size="18" />Cần cấp quyền VPN nội bộ? Liên hệ IT Helpdesk ReShare: <strong>ext. 102</strong></span>
-        <span class="auth-mono">Node: SGN-AUTH-03</span>
-      </div>
+      <div class="connection-error__help">Nếu mạng đã ổn định, hãy thử đăng nhập lại.</div>
     </section>
 
     <div v-else class="admin-login">
       <section class="admin-login__intro">
-        <span class="auth-chip"><span class="auth-dot" />Cổng xác thực tập trung IAM</span>
+        <span class="auth-chip"><span class="auth-dot" />Cổng quản trị ReShare</span>
         <h1>Hệ Thống Vận Hành ReShare</h1>
         <p class="admin-login__lead">
-          Nền tảng kiểm soát chuỗi cung ứng, tiếp nhận tuần hoàn thời trang và định danh tài sản thời gian thực.
+          Nơi nhân sự được phân quyền theo dõi và điều phối hoạt động ReShare.
         </p>
 
         <div class="admin-login__showcase">
           <figure class="admin-login__hero">
-            <img :src="heroImage" alt="Nhân sự ReShare phân loại hàng tại trạm xử lý" />
-            <figcaption><AuthIcon name="network" :size="22" />Trạm xử lý trung tâm Tân Bình • 99.98% Sẵn sàng</figcaption>
+            <img :src="heroImage" alt="Hình minh họa hoạt động phân loại vật phẩm" />
+            <figcaption><AuthIcon name="network" :size="22" />Hình minh họa quy trình tiếp nhận và phân loại</figcaption>
           </figure>
           <dl class="admin-login__highlights">
             <div v-for="highlight in HIGHLIGHTS" :key="highlight.label">
@@ -205,8 +185,8 @@ function onSsoClick() {
         </div>
 
         <ul class="admin-login__badges">
-          <li><AuthIcon name="shield" :size="18" />Mã hóa End-to-End</li>
-          <li><AuthIcon name="shield-check" :size="18" />Tuân thủ Chính sách Nội bộ</li>
+          <li><AuthIcon name="shield" :size="18" />Xác thực tài khoản</li>
+          <li><AuthIcon name="shield-check" :size="18" />Kiểm tra quyền theo yêu cầu</li>
         </ul>
       </section>
 
@@ -240,10 +220,6 @@ function onSsoClick() {
               <p>Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.</p>
             </div>
           </div>
-          <div v-if="notice" class="auth-alert auth-alert--info" role="status">
-            <AuthIcon name="help-circle" :size="22" class="auth-alert__icon" />
-            <p class="auth-alert__body">{{ notice }}</p>
-          </div>
 
           <form class="admin-login__form" novalidate @submit.prevent="onSubmit">
             <fieldset :disabled="isLoading">
@@ -252,7 +228,7 @@ function onSsoClick() {
                   <label for="admin-email" class="auth-field__label">
                     Email nhân sự <span class="auth-field__required">*</span>
                   </label>
-                  <span class="auth-field__hint auth-mono">SSO {{ ADMIN_EMAIL_DOMAIN }}</span>
+                  <span class="auth-field__hint">Tài khoản được cấp quyền</span>
                 </div>
                 <div class="auth-input" :class="{ 'is-invalid': emailMessage }">
                   <AuthIcon name="mail" />
@@ -261,7 +237,7 @@ function onSsoClick() {
                     v-model="form.email"
                     type="email"
                     autocomplete="username"
-                    :placeholder="`ten.nhanvien${ADMIN_EMAIL_DOMAIN}`"
+                    placeholder="ten@vidu.com"
                     :aria-invalid="Boolean(emailMessage)"
                     aria-describedby="admin-email-message"
                   />
@@ -320,57 +296,35 @@ function onSsoClick() {
                 <AuthIcon name="badge-check" :size="22" class="auth-note__icon" />
                 <div>
                   <div class="admin-login__monitor-header">
-                    <span class="auth-note__title">Giám sát bảo mật IAM</span>
-                    <span class="admin-login__monitor-count auth-mono">Còn {{ remainingAttempts }} lần thử</span>
+                    <span class="auth-note__title">Kiểm tra thông tin đăng nhập</span>
+                    <span class="admin-login__monitor-count auth-mono">Đã thử {{ failedAttempts }} lần</span>
                   </div>
                   <p>
-                    Lưu ý: Tài khoản sẽ tạm khóa tự động sau <strong>{{ MAX_SIGN_IN_ATTEMPTS }} lần thử sai liên tiếp</strong>
-                    để phòng vệ brute-force.
+                    Kiểm tra email và mật khẩu, hoặc dùng chức năng đặt lại mật khẩu nếu cần.
                   </p>
-                  <div
-                    class="admin-login__monitor-bar"
-                    role="progressbar"
-                    :aria-valuenow="failedAttempts"
-                    aria-valuemin="0"
-                    :aria-valuemax="MAX_SIGN_IN_ATTEMPTS"
-                    aria-label="Số lần đăng nhập sai"
-                  >
-                    <span :style="{ width: `${(failedAttempts / MAX_SIGN_IN_ATTEMPTS) * 100}%` }" />
-                  </div>
                 </div>
               </div>
 
               <div class="admin-login__keep">
                 <label>
                   <input v-model="form.keepSignedIn" type="checkbox" />
-                  Duy trì phiên đăng nhập ({{ extendedSessionHours }} giờ làm việc)
+                  Ghi nhớ đăng nhập trên thiết bị này
                 </label>
-                <span class="auth-mono">{{ APP_VERSION }}</span>
+                <span class="auth-mono">Firebase Auth</span>
               </div>
 
-              <button type="submit" class="auth-btn auth-btn--primary" :disabled="isLoading || isLocked">
+              <button type="submit" class="auth-btn auth-btn--primary" :disabled="isLoading">
                 <AuthIcon :name="isLoading ? 'loader' : 'log-in'" :class="{ 'auth-spin': isLoading }" />
                 {{ submitLabel }}
               </button>
 
-              <div class="admin-login__secondary">
-                <button type="button" class="auth-btn auth-btn--soft" @click="onSsoClick">
-                  <AuthIcon name="key" :size="18" />Đăng nhập SSO Google
-                </button>
-                <a
-                  class="auth-btn auth-btn--soft"
-                  :href="`mailto:${SUPPORT_EMAIL}?subject=Yêu cầu mở khóa tài khoản quản trị`"
-                >
-                  <AuthIcon name="help-circle" :size="18" />Yêu cầu mở khóa
-                </a>
-              </div>
             </fieldset>
           </form>
         </div>
 
         <footer class="admin-login__card-footer">
-          <span><AuthIcon name="server" :size="18" />IP kiểm tra: <span class="auth-mono">118.69.182.44</span></span>
-          <span><AuthIcon name="lock" :size="18" />Khóa phiên tự động: <span class="auth-mono">{{ sessionMinutes }}m</span></span>
+          <span><AuthIcon name="server" :size="18" />Đăng nhập qua <span class="auth-mono">Firebase Auth</span></span>
+          <span><AuthIcon name="lock" :size="18" />Quyền truy cập theo <span class="auth-mono">vai trò và kho</span></span>
         </footer>
       </section>
     </div>
