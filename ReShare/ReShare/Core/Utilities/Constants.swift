@@ -4,13 +4,19 @@ import Foundation
 enum Constants {
     enum FirestoreCollections {
         static let users = "users"
+        static let catalogItems = "catalog_items"
+        static let campaigns = "campaigns"
         static let donations = "donations"
+        static let hubs = "hubs"
+        static let conversations = "conversations"
+        static let messages = "messages"
         static let beneficiaries = "beneficiaries"
         static let dropoffLocations = "dropoff_locations"
     }
     
     enum StoragePaths {
         static let donationImages = "donation_images"
+        static let catalogImages = "catalog_images"
         static let avatars = "avatars"
     }
     

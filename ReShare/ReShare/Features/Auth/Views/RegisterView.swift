@@ -210,6 +210,12 @@ struct RegisterView: View {
                     }
                 }
             }
+            if !confirmPassword.isEmpty && viewModel.password != confirmPassword {
+                Text("Mật khẩu xác nhận không khớp.")
+                    .font(.system(size: 12))
+                    .foregroundColor(AppColors.rejected)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
     }
     
