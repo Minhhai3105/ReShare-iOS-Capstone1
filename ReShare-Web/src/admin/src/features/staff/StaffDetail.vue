@@ -5,7 +5,7 @@ const props = defineProps({
   person: { type: Object, required: true },
 })
 
-const emit = defineEmits(['back'])
+const emit = defineEmits(['back', 'edit'])
 const roleName = computed(() => props.person.role === 'system_admin' ? 'System Admin' : 'Warehouse Admin')
 const accessScope = computed(() => {
   if (props.person.role === 'system_admin') return 'Toàn hệ thống'
@@ -54,7 +54,7 @@ const accountStatus = computed(() => props.person.status === 'active' ? 'Đang h
             <p><i class="fa-solid fa-circle-info" aria-hidden="true"></i> Đang xem quyền của {{ person.name }}</p>
             <div class="access-actions">
               <button type="button"><i class="fa-solid fa-user-minus" aria-hidden="true"></i> Thu hồi quyền admin</button>
-              <button type="button"><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i> Chỉnh sửa quyền</button>
+              <button type="button" @click="emit('edit')"><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i> Chỉnh sửa quyền</button>
             </div>
           </div>
         </section>

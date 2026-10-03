@@ -10,6 +10,19 @@ const sampleStaff = [
 
 export const staffRepository = {
   async list() {
-    return sampleStaff
+    return sampleStaff.map((person) => ({ ...person, warehouses: [...person.warehouses] }))
+  },
+
+  async updatePermissions(id, changes) {
+    const person = sampleStaff.find((record) => record.id === id)
+    if (!person) throw new Error(`Staff record not found: ${id}`)
+
+    Object.assign(person, {
+      role: changes.role,
+      status: changes.status,
+      warehouses: changes.role === 'system_admin' ? [] : [...changes.warehouses],
+    })
+
+    return { ...person, warehouses: [...person.warehouses] }
   },
 }

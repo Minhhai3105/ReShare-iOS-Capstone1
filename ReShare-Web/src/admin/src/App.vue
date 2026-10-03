@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { staffRepository } from './features/staff/staffRepository.js'
 import StaffDetail from './features/staff/StaffDetail.vue'
+import StaffEdit from './features/staff/StaffEdit.vue'
 import StaffGrant from './features/staff/StaffGrant.vue'
 
 const staff = ref([])
@@ -9,6 +10,7 @@ const isLoading = ref(true)
 const loadError = ref('')
 const showGrant = ref(false)
 const staffRouteId = ref(getStaffRouteId())
+const showStaffEdit = ref(isStaffEditRoute())
 
 const query = ref('')
 const selectedRole = ref('all')
@@ -25,7 +27,7 @@ const selectedStaff = computed(() => staff.value.find((person) => person.id === 
 const hasFilters = computed(() => Boolean(query.value.trim()) || selectedRole.value !== 'all' || selectedStatus.value !== 'all')
 
 function getStaffRouteId() {
-  const match = window.location.pathname.match(/^\/staff\/([^/]+)\/?$/)
+  const match = window.location.pathname.match(/^\/staff\/([^/]+)(?:\/edit)?\/?$/)
   if (!match) return ''
   try {
     return decodeURIComponent(match[1])
@@ -34,10 +36,40 @@ function getStaffRouteId() {
   }
 }
 
+function isStaffEditRoute() {
+  return /^\/staff\/[^/]+\/edit\/?$/.test(window.location.pathname)
+}
+
 function openStaff(person) {
   const nextPath = `/staff/${encodeURIComponent(person.id)}`
   window.history.pushState({ staffDetail: true }, '', nextPath)
   staffRouteId.value = person.id
+  showStaffEdit.value = false
+}
+
+function openStaffEdit() {
+  if (!selectedStaff.value) return
+  window.history.pushState({ staffEdit: true }, '', `/staff/${encodeURIComponent(selectedStaff.value.id)}/edit`)
+  showStaffEdit.value = true
+}
+
+function closeStaffEdit() {
+  if (window.history.state?.staffEdit) {
+    window.history.back()
+    return
+  }
+  window.history.replaceState({ staffDetail: true }, '', `/staff/${encodeURIComponent(staffRouteId.value)}`)
+  showStaffEdit.value = false
+}
+
+async function saveStaffChanges(changes) {
+  try {
+    const updated = await staffRepository.updatePermissions(staffRouteId.value, changes)
+    staff.value = staff.value.map((person) => person.id === updated.id ? updated : person)
+    closeStaffEdit()
+  } catch {
+    loadError.value = 'Không thể lưu thay đổi quyền nhân sự.'
+  }
 }
 
 function goBackToList() {
@@ -60,6 +92,7 @@ function navigateToStaffList() {
 
 function syncRoute() {
   staffRouteId.value = getStaffRouteId()
+  showStaffEdit.value = isStaffEditRoute()
 }
 
 function clearFilters() {
@@ -121,7 +154,8 @@ onBeforeUnmount(() => window.removeEventListener('popstate', syncRoute))
     <main class="page">
       <StaffGrant v-if="showGrant" @back="showGrant = false" />
       <div v-else-if="staffRouteId && isLoading" class="route-state"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Đang tải hồ sơ nhân sự...</div>
-      <StaffDetail v-else-if="selectedStaff" :person="selectedStaff" @back="goBackToList" />
+      <StaffEdit v-else-if="selectedStaff && showStaffEdit" :person="selectedStaff" @back="closeStaffEdit" @save="saveStaffChanges" />
+      <StaffDetail v-else-if="selectedStaff" :person="selectedStaff" @back="goBackToList" @edit="openStaffEdit" />
       <section v-else-if="staffRouteId" class="route-state route-state--error" role="alert">
         <i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i>
         <h1>Không tìm thấy nhân sự</h1>
