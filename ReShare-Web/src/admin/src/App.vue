@@ -4,6 +4,7 @@ import { staffRepository } from './features/staff/staffRepository.js'
 import StaffDetail from './features/staff/StaffDetail.vue'
 import StaffEdit from './features/staff/StaffEdit.vue'
 import StaffGrant from './features/staff/StaffGrant.vue'
+import logoUrl from './assets/reshare-logo.png'
 
 const staff = ref([])
 const isLoading = ref(true)
@@ -127,7 +128,7 @@ onBeforeUnmount(() => window.removeEventListener('popstate', syncRoute))
   <div class="admin-shell">
     <header class="topbar">
       <a class="brand" href="#" aria-label="ReShare Ops Portal">
-        <span class="brand__mark">R</span>
+        <img class="brand__mark" :src="logoUrl" alt="" />
         <span class="brand__name">ReShare <small>PORTAL</small></span>
       </a>
       <div class="workspace"><strong>ReShare<br />Ops</strong><span>/</span><span>Công vận hành nội bộ</span></div>

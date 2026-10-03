@@ -14,3 +14,9 @@ backend/.env
 backend/.env.*
 !backend/.env.example
 backend/*service-account*.json
+
+# Web build outputs and local dependencies
+ReShare-Web/node_modules/
+ReShare-Web/dist/
+ReShare-Web/src/admin/node_modules/
+ReShare-Web/src/admin/dist/

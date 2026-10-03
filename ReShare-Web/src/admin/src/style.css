@@ -27,7 +27,7 @@ button:disabled { cursor: not-allowed; }
   gap: 22px; padding: 0 28px; background: rgba(255,255,255,.97); border-bottom: 1px solid #edf0f5;
 }
 .brand { width: 226px; flex: 0 0 226px; display: flex; align-items: center; gap: 9px; text-decoration: none; color: var(--green); }
-.brand__mark { width: 25px; height: 25px; display: grid; place-items: center; border: 2px solid #d2e6d4; border-radius: 7px; background: var(--green); color: white; font: 800 15px Manrope, sans-serif; }
+.brand__mark { width: 25px; height: 25px; display: block; object-fit: contain; }
 .brand__name { display: flex; align-items: center; gap: 5px; font-weight: 700; font-size: 13px; }
 .brand__name small { padding: 2px 4px; border: 1px solid #b5d5b8; border-radius: 3px; font-size: 7px; letter-spacing: .04em; }
 .workspace { display: flex; align-items: center; gap: 16px; min-width: 200px; color: #344037; font-size: 13px; line-height: 1.3; }
