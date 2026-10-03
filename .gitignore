@@ -7,3 +7,10 @@ Document/
 
 # OS metadata
 .DS_Store
+
+# Image API local files and credentials
+backend/node_modules/
+backend/.env
+backend/.env.*
+!backend/.env.example
+backend/*service-account*.json
