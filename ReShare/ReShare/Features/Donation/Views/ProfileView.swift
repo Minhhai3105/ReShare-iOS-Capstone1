@@ -242,7 +242,7 @@ struct ProfileView: View {
                     
                     // MARK: 4. NÚT ĐĂNG XUẤT (SIGN OUT)
                     Button(action: { showProfileEditor = true }) {
-                        Label("Chỉnh sửa hồ sơ", systemImage: "person.crop.circle.badge.pencil")
+                        Label("Chỉnh sửa hồ sơ", systemImage: "square.and.pencil")
                             .font(.system(size: 15, weight: .semibold))
                             .frame(maxWidth: .infinity)
                             .frame(height: 48)
