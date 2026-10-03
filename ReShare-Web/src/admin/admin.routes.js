@@ -40,6 +40,7 @@ function getRouteDeniedReason(to) {
 }
 
 export async function adminAuthGuard(to) {
+  if (!to.path.startsWith('/admin')) return true
   await restoreSession()
   if (to.name === ADMIN_ROUTE.login && isAuthenticated.value && !getAccessDeniedReason()) {
     return { name: ADMIN_ROUTE.home }

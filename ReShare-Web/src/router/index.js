@@ -1,12 +1,16 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { adminRoutes, installAdminAuth } from '@/admin/admin.routes'
+import LandingPage from '@/landing/LandingPage.vue'
 
 const router = createRouter({
   history: createWebHistory(),
-  // Tạm chuyển "/" vào Admin cho tới khi có Landing Page.
-  routes: [{ path: '/', redirect: '/admin' }, ...adminRoutes],
+  routes: [{ path: '/', component: LandingPage }, ...adminRoutes],
 })
 
 installAdminAuth(router)
+
+router.afterEach((to) => {
+  document.title = to.path.startsWith('/admin') ? 'ReShare — Quản trị' : 'ReShare — Sẻ chia đúng cách'
+})
 
 export default router
