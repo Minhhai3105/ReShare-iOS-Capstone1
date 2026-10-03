@@ -1,0 +1,11 @@
+{
+  "name": "reshare-firebase-tests",
+  "private": true,
+  "scripts": {
+    "test:rules": "node --test tests/*.rules.test.cjs",
+    "test:rules:emulator": "firebase emulators:exec --only firestore --project demo-reshare 'npm run test:rules'"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "5.0.1"
+  }
+}
