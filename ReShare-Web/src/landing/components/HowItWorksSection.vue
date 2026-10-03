@@ -4,8 +4,8 @@ const steps = [
   { number: '02', icon: 'camera', title: 'Chụp ảnh', body: 'Người dùng chụp ảnh món đồ để hệ thống bắt đầu nhận diện.' },
   { number: '03', icon: 'scan', title: 'Kiểm tra thông tin', body: 'Người dùng xem lại danh mục, số lượng và tình trạng gợi ý.' },
   { number: '04', icon: 'document', title: 'Gửi yêu cầu', body: 'Yêu cầu được gửi đến tổ chức để xem xét và xác nhận.' },
-  { number: '05', icon: 'shield', title: 'Duyệt', body: 'Đội ngũ xác nhận thông tin trước khi chuyển sang bước tiếp theo.' },
-  { number: '06', icon: 'truck', title: 'Tiếp nhận tại kho', body: 'Người dùng mang hàng đến điểm tiếp nhận đã được chỉ định.' },
+  { number: '05', icon: 'shield', title: 'Duyệt yêu cầu', body: 'Nhân sự xem xét thông tin. Đơn được duyệt chưa có nghĩa vật phẩm đã vào kho.' },
+  { number: '06', icon: 'truck', title: 'Bàn giao và nhập kho', body: 'Khi điểm tiếp nhận hoạt động, kho kiểm nhận vật phẩm thực tế rồi mới ghi nhận tồn kho.' },
 ]
 </script>
 
@@ -14,10 +14,11 @@ const steps = [
     <div class="landing-container">
       <div class="section-heading process-heading">
         <span class="eyebrow"><span class="eyebrow-dot"></span> CÁCH HOẠT ĐỘNG</span>
-        <h2>Quy trình đơn giản từ ý định đến bàn<br />giao</h2>
+        <h2>Hai cách trao tặng trên ReShare</h2>
         <p>
-          Mỗi bước đều tập trung vào sự minh bạch, dễ theo dõi và không yêu cầu thanh toán hoặc
-          đặt lịch vận chuyển.
+          Với quyên góp qua kho, các bước dưới đây mô tả quy trình dự kiến khi điểm tiếp nhận hoạt động.
+          Với Kho đồ 0đ, người trao đăng món và hai bên trao đổi trực tiếp để hẹn bàn giao;
+          vật phẩm đó không được tính là hàng tồn kho.
         </p>
       </div>
       <div class="process-grid">

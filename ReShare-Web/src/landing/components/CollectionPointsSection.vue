@@ -12,9 +12,9 @@ const points = [
       <div class="section-heading section-heading--left">
         <div>
           <span class="eyebrow"><span class="eyebrow-dot"></span> ĐIỂM TIẾP NHẬN</span>
-          <h2>Ba điểm tiếp nhận tại Đà Nẵng</h2>
+          <h2>Dự kiến ba điểm tiếp nhận tại Đà Nẵng</h2>
         </div>
-        <p>Mỗi thẻ hiển thị địa chỉ, giờ tiếp nhận và nút chỉ đường. Dữ liệu dưới đây chỉ mang tính minh họa.</p>
+        <p>Các điểm dưới đây chỉ là mô hình minh họa, chưa hoạt động. Địa chỉ, giờ tiếp nhận và chỉ đường sẽ được công bố khi có xác nhận chính thức.</p>
       </div>
       <div class="points-grid">
         <article v-for="point in points" :key="point.number" class="point-card">

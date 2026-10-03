@@ -10,10 +10,10 @@ import communitySharing from '../assets/community-sharing.jpg'
         <h1>Trao đúng thứ,<br />đến đúng nơi,<br /><span>vào đúng lúc.</span></h1>
         <p class="hero-subtitle">Nền tảng thông minh quản lý quyên góp và hàng hóa</p>
         <p class="hero-description">
-          ReShare kết nối người trao tặng với cộng đồng cần hỗ trợ — để mỗi món đồ còn tốt tìm được hành trình ý nghĩa tiếp theo  .
+          ReShare kết nối người trao tặng với cộng đồng cần hỗ trợ — để mỗi món đồ còn tốt tìm được hành trình ý nghĩa tiếp theo.
         </p>
         <p class="hero-description">
-        Sử dụng ứng dụng AI để phân loại, kiểm kê và điều phối hàng hóa minh bạch, hiệu quả.
+          ReShare đang phát triển tính năng AI gợi ý danh mục từ ảnh; người dùng luôn kiểm tra và xác nhận thông tin.
         </p>
         <div class="hero-actions">
           <a class="button" href="#preview">
@@ -43,9 +43,9 @@ import communitySharing from '../assets/community-sharing.jpg'
   </div>
 
   <div class="confirmed-content">
-    <strong>ĐÃ XÁC NHẬN</strong>
-    <span class="confirmed-number">800 món đồ</span>
-    <small>đã tìm thấy nơi cần nhất</small>
+    <strong>HÀNH TRÌNH SẺ CHIA</strong>
+    <span class="confirmed-number">Từ người trao</span>
+    <small>đến người cần</small>
   </div>
 </div>
       </div>

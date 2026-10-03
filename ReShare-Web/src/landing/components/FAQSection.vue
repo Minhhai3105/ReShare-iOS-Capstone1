@@ -2,10 +2,6 @@
 import { ref } from 'vue'
 
 const activeQuestion = ref(0)
-const feedbackOpen = ref(false)
-const feedbackEmail = ref('')
-const feedbackMessage = ref('')
-const feedbackSent = ref(false)
 const questions = [
   {
     question: 'ReShare là gì?',
@@ -40,8 +36,8 @@ const questions = [
     answer: 'ReShare dự kiến có ba điểm tiếp nhận tại Đà Nẵng. Địa chỉ và thời gian hoạt động sẽ được cập nhật khi có thông tin chính thức.',
   },
   {
-    question: 'Tôi liên hệ với ReShare bằng cách nào?',
-    answer: 'Bạn có thể liên hệ qua email hello@reshare.vn hoặc gửi góp ý cho ReShare.',
+    question: 'Khi nào có kênh liên hệ với ReShare?',
+    answer: 'Kênh liên hệ chính thức sẽ được công bố trên trang này khi dự án sẵn sàng vận hành.',
   },
 ]
 
@@ -49,20 +45,6 @@ function toggleQuestion(index) {
   activeQuestion.value = activeQuestion.value === index ? -1 : index
 }
 
-function openFeedback() {
-  feedbackEmail.value = ''
-  feedbackMessage.value = ''
-  feedbackSent.value = false
-  feedbackOpen.value = true
-}
-
-function closeFeedback() {
-  feedbackOpen.value = false
-}
-
-function submitFeedback() {
-  feedbackSent.value = true
-}
 </script>
 
 <template>
@@ -90,78 +72,10 @@ function submitFeedback() {
           </h3>
           <div v-show="activeQuestion === index" :id="`faq-answer-${index}`" class="faq-answer">
             <p>{{ item.answer }}</p>
-            <button
-              v-if="index === questions.length - 1"
-              class="button feedback-open-button"
-              type="button"
-              @click="openFeedback"
-            >
-              Gửi góp ý
-            </button>
           </div>
         </article>
       </div>
     </div>
 
-    <div
-      v-if="feedbackOpen"
-      class="feedback-overlay"
-      @click.self="closeFeedback"
-      @keydown.esc="closeFeedback"
-    >
-      <section
-        class="feedback-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="feedback-title"
-        aria-describedby="feedback-description"
-      >
-        <button
-          class="feedback-close"
-          type="button"
-          aria-label="Đóng cửa sổ góp ý"
-          @click="closeFeedback"
-        >
-          ×
-        </button>
-        <template v-if="!feedbackSent">
-          <h2 id="feedback-title">Gửi góp ý</h2>
-          <p id="feedback-description" class="feedback-description">
-            Chia sẻ góp ý của bạn để ReShare phục vụ cộng đồng tốt hơn.
-          </p>
-          <form class="feedback-form" @submit.prevent="submitFeedback">
-            <label for="feedback-email">Email</label>
-            <input
-              id="feedback-email"
-              v-model.trim="feedbackEmail"
-              type="email"
-              name="email"
-              autocomplete="email"
-              placeholder="Email của bạn"
-              autofocus
-              required
-            />
-            <label for="feedback-message">Nội dung góp ý</label>
-            <textarea
-              id="feedback-message"
-              v-model.trim="feedbackMessage"
-              name="message"
-              placeholder="Nhập góp ý của bạn"
-              rows="5"
-              required
-            ></textarea>
-            <button class="button feedback-submit" type="submit">Gửi góp ý</button>
-          </form>
-        </template>
-        <div v-else class="feedback-success" role="status" aria-live="polite">
-          <span class="feedback-success-icon" aria-hidden="true">✓</span>
-          <h2 id="feedback-title">Gửi góp ý thành công!</h2>
-          <p id="feedback-description">
-            Đây là bản demo. Góp ý của bạn chưa được gửi đi hoặc lưu lại.
-          </p>
-          <button class="button feedback-submit" type="button" @click="closeFeedback">Đóng</button>
-        </div>
-      </section>
-    </div>
   </section>
 </template>

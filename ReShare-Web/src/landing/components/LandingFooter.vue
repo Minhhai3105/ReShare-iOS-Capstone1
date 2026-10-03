@@ -1,8 +1,5 @@
 <script setup>
-import { ref } from 'vue'
 import logo from '../assets/logo.png'
-
-const email = ref('')
 
 const footerLinks = [
   { label: 'ReShare là gì', href: '#about' },
@@ -12,11 +9,6 @@ const footerLinks = [
   { label: 'Giá trị', href: '#values' },
 ]
 
-function sendNewsletterRequest() {
-  const subject = encodeURIComponent('Đăng ký nhận tin ReShare')
-  const body = encodeURIComponent(`Vui lòng đăng ký nhận tin cho địa chỉ email: ${email.value}`)
-  window.location.href = `mailto:hello@reshare.vn?subject=${subject}&body=${body}`
-}
 </script>
 
 <template>
@@ -36,31 +28,14 @@ function sendNewsletterRequest() {
         </div>
         <div class="footer-column footer-contact">
           <h2>Kết nối</h2>
-          <a class="footer-contact-link" href="mailto:hello@reshare.vn">
-            <span aria-hidden="true">✉</span> hello@reshare.vn
-          </a>
+          <span class="footer-contact-link">Kênh liên hệ sẽ được cập nhật</span>
           <span class="footer-contact-link">
             <span aria-hidden="true">⌖</span> Việt Nam
           </span>
         </div>
         <div class="footer-newsletter">
-          <h2>Nhận tin từ ReShare</h2>
-          <p>Theo dõi câu chuyện cộng đồng và các nhu cầu mới.</p>
-          <form class="newsletter-form" @submit.prevent="sendNewsletterRequest">
-            <label class="visually-hidden" for="newsletter-email">Email của bạn</label>
-            <input
-              id="newsletter-email"
-              v-model="email"
-              type="email"
-              name="email"
-              autocomplete="email"
-              placeholder="Email của bạn"
-              required
-            />
-            <button class="newsletter-submit" type="submit" aria-label="Gửi yêu cầu đăng ký nhận tin">
-              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h11m-4-4 4 4-4 4" /></svg>
-            </button>
-          </form>
+          <h2>Cập nhật từ ReShare</h2>
+          <p>Thông tin liên hệ và điểm tiếp nhận sẽ được công bố khi dự án sẵn sàng vận hành.</p>
         </div>
       </div>
       <div class="footer-bottom">
