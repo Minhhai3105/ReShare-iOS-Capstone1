@@ -16,6 +16,18 @@ final class AuthService: AuthServiceProtocol {
     var currentUser: String? {
         Auth.auth().currentUser?.uid
     }
+
+    var currentUserId: String? {
+        currentUser
+    }
+
+    var currentDisplayName: String? {
+        Auth.auth().currentUser?.displayName
+    }
+
+    var currentEmail: String? {
+        Auth.auth().currentUser?.email
+    }
     
     func signUp(email: String, password: String) async throws -> String {
         let result = try await Auth.auth().createUser(withEmail: email, password: password)
