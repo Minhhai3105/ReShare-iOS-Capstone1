@@ -109,14 +109,19 @@ function createImageApi({ db, verifyToken, cloudinary, cloudName, apiKey, apiSec
     return {};
   }
 
-  async function readAccess(uid, claims, body) {
+  async function isActiveSystemAdmin(uid) {
+    const assignment = await db.collection('staff_assignments').doc(uid).get();
+    return assignment.exists && assignment.data().active === true && assignment.data().role === 'system_admin';
+  }
+
+  async function readAccess(uid, body) {
     const { donationId, publicId } = body;
     validateRecordId('donation', donationId);
     validatePublicIds([publicId], `donations/${donationId}`);
     const donation = await recordSnapshot('donation', donationId);
     if (!donation.exists) throw new ApiError(404, 'Donation not found');
     const data = donation.data();
-    if (data.donorId !== uid && claims.role !== 'system_admin') throw new ApiError(403, 'Access denied');
+    if (data.donorId !== uid && !(await isActiveSystemAdmin(uid))) throw new ApiError(403, 'Access denied');
     if (data.imageProvider !== 'cloudinary' || !(data.imagePublicIds || []).includes(publicId)) {
       throw new ApiError(404, 'Image not attached to donation');
     }
@@ -155,7 +160,7 @@ function createImageApi({ db, verifyToken, cloudinary, cloudName, apiKey, apiSec
     let result;
     if (path === '/v1/images/upload-intents') result = await uploadIntent(claims.uid, body);
     else if (path === '/v1/images/cleanup') result = await cleanup(claims.uid, body);
-    else result = await readAccess(claims.uid, claims, body);
+    else result = await readAccess(claims.uid, body);
     return { status: 200, body: result };
   }
 

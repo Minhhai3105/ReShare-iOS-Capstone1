@@ -1,0 +1,390 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function activeStaffWithRole(role) {
+      let path = /databases/$(database)/documents/staff_assignments/$(request.auth.uid);
+      return request.auth != null
+        && exists(path)
+        && get(path).data.get('active', false) == true
+        && get(path).data.get('role', null) == role;
+    }
+
+    function isSystemAdmin() {
+      return activeStaffWithRole('system_admin');
+    }
+
+    function canReadWarehouse(warehouseId) {
+      let path = /databases/$(database)/documents/staff_assignments/$(request.auth.uid);
+      return isSystemAdmin() || (
+        activeStaffWithRole('warehouse_admin')
+        && get(path).data.get('warehouseIds', []) is list
+        && warehouseId in get(path).data.warehouseIds
+      );
+    }
+
+    // Quyền nhân sự chỉ do Admin SDK ghi; client được đọc để dựng UI, không tự cấp quyền.
+    match /staff_assignments/{staffId} {
+      allow get: if request.auth != null && (request.auth.uid == staffId || isSystemAdmin());
+      allow list: if isSystemAdmin();
+      allow write: if false;
+    }
+
+    match /staff_assignment_audit/{eventId} {
+      allow read: if isSystemAdmin();
+      allow write: if false;
+    }
+
+    // Nhân viên kho chỉ được lấy từng kho được gán; truy vấn toàn bộ dành cho System Admin.
+    match /warehouses/{warehouseId} {
+      allow get: if request.auth != null && canReadWarehouse(warehouseId);
+      allow list: if isSystemAdmin();
+      allow write: if false;
+    }
+
+    function validCloudinaryImages(purpose, recordId) {
+      let ids = request.resource.data.get('imagePublicIds', null);
+      let provider = request.resource.data.get('imageProvider', null);
+      let batchPath = /databases/$(database)/documents/image_upload_batches/$(purpose + '_' + recordId);
+      return (ids == null && provider != 'cloudinary') ||
+        (provider == 'cloudinary'
+          && ids is list
+          && ids.size() >= 3
+          && ids.size() <= 6
+          && ids.toSet().size() == ids.size()
+          && exists(batchPath)
+          && get(batchPath).data.ownerUid == request.auth.uid
+          && get(batchPath).data.assets.values().hasAll(ids));
+    }
+
+    // 1. Users Profile (Chỉ chính chủ mới có quyền đọc và sửa thông tin cá nhân của mình)
+    match /users/{userId} {
+      function isOwner() {
+        return request.auth != null && request.auth.uid == userId;
+      }
+
+      function validPublicProfile() {
+        return request.resource.data.displayName is string
+          && request.resource.data.displayName.size() > 0
+          && request.resource.data.displayName.size() <= 80
+          && request.resource.data.phoneNumber is string
+          && request.resource.data.phoneNumber.size() <= 32;
+      }
+
+      allow get: if isOwner();
+      allow list: if false;
+      allow create: if isOwner()
+        && request.auth.token.email is string
+        && request.resource.data.keys().hasOnly([
+          'id', 'email', 'displayName', 'phoneNumber', 'role', 'createdAt'
+        ])
+        && request.resource.data.keys().hasAll([
+          'id', 'email', 'displayName', 'phoneNumber', 'role', 'createdAt'
+        ])
+        && request.resource.data.id == userId
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.role == 'donor'
+        && request.resource.data.createdAt is timestamp
+        && validPublicProfile();
+      allow update: if isOwner()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'displayName', 'phoneNumber'
+        ])
+        && validPublicProfile();
+      allow delete: if false;
+    }
+
+    // 2. Catalog Items (Kho đồ 0đ P2P C2C)
+    match /catalog_items/{itemId} {
+      function changedOnly(fields) {
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
+      }
+
+      function canReserve() {
+        return request.auth.uid == resource.data.donorId
+          && resource.data.status in ['available', 'Sẵn sàng nhận đồ']
+          && request.resource.data.status == 'reserved'
+          && changedOnly([
+            'status', 'reservedChatId', 'reservedRequesterId', 'pickupTime',
+            'reservationDeadline', 'donorHandoverConfirmed', 'requesterHandoverConfirmed'
+          ])
+          && request.resource.data.get('reservedChatId', null) is string
+          && request.resource.data.get('reservedRequesterId', null) is string
+          && request.resource.data.reservedRequesterId != request.auth.uid
+          && request.resource.data.get('pickupTime', null) is timestamp
+          && request.resource.data.get('reservationDeadline', null) is timestamp
+          && request.resource.data.get('donorHandoverConfirmed', false) == false
+          && request.resource.data.get('requesterHandoverConfirmed', false) == false;
+      }
+
+      function canCancel() {
+        return resource.data.status == 'reserved'
+          && request.resource.data.status == 'available'
+          && (request.auth.uid == resource.data.donorId ||
+              request.auth.uid == resource.data.get('reservedRequesterId', null))
+          && resource.data.get('donorHandoverConfirmed', false) == false
+          && resource.data.get('requesterHandoverConfirmed', false) == false
+          && changedOnly([
+            'status', 'reservedChatId', 'reservedRequesterId', 'pickupTime',
+            'reservationDeadline', 'donorHandoverConfirmed', 'requesterHandoverConfirmed'
+          ])
+          && request.resource.data.get('reservedChatId', null) == null
+          && request.resource.data.get('reservedRequesterId', null) == null
+          && request.resource.data.get('pickupTime', null) == null
+          && request.resource.data.get('reservationDeadline', null) == null
+          && request.resource.data.get('donorHandoverConfirmed', false) == false
+          && request.resource.data.get('requesterHandoverConfirmed', false) == false;
+      }
+
+      function canConfirmHandover() {
+        let donorConfirmed = request.resource.data.get('donorHandoverConfirmed', false);
+        let requesterConfirmed = request.resource.data.get('requesterHandoverConfirmed', false);
+        return resource.data.status == 'reserved'
+          && changedOnly(['status', 'donorHandoverConfirmed', 'requesterHandoverConfirmed'])
+          && (
+            (request.auth.uid == resource.data.donorId
+              && donorConfirmed == true
+              && requesterConfirmed == resource.data.get('requesterHandoverConfirmed', false)) ||
+            (request.auth.uid == resource.data.get('reservedRequesterId', null)
+              && requesterConfirmed == true
+              && donorConfirmed == resource.data.get('donorHandoverConfirmed', false))
+          )
+          && ((donorConfirmed && requesterConfirmed && request.resource.data.status == 'completed') ||
+              (!(donorConfirmed && requesterConfirmed) && request.resource.data.status == 'reserved'));
+      }
+
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.resource.data.donorId == request.auth.uid
+        && request.resource.data.status == 'available'
+        && validCloudinaryImages('catalog_item', itemId)
+        && request.resource.data.get('reservedChatId', null) == null
+        && request.resource.data.get('reservedRequesterId', null) == null
+        && request.resource.data.get('donorHandoverConfirmed', false) == false
+        && request.resource.data.get('requesterHandoverConfirmed', false) == false;
+
+      allow update: if request.auth != null &&
+        (canReserve() || canCancel() || canConfirmHandover());
+
+      allow delete: if request.auth != null && resource.data.donorId == request.auth.uid;
+    }
+
+    // 3. Conversations (In-App Chat 1-1)
+    match /conversations/{chatId} {
+      function itemAfter() {
+        return getAfter(/databases/$(database)/documents/catalog_items/$(request.resource.data.itemId)).data;
+      }
+
+      function validConversationState() {
+        let item = itemAfter();
+        let belongsToChat = item.get('reservedChatId', null) == chatId;
+        return (request.resource.data.get('isReserved', false) != true ||
+                (item.status == 'reserved' && belongsToChat))
+          && (request.resource.data.get('appointmentStatus', 'none') != 'accepted' ||
+              (item.status == 'reserved' && belongsToChat))
+          && (request.resource.data.get('appointmentStatus', 'none') != 'completed' ||
+              (item.status == 'completed' && belongsToChat))
+          && (request.resource.data.get('donorHandoverConfirmed', false) != true ||
+              (belongsToChat && item.get('donorHandoverConfirmed', false) == true))
+          && (request.resource.data.get('requesterHandoverConfirmed', false) != true ||
+              (belongsToChat && item.get('requesterHandoverConfirmed', false) == true));
+      }
+
+      function changesOnlyOwnReadTime() {
+        let before = resource.data.get('lastReadTimes', {});
+        let after = request.resource.data.get('lastReadTimes', {});
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastReadTimes'])
+          && after is map
+          && before is map
+          && after.diff(before).affectedKeys().hasOnly([request.auth.uid])
+          && after.get(request.auth.uid, null) is timestamp;
+      }
+
+      function validWorkflowTransition() {
+        let changed = request.resource.data.diff(resource.data).affectedKeys();
+        let before = resource.data.get('appointmentStatus', 'none');
+        let after = request.resource.data.get('appointmentStatus', 'none');
+        let item = itemAfter();
+        return !changed.hasAny([
+          'appointmentStatus', 'isReserved', 'proposedPickupTime',
+          'reservationDeadline', 'donorHandoverConfirmed', 'requesterHandoverConfirmed'
+        ]) || (
+          after == 'proposed'
+          && before in ['none', 'proposed', 'declined', 'cancelled']
+          && request.auth.uid == resource.data.requesterId
+          && item.status in ['available', 'Sẵn sàng nhận đồ']
+          && request.resource.data.get('isReserved', false) == false
+          && request.resource.data.get('proposedPickupTime', null) is timestamp
+          && changed.hasOnly([
+            'appointmentStatus', 'proposedPickupTime',
+            'lastMessage', 'lastMessageTime', 'lastSenderId'
+          ])
+        ) || (
+          after == 'accepted'
+          && before == 'proposed'
+          && request.auth.uid == resource.data.donorId
+          && item.status == 'reserved'
+          && item.get('reservedChatId', null) == chatId
+          && request.resource.data.get('isReserved', false) == true
+          && request.resource.data.get('proposedPickupTime', null) == item.get('pickupTime', null)
+          && request.resource.data.get('reservationDeadline', null) == item.get('reservationDeadline', null)
+          && changed.hasOnly([
+            'appointmentStatus', 'isReserved', 'proposedPickupTime',
+            'reservationDeadline', 'donorHandoverConfirmed',
+            'requesterHandoverConfirmed', 'lastMessage',
+            'lastMessageTime', 'lastSenderId'
+          ])
+        ) || (
+          after == 'declined'
+          && before == 'proposed'
+          && request.auth.uid == resource.data.donorId
+          && request.resource.data.get('isReserved', false) == false
+          && changed.hasOnly([
+            'appointmentStatus', 'lastMessage', 'lastMessageTime', 'lastSenderId'
+          ])
+        ) || (
+          after == 'cancelled'
+          && before == 'accepted'
+          && item.status == 'available'
+          && item.get('reservedChatId', null) == null
+          && request.resource.data.get('isReserved', false) == false
+          && request.resource.data.get('proposedPickupTime', null) == null
+          && request.resource.data.get('reservationDeadline', null) == null
+          && changed.hasOnly([
+            'appointmentStatus', 'isReserved', 'proposedPickupTime',
+            'reservationDeadline', 'donorHandoverConfirmed',
+            'requesterHandoverConfirmed', 'lastMessage',
+            'lastMessageTime', 'lastSenderId'
+          ])
+        ) || (
+          after == 'completed'
+          && before == 'accepted'
+          && item.status == 'completed'
+          && item.get('reservedChatId', null) == chatId
+          && request.resource.data.get('isReserved', false) == false
+          && changed.hasOnly([
+            'appointmentStatus', 'isReserved', 'donorHandoverConfirmed',
+            'requesterHandoverConfirmed', 'lastMessage',
+            'lastMessageTime', 'lastSenderId'
+          ])
+        ) || (
+          after == before
+          && before == 'accepted'
+          && item.status == 'reserved'
+          && item.get('reservedChatId', null) == chatId
+          && request.resource.data.get('donorHandoverConfirmed', false) == item.get('donorHandoverConfirmed', false)
+          && request.resource.data.get('requesterHandoverConfirmed', false) == item.get('requesterHandoverConfirmed', false)
+          && changed.hasOnly([
+            'donorHandoverConfirmed', 'requesterHandoverConfirmed',
+            'lastMessage', 'lastMessageTime', 'lastSenderId'
+          ])
+          && (
+            (request.auth.uid == resource.data.donorId
+              && request.resource.data.get('requesterHandoverConfirmed', false) == resource.data.get('requesterHandoverConfirmed', false)) ||
+            (request.auth.uid == resource.data.requesterId
+              && request.resource.data.get('donorHandoverConfirmed', false) == resource.data.get('donorHandoverConfirmed', false))
+          )
+        ) || (
+          after == before
+          && before in ['none', 'proposed']
+          && request.auth.uid == resource.data.donorId
+          && item.status == 'reserved'
+          && item.get('reservedChatId', null) == chatId
+          && request.resource.data.get('isReserved', false) == true
+          && changed.hasOnly([
+            'isReserved', 'lastMessage', 'lastMessageTime', 'lastSenderId'
+          ])
+        );
+      }
+
+      // Cho phép kiểm tra ID chat chưa tồn tại trước transaction tạo chat.
+      allow get: if request.auth != null && (
+        resource == null || request.auth.uid in resource.data.participantIds
+      );
+      allow list: if request.auth != null && request.auth.uid in resource.data.participantIds;
+      allow create: if request.auth != null
+        && request.auth.uid == request.resource.data.requesterId
+        && request.resource.data.requesterId != request.resource.data.donorId
+        && request.resource.data.donorId == itemAfter().donorId
+        && request.resource.data.itemId is string
+        && request.resource.data.participantIds == [request.resource.data.donorId, request.resource.data.requesterId]
+        && request.resource.data.lastSenderId == request.auth.uid
+        && validConversationState();
+
+      // Thành viên chỉ được cập nhật các trường metadata tin nhắn, lịch hẹn và bàn giao
+      allow update: if request.auth != null
+        && request.auth.uid in resource.data.participantIds
+        && (changesOnlyOwnReadTime() || (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'lastMessage', 'lastMessageTime', 'lastSenderId', 'isReserved',
+            'appointmentStatus', 'proposedPickupTime', 'reservationDeadline',
+            'donorHandoverConfirmed', 'requesterHandoverConfirmed'
+          ])
+          && request.resource.data.lastSenderId == request.auth.uid
+          && validConversationState()
+          && validWorkflowTransition()
+        ));
+
+      // Sub-collection: Messages
+      // Chỉ thành viên của cuộc trò chuyện cha mới được đọc và gửi tin nhắn
+      match /messages/{messageId} {
+        function conversationAfter() {
+          return getAfter(/databases/$(database)/documents/conversations/$(chatId)).data;
+        }
+
+        function itemAfter() {
+          return getAfter(/databases/$(database)/documents/catalog_items/$(conversationAfter().itemId)).data;
+        }
+
+        allow read: if request.auth != null
+          && request.auth.uid in get(/databases/$(database)/documents/conversations/$(chatId)).data.participantIds;
+        allow create: if request.auth != null
+          && request.resource.data.senderId == request.auth.uid
+          && request.resource.data.get('messageType', 'text') != 'system'
+          && request.auth.uid in conversationAfter().participantIds;
+        // Cho phép cập nhật trạng thái thẻ đề xuất hẹn (appointmentStatus)
+        allow update: if request.auth != null
+          && request.auth.uid == conversationAfter().donorId
+          && resource.data.messageType == 'appointment_proposal'
+          && resource.data.appointmentStatus == 'pending'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['appointmentStatus'])
+          && (request.resource.data.appointmentStatus == 'declined' ||
+              (request.resource.data.appointmentStatus == 'accepted'
+                && itemAfter().status == 'reserved'
+                && itemAfter().reservedChatId == chatId));
+        allow delete: if false;
+      }
+    }
+
+    // 4. Donations (Quyên góp tập trung về Trạm Hub)
+    match /donations/{donationId} {
+      // Cho phép kiểm tra ID chưa tồn tại để transaction tạo đơn có thể retry an toàn.
+      allow get: if request.auth != null && (
+        resource == null ||
+        resource.data.donorId == request.auth.uid ||
+        isSystemAdmin()
+      );
+      allow list: if request.auth != null && (
+        resource.data.donorId == request.auth.uid ||
+        isSystemAdmin()
+      );
+      allow create: if request.auth != null
+        && request.resource.data.id == donationId
+        && request.resource.data.donorId == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && validCloudinaryImages('donation', donationId);
+      allow update: if request.auth != null && isSystemAdmin();
+      allow delete: if false;
+    }
+
+    // 5. Campaigns & Hubs (Chiến dịch & Trạm tiếp nhận - Công khai để xem)
+    match /campaigns/{campaignId} {
+      allow read: if true;
+      allow write: if request.auth != null && isSystemAdmin();
+    }
+
+    match /hubs/{hubId} {
+      allow read: if true;
+      allow write: if false;
+    }
+  }
+}
