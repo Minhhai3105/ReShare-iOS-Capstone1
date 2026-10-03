@@ -1591,10 +1591,6 @@ html:has(.landing-page) {
   color: #fff !important;
 }
 
-.landing-page .brand--footer img {
-  filter: brightness(0) invert(1);
-}
-
 .landing-page .footer-about p,
 .landing-page .footer-column p {
   max-width: 300px;
@@ -4048,26 +4044,12 @@ html:has(.landing-page) {
 .landing-page .footer-main {
   grid-template-columns: 1.65fr 0.65fr 0.9fr 1.25fr;
   gap: 42px;
-  padding-bottom: 29px;
+  padding-bottom: 0;
 }
 
-.landing-page .footer-brand-icon {
-  display: grid;
+.landing-page .brand--footer img {
   width: 33px;
   height: 33px;
-  place-items: center;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.12);
-}
-
-.landing-page .footer-brand-icon svg {
-  width: 19px;
-  height: 19px;
-  fill: none;
-  stroke: #fff;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.8;
 }
 
 .landing-page .brand--footer {
@@ -4081,7 +4063,7 @@ html:has(.landing-page) {
 }
 
 .landing-page .footer-column {
-  gap: 7px;
+  gap: 5px;
 }
 
 .landing-page .footer-column h2,
@@ -4095,6 +4077,7 @@ html:has(.landing-page) {
 
 .landing-page .footer-column a {
   font-size: 11px;
+  line-height: 1.45;
 }
 
 .landing-page .footer-contact-link {

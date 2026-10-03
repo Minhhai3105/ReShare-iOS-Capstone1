@@ -1,5 +1,6 @@
 <script setup>
 import { ref } from 'vue'
+import logo from '../assets/logo.png'
 
 const email = ref('')
 
@@ -24,14 +25,7 @@ function sendNewsletterRequest() {
       <div class="footer-main">
         <div class="footer-about">
           <a class="brand brand--footer" href="#home">
-            <span class="footer-brand-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <circle cx="18" cy="5" r="2.5" />
-                <circle cx="6" cy="12" r="2.5" />
-                <circle cx="18" cy="19" r="2.5" />
-                <path d="m8.2 10.8 7.5-4.4M8.2 13.2l7.5 4.4" />
-              </svg>
-            </span>
+            <img :src="logo" alt="" />
             <span>ReShare</span>
           </a>
           <p>Chia sẻ giá trị. Kết nối cộng đồng.</p>
