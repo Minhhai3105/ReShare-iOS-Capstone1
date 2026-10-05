@@ -107,7 +107,7 @@ watch(enlarged, async (value) => {
 </script>
 
 <template>
-  <AuthShell :show-server-status="!localPreview">
+  <AuthShell :show-server-status="false">
     <div class="donation-page">
       <p v-if="localPreview" class="eyebrow">PREVIEW LOCAL ĐỘC LẬP · KHÔNG CẦN ĐĂNG NHẬP</p>
       <RouterLink v-else :to="{ name: 'admin-home' }">← Về quản trị</RouterLink>

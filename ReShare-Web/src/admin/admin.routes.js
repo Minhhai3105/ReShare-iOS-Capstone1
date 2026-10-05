@@ -22,12 +22,12 @@ export const adminRoutes = [
     component: () => import('./auth/views/AdminForbidden.vue'),
     meta: { requiresAuth: true },
   },
-  {
+  ...(import.meta.env.DEV ? [{
     path: '/admin/warehouses/:warehouseId/donations/:donationId',
     name: 'admin-donation-detail',
     component: () => import('./donations/DonationDetailRoute.vue'),
     meta: { requiresAuth: true, roles: ADMIN_ROLES },
-  },
+  }] : []),
   {
     path: '/admin',
     name: ADMIN_ROUTE.home,

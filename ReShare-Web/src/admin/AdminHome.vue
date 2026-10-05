@@ -8,6 +8,7 @@ import { currentUser, signOut, staffAssignment } from './auth/auth.store'
 import { ADMIN_ROUTE, USER_ROLE } from './auth/auth.constants'
 
 const router = useRouter()
+const isDemoBuild = import.meta.env.DEV
 
 const warehousesLabel = computed(() =>
   staffAssignment.value.role === USER_ROLE.systemAdmin ? 'Toàn hệ thống' : staffAssignment.value.warehouseIds.join(', '),
@@ -35,11 +36,11 @@ async function onSignOutClick() {
         </div>
       </AuthAccountInfo>
 
-      <RouterLink v-if="demoWarehouse" class="auth-btn auth-btn--primary"
+      <RouterLink v-if="isDemoBuild && demoWarehouse" class="auth-btn auth-btn--primary"
         :to="{ name: 'admin-donation-detail', params: { warehouseId: demoWarehouse, donationId: 'demo-001' } }">
         Xem Donation Detail — demo RC1D-67
       </RouterLink>
-      <p v-else>Chưa có kho được phân công để xem donation.</p>
+      <p v-else-if="isDemoBuild">Chưa có kho được phân công để xem donation.</p>
 
       <button type="button" class="auth-btn auth-btn--primary admin-home__sign-out" @click="onSignOutClick">
         <AuthIcon name="log-out" />Đăng xuất
