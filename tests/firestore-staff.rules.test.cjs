@@ -54,6 +54,7 @@ test('US02: staff rights come from trusted assignment and are limited to assigne
     await assertFails(worker.doc('warehouses/kho-b').get());
     await assertFails(admin.doc('warehouses/kho-a').get());
   } finally {
+    await env.clearFirestore();
     await env.cleanup();
   }
 });
