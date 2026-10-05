@@ -28,6 +28,36 @@ export const adminRoutes = [
     component: () => import('./AdminHome.vue'),
     meta: { requiresAuth: true, roles: ADMIN_ROLES },
   },
+  {
+    path: '/admin/staff',
+    name: ADMIN_ROUTE.staff,
+    component: () => import('./staff/StaffManagement.vue'),
+    meta: { requiresAuth: true, roles: ['system_admin'] },
+  },
+  {
+    path: '/admin/donations',
+    name: ADMIN_ROUTE.donationQueue,
+    component: () => import('./donations/views/DonationQueue.vue'),
+    meta: { requiresAuth: true, roles: ADMIN_ROLES },
+  },
+  ...(import.meta.env.DEV ? [{
+    path: '/admin/receipt-preview',
+    name: 'admin-donation-receipt-preview',
+    component: () => import('./receipt/views/ActualReceipt.vue'),
+    meta: { requiresAuth: true, roles: ADMIN_ROLES, devPreview: true },
+  }] : []),
+  {
+    path: '/admin/donations/:donationId/receipt',
+    name: 'admin-donation-receipt',
+    component: () => import('./receipt/views/ActualReceipt.vue'),
+    meta: { requiresAuth: true, roles: ADMIN_ROLES },
+  },
+  ...(import.meta.env.DEV ? [{
+    path: '/admin/ai-review-preview',
+    name: 'admin-ai-review-preview',
+    component: () => import('./DonationAiReviewDemo.vue'),
+    meta: { requiresAuth: true, roles: ADMIN_ROLES },
+  }] : []),
   { path: '/admin/:pathMatch(.*)*', redirect: () => ({ name: ADMIN_ROUTE.home, params: {} }) },
 ]
 

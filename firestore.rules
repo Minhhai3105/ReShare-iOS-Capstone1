@@ -357,6 +357,23 @@ service cloud.firestore {
 
     // 4. Donations (Quyên góp tập trung về Trạm Hub)
     match /donations/{donationId} {
+      function validNewDonation() {
+        let data = request.resource.data;
+        return data.keys().hasAll([
+            'id', 'donorId', 'title', 'description', 'category',
+            'condition', 'status', 'imageProvider', 'imagePublicIds', 'createdAt'
+          ])
+          && data.title is string
+          && data.title.size() > 0
+          && data.title.size() <= 120
+          && data.description is string
+          && data.category in ['clothing', 'books', 'household']
+          && data.condition in ['new', 'like_new', 'good', 'fair']
+          && data.createdAt is timestamp
+          && data.imageProvider == 'cloudinary'
+          && validCloudinaryImages('donation', donationId);
+      }
+
       // Cho phép kiểm tra ID chưa tồn tại để transaction tạo đơn có thể retry an toàn.
       allow get: if request.auth != null && (
         resource == null ||
@@ -371,7 +388,7 @@ service cloud.firestore {
         && request.resource.data.id == donationId
         && request.resource.data.donorId == request.auth.uid
         && request.resource.data.status == 'pending'
-        && validCloudinaryImages('donation', donationId);
+        && validNewDonation();
       allow update: if request.auth != null && isSystemAdmin();
       allow delete: if false;
     }
