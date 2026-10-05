@@ -85,3 +85,24 @@ test('private donation image requires donor or system admin plus attached intent
   documents.set('staff_assignments/admin', { uid: 'admin', role: 'system_admin', active: false, warehouseIds: [] });
   await assert.rejects(call('/v1/images/read-access', 'admin', request), { status: 403 });
 });
+
+test('assigned warehouse staff can view donation images but other warehouses cannot', async () => {
+  const { call, documents } = setup();
+  const publicId = (await call('/v1/images/upload-intents', 'donor', {
+    purpose: 'donation', recordId: donationId, clientImageId
+  })).body.publicId;
+  documents.set(`donations/${donationId}`, {
+    donorId: 'donor', hubId: 'kho-a', imageProvider: 'cloudinary', imagePublicIds: [publicId]
+  });
+  documents.set('staff_assignments/worker-a', {
+    active: true, role: 'warehouse_admin', warehouseIds: ['kho-a']
+  });
+  documents.set('staff_assignments/worker-b', {
+    active: true, role: 'warehouse_admin', warehouseIds: ['kho-b']
+  });
+  const request = { donationId, publicId };
+  assert.match((await call('/v1/images/read-access', 'worker-a', request)).body.url, /^https:/);
+  await assert.rejects(call('/v1/images/read-access', 'worker-b', request), { status: 403 });
+  documents.get('staff_assignments/worker-a').active = false;
+  await assert.rejects(call('/v1/images/read-access', 'worker-a', request), { status: 403 });
+});

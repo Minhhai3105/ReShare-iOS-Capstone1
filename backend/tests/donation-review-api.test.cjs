@@ -31,6 +31,9 @@ function setup() {
           const current = documents.get(ref.key) || {};
           writes.push([ref.key, { ...current, ...data }]);
         },
+        set: (ref, data) => {
+          writes.push([ref.key, data]);
+        },
       });
       for (const [k, d] of writes) documents.set(k, d);
       return result;
@@ -100,6 +103,9 @@ test('US10: Authorized Warehouse Admin can approve pending donation in their war
   const stored = documents.get('donations/don-1');
   assert.equal(stored.status, 'approved');
   assert.equal(stored.version, 2);
+  assert.equal(Object.hasOwn(stored, 'internalNote'), false);
+  assert.equal(Object.hasOwn(stored, 'reviewedBy'), false);
+  assert.equal(documents.get('donation_reviews/don-1').reviewedBy, 'worker-a');
 
   // AC5: Inventory is unchanged
   const inventoryAfter = [...documents.keys()].filter((k) => k.startsWith('inventory'));
@@ -132,6 +138,23 @@ test('US10: Rejection requires publicMessage and rejects empty reason', async ()
   assert.equal(res.body.donation.status, 'rejected');
   assert.equal(res.body.donation.statusNote, 'Vật phẩm đã sờn rách, không đạt tiêu chuẩn tiếp nhận.');
   assert.equal(res.body.donation.internalNote, 'Đã gọi điện giải thích cho donor.');
+  assert.equal(Object.hasOwn(documents.get('donations/don-1'), 'internalNote'), false);
+  assert.equal(documents.get('donation_reviews/don-1').internalNote, 'Đã gọi điện giải thích cho donor.');
+});
+
+test('US10: malformed message types are rejected before writing a review', async () => {
+  const { api, documents } = setup();
+  for (const body of [
+    { action: 'reject', publicMessage: { text: 'wrong type' } },
+    { action: 'approve', internalNote: ['wrong type'] },
+  ]) {
+    await assert.rejects(
+      api.handle('POST', '/v1/admin/donations/don-1/decide', { authorization: 'Bearer wh-a-token' }, body),
+      (error) => error.status === 400,
+    );
+  }
+  assert.equal(documents.get('donations/don-1').status, 'pending');
+  assert.equal(documents.has('donation_reviews/don-1'), false);
 });
 
 test('US10: Staff from wrong warehouse or unauthorized role is rejected with 403', async () => {

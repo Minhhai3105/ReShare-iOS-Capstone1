@@ -1,4 +1,14 @@
 const { ApiError } = require('./image-api.cjs');
+const { FieldValue } = require('firebase-admin/firestore');
+
+function publicHistory(history) {
+  if (!Array.isArray(history)) return [];
+  return history.map(entry => Object.fromEntries(
+    ['action', 'fromStatus', 'toStatus', 'reviewState', 'timestamp', 'publicMessage', 'version']
+      .filter(key => entry && entry[key] !== undefined)
+      .map(key => [key, entry[key]])
+  ));
+}
 
 function createDonationReviewApi({ db, verifyToken, serverTimestamp }) {
   if (!db || !verifyToken) throw new Error('Donation Review API configuration is incomplete');
@@ -34,6 +44,11 @@ function createDonationReviewApi({ db, verifyToken, serverTimestamp }) {
       throw new ApiError(400, 'Invalid appraisal action. Must be approve, reject, or information.');
     }
 
+    if ((publicMessage !== undefined && typeof publicMessage !== 'string') ||
+        (internalNote !== undefined && typeof internalNote !== 'string')) {
+      throw new ApiError(400, 'Messages must be strings.');
+    }
+
     if ((action === 'reject' || action === 'information') && (!publicMessage || !publicMessage.trim())) {
       throw new ApiError(400, action === 'reject' 
         ? 'Public rejection reason is required for the donor.'
@@ -48,6 +63,7 @@ function createDonationReviewApi({ db, verifyToken, serverTimestamp }) {
     }
 
     const donationRef = db.collection('donations').doc(donationId);
+    const reviewRef = db.collection('donation_reviews').doc(donationId);
 
     const result = await db.runTransaction(async (transaction) => {
       const doc = await transaction.get(donationRef);
@@ -55,6 +71,10 @@ function createDonationReviewApi({ db, verifyToken, serverTimestamp }) {
         throw new ApiError(404, 'Donation not found');
       }
       const data = doc.data();
+      const reviewDoc = await transaction.get(reviewRef);
+      const previousReviews = reviewDoc.exists && Array.isArray(reviewDoc.data().history)
+        ? reviewDoc.data().history
+        : (Array.isArray(data.history) ? data.history : []);
 
       // Warehouse authorization check
       const assignedWarehouse = data.hubId || data.warehouseId;
@@ -97,14 +117,23 @@ function createDonationReviewApi({ db, verifyToken, serverTimestamp }) {
         status: newStatus,
         reviewState: newReviewState,
         statusNote: cleanPublicMessage || null,
-        internalNote: cleanInternalNote || null,
-        reviewedBy: staff.uid,
         reviewedAt: (serverTimestamp ? serverTimestamp() : new Date()),
         version: nextVersion,
-        history: [...(data.history || []), historyEntry],
+        history: [...publicHistory(data.history), publicHistory([historyEntry])[0]],
       };
 
+      // Firestore returns a complete document to its donor. Remove legacy private fields.
+      if (Object.hasOwn(data, 'internalNote')) updateData.internalNote = FieldValue.delete();
+      if (Object.hasOwn(data, 'reviewedBy')) updateData.reviewedBy = FieldValue.delete();
+
       transaction.update(donationRef, updateData);
+      transaction.set(reviewRef, {
+        donationId,
+        internalNote: cleanInternalNote || null,
+        reviewedBy: staff.uid,
+        reviewedAt: updateData.reviewedAt,
+        history: [...previousReviews, historyEntry],
+      });
 
       // Inventory check: AC5 specifies that approval MUST NOT increase inventory.
       // We explicitly ensure no writes are made to inventory collections.
@@ -113,6 +142,9 @@ function createDonationReviewApi({ db, verifyToken, serverTimestamp }) {
         id: donationId,
         ...data,
         ...updateData,
+        internalNote: cleanInternalNote || null,
+        reviewedBy: staff.uid,
+        history: [...previousReviews, historyEntry],
       };
     });
 
@@ -134,9 +166,24 @@ function createDonationReviewApi({ db, verifyToken, serverTimestamp }) {
     if (staff.role === 'warehouse_admin' && (!assignedWarehouse || !staff.warehouseIds.includes(assignedWarehouse))) {
       throw new ApiError(403, 'Forbidden: not your assigned warehouse');
     }
+    const reviewDoc = await db.collection('donation_reviews').doc(donationId).get();
+    const review = reviewDoc.exists ? reviewDoc.data() : {};
+    const donorDoc = data.donorId ? await db.collection('users').doc(data.donorId).get() : null;
+    const donor = donorDoc?.exists ? donorDoc.data() : {};
     return {
       status: 200,
-      body: { donation: { id: doc.id, ...data } },
+      body: { donation: {
+        id: doc.id,
+        ...data,
+        createdAt: data.createdAt?.toDate?.().toISOString() || data.createdAt,
+        donor: {
+          name: donor.displayName || data.donorName || data.donorId || 'Người gửi',
+          email: donor.email || null,
+        },
+        internalNote: review.internalNote || null,
+        reviewedBy: review.reviewedBy || null,
+        history: review.history || data.history || [],
+      } },
     };
   }
 
