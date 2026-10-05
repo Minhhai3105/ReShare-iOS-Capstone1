@@ -10,6 +10,9 @@ const links = [
   { label: 'Công nghệ AI', href: '#ai-tech' },
   { label: 'Tính năng', href: '#features' },
   { label: 'Giá trị', href: '#values' },
+  { label: 'Điểm tiếp nhận', href: '#collection-points' },
+  { label: 'FAQ', href: '#faq' },
+  { label: 'Liên hệ', href: '#contact' },
 ]
 
 function closeMenu() {
