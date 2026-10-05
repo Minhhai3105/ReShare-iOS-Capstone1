@@ -1,0 +1,7 @@
+# Local preview/build/browser artifacts, never product assets.
+.preview/
+node_modules/
+# Figma reference only; do not include in commits.
+figma-e.png
+figma-f.png
+figma-q.png

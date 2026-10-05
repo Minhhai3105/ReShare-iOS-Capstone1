@@ -52,6 +52,12 @@ export const adminRoutes = [
     component: () => import('./receipt/views/ActualReceipt.vue'),
     meta: { requiresAuth: true, roles: ADMIN_ROLES },
   },
+  ...(import.meta.env.DEV ? [{
+    path: '/admin/ai-review-preview',
+    name: 'admin-ai-review-preview',
+    component: () => import('./DonationAiReviewDemo.vue'),
+    meta: { requiresAuth: true, roles: ADMIN_ROLES },
+  }] : []),
   { path: '/admin/:pathMatch(.*)*', redirect: () => ({ name: ADMIN_ROUTE.home, params: {} }) },
 ]
 
