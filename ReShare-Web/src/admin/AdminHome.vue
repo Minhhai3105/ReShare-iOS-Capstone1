@@ -12,6 +12,8 @@ const router = useRouter()
 const warehousesLabel = computed(() =>
   staffAssignment.value.role === USER_ROLE.systemAdmin ? 'Toàn hệ thống' : staffAssignment.value.warehouseIds.join(', '),
 )
+const demoWarehouse = computed(() => staffAssignment.value?.warehouseIds?.[0]
+  || (staffAssignment.value?.role === USER_ROLE.systemAdmin ? 'demo-hub' : null))
 
 async function onSignOutClick() {
   await signOut()
@@ -32,6 +34,12 @@ async function onSignOutClick() {
           <dd class="auth-mono">{{ warehousesLabel }}</dd>
         </div>
       </AuthAccountInfo>
+
+      <RouterLink v-if="demoWarehouse" class="auth-btn auth-btn--primary"
+        :to="{ name: 'admin-donation-detail', params: { warehouseId: demoWarehouse, donationId: 'demo-001' } }">
+        Xem Donation Detail — demo RC1D-67
+      </RouterLink>
+      <p v-else>Chưa có kho được phân công để xem donation.</p>
 
       <button type="button" class="auth-btn auth-btn--primary admin-home__sign-out" @click="onSignOutClick">
         <AuthIcon name="log-out" />Đăng xuất
