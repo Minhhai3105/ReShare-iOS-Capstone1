@@ -374,15 +374,22 @@ service cloud.firestore {
           && validCloudinaryImages('donation', donationId);
       }
 
+      function canStaffReadDonation() {
+        let assignedWarehouse = resource.data.get('warehouseId', resource.data.get('hubId', null));
+        return isSystemAdmin() || (
+          assignedWarehouse != null && canReadWarehouse(assignedWarehouse)
+        );
+      }
+
       // Cho phép kiểm tra ID chưa tồn tại để transaction tạo đơn có thể retry an toàn.
       allow get: if request.auth != null && (
         resource == null ||
         resource.data.donorId == request.auth.uid ||
-        isSystemAdmin()
+        canStaffReadDonation()
       );
       allow list: if request.auth != null && (
         resource.data.donorId == request.auth.uid ||
-        isSystemAdmin()
+        canStaffReadDonation()
       );
       allow create: if request.auth != null
         && request.resource.data.id == donationId
