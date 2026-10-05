@@ -33,6 +33,15 @@ async function onSignOutClick() {
         </div>
       </AuthAccountInfo>
 
+      <router-link
+        v-if="staffAssignment.role === USER_ROLE.systemAdmin"
+        :to="{ name: ADMIN_ROUTE.staff }"
+        class="auth-btn auth-btn--primary admin-home__staff-link"
+      >Quản lý nhân sự</router-link>
+
+      <RouterLink :to="{ name: ADMIN_ROUTE.donationQueue }" class="auth-btn auth-btn--soft admin-home__sign-out">
+        <AuthIcon name="inbox" />Hàng đợi yêu cầu quyên góp
+      </RouterLink>
       <button type="button" class="auth-btn auth-btn--primary admin-home__sign-out" @click="onSignOutClick">
         <AuthIcon name="log-out" />Đăng xuất
       </button>
@@ -81,6 +90,12 @@ async function onSignOutClick() {
 .admin-home__sign-out {
   width: 100%;
   margin-top: 16px;
+}
+
+.admin-home__staff-link {
+  width: 100%;
+  margin-top: 16px;
+  text-decoration: none;
 }
 
 @media (max-width: 640px) {
