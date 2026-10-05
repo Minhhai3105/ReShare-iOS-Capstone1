@@ -19,7 +19,14 @@ test('staff assignment and audit commit atomically in Firestore Emulator', {
 
     await revokeStaffAssignment({ db, actorUid: 'admin', targetUid: 'worker' });
     assert.equal((await db.doc('staff_assignments/worker').get()).data().active, false);
-    assert.equal((await db.collection('staff_assignment_audit').get()).size, 3);
+    const audit = await db.collection('staff_assignment_audit').get();
+    assert.equal(audit.size, 3);
+    const revocation = audit.docs.map(doc => doc.data()).find(event => event.after?.active === false);
+    assert.equal(revocation.actorUid, 'admin');
+    assert.equal(revocation.targetUid, 'worker');
+    assert.equal(revocation.before.active, true);
+    assert.deepEqual(revocation.after.warehouseIds, []);
+    assert.ok(revocation.createdAt.toDate() instanceof Date);
   } finally {
     await deleteApp(app);
   }
