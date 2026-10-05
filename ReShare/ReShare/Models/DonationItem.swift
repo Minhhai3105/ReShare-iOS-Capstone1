@@ -18,6 +18,7 @@ struct DonationItem: Identifiable, Codable {
 
     //  statusNote: Dùng hiển thị lời nhắn trạng thái từ hệ thống/admin cho người dùng
     var statusNote: String?
+    var reviewState: String? = nil
 
     // Hỗ trợ tích hợp Firestore & đồng bộ Web Admin theo BACKEND_SPECIFICATION.md
     var campaignId: String? = nil
