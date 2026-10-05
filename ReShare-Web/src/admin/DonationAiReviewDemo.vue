@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue';
 import AdminIcon from './AdminIcon.vue';
 import ApprovedScreen from './ApprovedScreen.vue';
 import ReportScreen from './ReportScreen.vue';
+import brandLogo from './auth/assets/reshare-logo.png';
 import { donationCategories, mockDonationAiReviewItems, type DonationCategory } from './mockDonationAiReview';
 
 const tabs = [
@@ -92,7 +93,7 @@ const operationMenu = [
       <section v-if="activeTab === 'E'" class="page-view e-page">
         <div class="e-app-shell">
           <aside class="e-sidebar">
-            <div class="e-brand"><span class="brand-mark">R</span><strong>ReShare</strong><small>PORTAL</small></div>
+            <div class="e-brand"><img :src="brandLogo" alt="" width="28" height="28" /><strong>ReShare</strong><small>PORTAL</small></div>
             <nav class="e-nav" aria-label="Điều hướng quản trị">
               <div class="menu-group">
                 <div class="menu-label">Vận hành kho &amp; xử lý</div>
