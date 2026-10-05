@@ -14,7 +14,6 @@ import {
 } from '../donation.constants'
 
 const SKELETON_ROWS = 6
-const isDemo = import.meta.env.DEV
 const STATUS_TONE = {
   [DONATION_STATUS.pending]: 'warning',
   [DONATION_STATUS.approved]: 'info',
@@ -62,14 +61,15 @@ const quickFilters = computed(() => {
   ]
 })
 // Khi lỗi hoặc không có quyền thì ẩn số đếm để không hiểu nhầm là "0 đơn".
-const showStatusCounts = computed(() => [QUEUE_VIEW_STATE.ready, QUEUE_VIEW_STATE.empty].includes(viewState.value))
+const showStatusCounts = computed(() => result.value?.statusCounts != null &&
+  [QUEUE_VIEW_STATE.ready, QUEUE_VIEW_STATE.empty].includes(viewState.value))
 const rangeLabel = computed(() => {
-  if (!result.value?.total) return 'Hiển thị 0 trên 0 yêu cầu'
+  if (!result.value?.items.length) return 'Không có yêu cầu phù hợp'
   const { page, pageSize, total } = result.value
   const start = (page - 1) * pageSize + 1
-  return `Hiển thị ${start}–${Math.min(page * pageSize, total)} trên ${total} yêu cầu`
+  const end = start + result.value.items.length - 1
+  return total == null ? `Hiển thị ${start}–${end} yêu cầu` : `Hiển thị ${start}–${end} trên ${total} yêu cầu`
 })
-const pageNumbers = computed(() => Array.from({ length: result.value?.totalPages ?? 0 }, (_, index) => index + 1))
 
 function formatDonationCode(id) {
   return `#${id.toUpperCase()}`
@@ -97,7 +97,7 @@ watch(staffAssignment, refreshQueue)
         <div>
           <div class="donation-queue__title-row">
             <h1>Yêu cầu quyên góp</h1>
-            <span class="auth-chip donation-queue__env"><span class="auth-dot" />{{ isDemo ? 'Dữ liệu thử nghiệm' : 'Chưa kết nối dữ liệu' }}</span>
+            <span class="auth-chip donation-queue__env"><span class="auth-dot" />Dữ liệu theo quyền kho</span>
           </div>
           <p>Theo dõi yêu cầu gửi qua app và tình trạng xử lý</p>
         </div>
@@ -118,7 +118,7 @@ watch(staffAssignment, refreshQueue)
           <strong>Thông báo điều phối</strong>
           <p>
             Phạm vi hiển thị: <strong>{{ scopeLabel }}</strong>.
-            {{ isDemo ? 'Danh sách dưới đây chỉ là dữ liệu minh họa, không phải đơn thực.' : 'Danh sách sẽ xuất hiện khi API vận hành được kết nối.' }}
+            Danh sách lấy từ Firestore và chỉ hiển thị theo phạm vi kho được phân công.
           </p>
         </div>
       </section>
@@ -126,10 +126,10 @@ watch(staffAssignment, refreshQueue)
       <section class="queue-card donation-queue__filters" aria-label="Bộ lọc">
         <div class="donation-queue__filter-grid">
           <label class="queue-field queue-field--search">
-            <span class="queue-field__label">Tìm kiếm <small>(Mã yêu cầu hoặc người gửi)</small></span>
+            <span class="queue-field__label">Tìm kiếm <small>(Mã yêu cầu chính xác)</small></span>
             <span class="auth-input">
               <AuthIcon name="search" />
-              <input v-model="filters.search" type="search" placeholder="Tìm theo mã yêu cầu hoặc tên người gửi…" />
+              <input v-model="filters.search" type="search" placeholder="Nhập mã yêu cầu chính xác…" />
             </span>
           </label>
 
@@ -267,28 +267,16 @@ watch(staffAssignment, refreshQueue)
         <footer class="donation-queue__pagination">
           <span>
             {{ rangeLabel }}
-            <template v-if="result?.total"> • Trang {{ result.page }} / {{ result.totalPages }}</template>
+            <template v-if="result?.items.length"> • Trang {{ result.page }}</template>
           </span>
-          <nav v-if="viewState === QUEUE_VIEW_STATE.ready && result.totalPages > 1" aria-label="Phân trang">
+          <nav v-if="viewState === QUEUE_VIEW_STATE.ready && (result.page > 1 || result.hasMore)" aria-label="Phân trang">
             <button type="button" class="queue-page" :disabled="isLoading || result.page === 1" @click="goToPage(result.page - 1)">
               <AuthIcon name="chevron-left" :size="16" />Trước
             </button>
             <button
-              v-for="pageNumber in pageNumbers"
-              :key="pageNumber"
               type="button"
               class="queue-page"
-              :class="{ 'is-active': pageNumber === result.page }"
-              :aria-current="pageNumber === result.page ? 'page' : undefined"
-              :disabled="isLoading"
-              @click="goToPage(pageNumber)"
-            >
-              {{ pageNumber }}
-            </button>
-            <button
-              type="button"
-              class="queue-page"
-              :disabled="isLoading || result.page === result.totalPages"
+              :disabled="isLoading || !result.hasMore"
               @click="goToPage(result.page + 1)"
             >
               Sau<AuthIcon name="chevron-right" :size="16" />
