@@ -33,6 +33,9 @@ async function onSignOutClick() {
         </div>
       </AuthAccountInfo>
 
+      <RouterLink :to="{ name: ADMIN_ROUTE.donationQueue }" class="auth-btn auth-btn--soft admin-home__sign-out">
+        <AuthIcon name="inbox" />Hàng đợi yêu cầu quyên góp
+      </RouterLink>
       <button type="button" class="auth-btn auth-btn--primary admin-home__sign-out" @click="onSignOutClick">
         <AuthIcon name="log-out" />Đăng xuất
       </button>

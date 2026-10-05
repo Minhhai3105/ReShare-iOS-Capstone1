@@ -28,6 +28,12 @@ export const adminRoutes = [
     component: () => import('./AdminHome.vue'),
     meta: { requiresAuth: true, roles: ADMIN_ROLES },
   },
+  {
+    path: '/admin/donations',
+    name: ADMIN_ROUTE.donationQueue,
+    component: () => import('./donations/views/DonationQueue.vue'),
+    meta: { requiresAuth: true, roles: ADMIN_ROLES },
+  },
   { path: '/admin/:pathMatch(.*)*', redirect: () => ({ name: ADMIN_ROUTE.home, params: {} }) },
 ]
 

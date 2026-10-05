@@ -25,6 +25,7 @@ export const ADMIN_ROUTE = Object.freeze({
   login: 'admin-login',
   forgotPassword: 'admin-forgot-password',
   forbidden: 'admin-forbidden',
+  donationQueue: 'admin-donation-queue',
 })
 
 export const AUTH_ERROR = Object.freeze({
