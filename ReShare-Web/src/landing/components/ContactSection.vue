@@ -1,6 +1,6 @@
 <script setup>
 import { reactive, ref } from 'vue'
-import { ContactRequestError, submitContact } from '../contactService'
+import { ContactRequestError, isContactConfigured, submitContact } from '../contactService'
 
 const MAX_NAME_LENGTH = 100
 const MAX_EMAIL_LENGTH = 254
@@ -46,6 +46,7 @@ function onInput(field) {
 }
 
 async function onSubmit() {
+  if (!isContactConfigured) return
   if (isSubmitting.value) return
   submitState.value = 'idle'
   if (!validateForm()) {
@@ -140,9 +141,12 @@ async function onSubmit() {
           <small v-if="touched.message && errors.message" id="contact-message-error" class="contact-error">{{ errors.message }}</small>
         </div>
 
-        <button class="button contact-submit" type="submit" :disabled="isSubmitting">
+        <button class="button contact-submit" type="submit" :disabled="isSubmitting || !isContactConfigured">
           {{ isSubmitting ? 'Đang gửi…' : 'Gửi liên hệ' }}
         </button>
+        <p v-if="!isContactConfigured" class="contact-status contact-status--error" role="status">
+          Kênh liên hệ đang được thiết lập. Vui lòng quay lại sau.
+        </p>
         <p v-if="submitState === 'validation-error'" class="contact-status contact-status--error" role="alert">
           Vui lòng kiểm tra và hoàn thành các thông tin bắt buộc.
         </p>

@@ -1,5 +1,6 @@
-// For separate web/backend origins, set this URL and allow the exact web origin on the backend.
-const CONTACT_ENDPOINT = import.meta.env.VITE_CONTACT_API_URL || '/v1/contact'
+// Bản production chỉ nhận liên hệ khi đã cấu hình URL API.
+export const isContactConfigured = Boolean(import.meta.env.VITE_CONTACT_API_URL || import.meta.env.DEV)
+const CONTACT_ENDPOINT = import.meta.env.VITE_CONTACT_API_URL || (import.meta.env.DEV ? '/v1/contact' : null)
 
 export class ContactRequestError extends Error {
   constructor(status) {
@@ -9,6 +10,7 @@ export class ContactRequestError extends Error {
 }
 
 export async function submitContact(contact) {
+  if (!CONTACT_ENDPOINT) throw new ContactRequestError(503)
   let response
   try {
     response = await fetch(CONTACT_ENDPOINT, {

@@ -45,7 +45,7 @@ const questions = [
   },
   {
     question: 'Khi nào có kênh liên hệ với ReShare?',
-    answer: 'Bạn có thể gửi liên hệ bằng form ở cuối trang. Yêu cầu được tiếp nhận vào hộp thư nội bộ của ReShare.',
+    answer: 'Biểu mẫu liên hệ nằm ở cuối trang và sẽ mở khi kênh tiếp nhận được kết nối. Trang sẽ báo rõ nếu kênh này chưa sẵn sàng.',
   },
 ]
 
