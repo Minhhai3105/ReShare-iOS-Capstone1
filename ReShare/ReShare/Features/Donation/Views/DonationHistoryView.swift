@@ -81,6 +81,9 @@ struct DonationHistoryView: View {
                         .padding(.horizontal, 20)
                         .padding(.top, 4)
                     }
+                    .refreshable {
+                        await loadHistory()
+                    }
                 }
             }
             .background(Color(red: 0.98, green: 0.98, blue: 0.96).ignoresSafeArea())
@@ -226,7 +229,7 @@ struct HistoryItemCard: View {
                     .foregroundColor(Color(red: 0.11, green: 0.27, blue: 0.16))
                     .lineLimit(1)
 
-                // Hàng 3: Ghi chú từ chối (NẾU BỊ REJECTED)
+                // Hàng 3: Ghi chú từ chối (NẾU BỊ REJECTED) hoặc Yêu cầu bổ sung thông tin
                 if item.status == .rejected, let reason = item.statusNote {
                     HStack(alignment: .top, spacing: 4) {
                         Image(systemName: "exclamationmark.circle.fill")
@@ -238,6 +241,18 @@ struct HistoryItemCard: View {
                     .foregroundColor(Color.red.opacity(0.85))
                     .padding(6)
                     .background(RoundedRectangle(cornerRadius: 6).fill(Color.red.opacity(0.06)))
+                    .padding(.top, 2)
+                } else if item.reviewState == "needs_information", let message = item.statusNote {
+                    HStack(alignment: .top, spacing: 4) {
+                        Image(systemName: "questionmark.circle.fill")
+                            .font(.system(size: 10))
+                        Text("Yêu cầu bổ sung: \(message)")
+                            .font(.system(size: 11))
+                            .lineLimit(2)
+                    }
+                    .foregroundColor(Color.orange.opacity(0.95))
+                    .padding(6)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.orange.opacity(0.08)))
                     .padding(.top, 2)
                 }
 
