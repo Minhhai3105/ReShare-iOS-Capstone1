@@ -29,6 +29,12 @@ export const adminRoutes = [
     meta: { requiresAuth: true, roles: ADMIN_ROLES },
   },
   {
+    path: '/admin/staff',
+    name: ADMIN_ROUTE.staff,
+    component: () => import('./staff/StaffManagement.vue'),
+    meta: { requiresAuth: true, roles: ['system_admin'] },
+  },
+  {
     path: '/admin/donations',
     name: ADMIN_ROUTE.donationQueue,
     component: () => import('./donations/views/DonationQueue.vue'),
