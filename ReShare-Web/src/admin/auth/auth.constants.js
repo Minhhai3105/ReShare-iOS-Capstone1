@@ -22,6 +22,7 @@ export const FORBIDDEN_REASON = Object.freeze({
 
 export const ADMIN_ROUTE = Object.freeze({
   home: 'admin-home',
+  staff: 'admin-staff',
   login: 'admin-login',
   forgotPassword: 'admin-forgot-password',
   forbidden: 'admin-forbidden',
