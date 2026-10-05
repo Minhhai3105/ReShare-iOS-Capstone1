@@ -40,6 +40,18 @@ export const adminRoutes = [
     component: () => import('./donations/views/DonationQueue.vue'),
     meta: { requiresAuth: true, roles: ADMIN_ROLES },
   },
+  ...(import.meta.env.DEV ? [{
+    path: '/admin/receipt-preview',
+    name: 'admin-donation-receipt-preview',
+    component: () => import('./receipt/views/ActualReceipt.vue'),
+    meta: { requiresAuth: true, roles: ADMIN_ROLES, devPreview: true },
+  }] : []),
+  {
+    path: '/admin/donations/:donationId/receipt',
+    name: 'admin-donation-receipt',
+    component: () => import('./receipt/views/ActualReceipt.vue'),
+    meta: { requiresAuth: true, roles: ADMIN_ROLES },
+  },
   { path: '/admin/:pathMatch(.*)*', redirect: () => ({ name: ADMIN_ROUTE.home, params: {} }) },
 ]
 
