@@ -374,15 +374,26 @@ service cloud.firestore {
           && validCloudinaryImages('donation', donationId);
       }
 
+      function canStaffReadDonation(docData) {
+        let path = /databases/$(database)/documents/staff_assignments/$(request.auth.uid);
+        let staffWarehouseIds = get(path).data.get('warehouseIds', []);
+        let targetWarehouseId = docData.get('warehouseId', docData.get('hubId', ''));
+        return isSystemAdmin() || (
+          activeStaffWithRole('warehouse_admin')
+          && staffWarehouseIds is list
+          && targetWarehouseId in staffWarehouseIds
+        );
+      }
+
       // Cho phép kiểm tra ID chưa tồn tại để transaction tạo đơn có thể retry an toàn.
       allow get: if request.auth != null && (
         resource == null ||
         resource.data.donorId == request.auth.uid ||
-        isSystemAdmin()
+        canStaffReadDonation(resource.data)
       );
       allow list: if request.auth != null && (
         resource.data.donorId == request.auth.uid ||
-        isSystemAdmin()
+        canStaffReadDonation(resource.data)
       );
       allow create: if request.auth != null
         && request.resource.data.id == donationId
@@ -391,6 +402,15 @@ service cloud.firestore {
         && validNewDonation();
       allow update: if request.auth != null && isSystemAdmin();
       allow delete: if false;
+    }
+
+    // Phiếu thực nhận (US12): lưu khi nhân sự tiếp nhận hàng tại kho
+    match /receipts/{receiptId} {
+      allow read: if request.auth != null && (
+        isSystemAdmin() ||
+        (activeStaffWithRole('warehouse_admin') && canReadWarehouse(resource.data.warehouseId))
+      );
+      allow write: if false;
     }
 
     // Contact records are accepted and accessed only by the trusted backend using Admin SDK.
