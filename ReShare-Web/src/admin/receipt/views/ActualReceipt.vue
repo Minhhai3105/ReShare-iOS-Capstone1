@@ -5,6 +5,7 @@ import AuthIcon from '../../auth/components/AuthIcon.vue'
 import { currentUser, staffAssignment, canAccessWarehouse } from '../../auth/auth.store'
 import { ADMIN_ROUTE } from '../../auth/auth.constants'
 import { demoReceiptRepository, receiptRepository } from '../receipt.repository'
+import brandLogo from '../../auth/assets/reshare-brand.png'
 
 const route = useRoute()
 const isDemoPreview = import.meta.env.DEV && route.meta.devPreview === true
@@ -95,7 +96,7 @@ onMounted(load)
 <template>
   <div class="admin-shell">
     <header class="topbar">
-      <div class="brand"><span class="brand-mark"><AuthIcon name="clipboard-check" :size="20" /></span><strong>ReShare</strong><span class="brand-tag">PORTAL</span><span class="brand-caption">Hệ thống điều phối vận hành</span></div>
+      <div class="brand"><img class="brand-logo" :src="brandLogo" alt="ReShare Portal" /><span class="brand-caption">Hệ thống điều phối vận hành</span></div>
       <div class="topbar__warehouse"><AuthIcon name="warehouse" :size="18" /><span><strong>Kho demo Hải Châu</strong><small>Khu vực Hải Châu &amp; Sơn Trà</small></span><span>⌄</span></div>
       <span class="topbar__active"><i></i>Đang thao tác tại kho</span>
       <span class="topbar__demo">Dữ liệu demo</span>
@@ -263,9 +264,10 @@ onMounted(load)
 .admin-footer{position:relative;right:auto;bottom:auto;left:auto;margin-left:264px}
 @media(max-width:1150px){.admin-footer{left:auto;margin-left:220px}}
 .receipt-status-block{display:grid;justify-items:end;gap:3px;margin-left:auto;white-space:nowrap}.receipt-status-block>small{font-size:10px;font-weight:700;color:#586272;letter-spacing:.045em}.receipt-status{display:inline-flex;align-items:center;gap:6px;margin-left:0}
+.brand-logo{display:block;width:165px;height:auto;flex:none;object-fit:contain}.brand-caption{max-width:75px;margin-left:0}
 .field-pair{align-items:start}.field-pair>.field{grid-template-rows:20px 44px auto;align-content:start}.field-pair>.field>span{display:flex;align-items:center;min-height:20px;line-height:20px}.field-pair>.field>input,.field-pair>.field>select{align-self:start;height:44px;min-height:44px;margin:0}
 .guidance-card .section-title span{padding:5px 10px;border-radius:99px;background:#e3eaff;color:#334c79;white-space:nowrap}.guidance-card>em{display:block;margin-top:14px;color:#596476;font-size:12px;line-height:1.5}.safety-card{padding:20px;background:#fff}.safety-card p{margin-top:12px;color:#4b5666;font-size:13px;line-height:1.55}
-@media(max-width:1150px){.receipt-columns{grid-template-columns:1fr}.side-stack{grid-template-columns:1fr 1fr}.safety-card{grid-column:1/-1}}
+@media(max-width:1150px){.receipt-columns{grid-template-columns:1fr}.side-stack{grid-template-columns:1fr 1fr}.safety-card{grid-column:1/-1}.brand-logo{width:145px}.brand-caption{max-width:60px}}
 @media(max-width:1000px){.brand{min-width:auto;padding-right:10px}.topbar__warehouse{min-width:145px}.topbar__warehouse span:nth-child(2){display:grid}.topbar__profile>span:nth-child(2){display:none}.topbar__search{display:none}.topbar__active{display:inline-flex}.topbar__shift{display:flex}}
 @media(max-width:760px){.sticky-actions{left:auto;right:auto;bottom:10px;width:100%}.admin-footer{display:none}.topbar__shift{display:none}.receipt-status-block{justify-items:start;margin:0 0 0 54px}.side-stack{grid-template-columns:1fr}.safety-card{grid-column:auto}}
 </style>
