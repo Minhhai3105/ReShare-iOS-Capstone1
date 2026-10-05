@@ -4500,3 +4500,130 @@ body:has(.landing-page) {
   .landing-page .feature-card { min-height: 0; }
   .landing-page .hero-actions .button { font-size: 14px; }
 }
+
+.landing-page .points-empty {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 26px;
+  border: 1px dashed #dfe7e0;
+  border-radius: 12px;
+  color: #62736a;
+  text-align: center;
+}
+
+.landing-page .contact-section {
+  background: #f8faf7;
+}
+
+.landing-page .contact-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  align-items: start;
+  gap: 64px;
+}
+
+.landing-page .contact-intro h2 {
+  max-width: 420px;
+}
+
+.landing-page .contact-intro > p {
+  max-width: 360px;
+  color: #68766d;
+  line-height: 1.7;
+}
+
+.landing-page .contact-form {
+  display: grid;
+  gap: 16px;
+  padding: 28px;
+  border: 1px solid #e2eae2;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(30, 70, 48, 0.06);
+}
+
+.landing-page .contact-field {
+  display: grid;
+  gap: 7px;
+}
+
+.landing-page .contact-field label {
+  color: #254336;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.landing-page .contact-field input,
+.landing-page .contact-field textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid #d7e1d8;
+  border-radius: 8px;
+  background: #fff;
+  color: #24372d;
+  font: inherit;
+  font-size: 15px;
+}
+
+.landing-page .contact-field textarea {
+  resize: vertical;
+}
+
+.landing-page .contact-field input:focus,
+.landing-page .contact-field textarea:focus {
+  border-color: #57966b;
+  outline: 2px solid rgba(87, 150, 107, 0.2);
+}
+
+.landing-page .contact-field input[aria-invalid="true"],
+.landing-page .contact-field textarea[aria-invalid="true"] {
+  border-color: #bd493c;
+}
+
+.landing-page .contact-error,
+.landing-page .contact-status {
+  margin: 0;
+  color: #a7382e;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.landing-page .contact-status {
+  color: #80551a;
+}
+
+.landing-page .contact-status--success {
+  color: #25633d;
+}
+
+.landing-page .contact-submit {
+  justify-content: center;
+  min-height: 46px;
+}
+
+.landing-page .contact-submit:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.landing-page .contact-disclosure {
+  margin: 0;
+  color: #66736b;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+@media (max-width: 1050px) {
+  .landing-page .contact-layout {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+}
+
+@media (max-width: 600px) {
+  .landing-page .contact-form {
+    gap: 13px;
+    padding: 19px;
+  }
+}

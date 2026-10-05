@@ -36,6 +36,16 @@ async function onSignOutClick() {
         </div>
       </AuthAccountInfo>
 
+      <router-link
+        v-if="staffAssignment.role === USER_ROLE.systemAdmin"
+        :to="{ name: ADMIN_ROUTE.staff }"
+        class="auth-btn auth-btn--primary admin-home__staff-link"
+      >Quản lý nhân sự</router-link>
+
+      <RouterLink :to="{ name: ADMIN_ROUTE.donationQueue }" class="auth-btn auth-btn--soft admin-home__sign-out">
+        <AuthIcon name="inbox" />Hàng đợi yêu cầu quyên góp
+      </RouterLink>
+
       <RouterLink v-if="isDemoBuild && demoWarehouse" class="auth-btn auth-btn--primary"
         :to="{ name: 'admin-donation-detail', params: { warehouseId: demoWarehouse, donationId: 'demo-001' } }">
         Xem Donation Detail — demo RC1D-67
@@ -90,6 +100,12 @@ async function onSignOutClick() {
 .admin-home__sign-out {
   width: 100%;
   margin-top: 16px;
+}
+
+.admin-home__staff-link {
+  width: 100%;
+  margin-top: 16px;
+  text-decoration: none;
 }
 
 @media (max-width: 640px) {

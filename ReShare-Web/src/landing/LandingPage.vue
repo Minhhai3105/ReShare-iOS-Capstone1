@@ -8,6 +8,7 @@ import FeaturesSection from './components/FeaturesSection.vue'
 import AppPreviewSection from './components/AppPreviewSection.vue'
 import CollectionPointsSection from './components/CollectionPointsSection.vue'
 import FAQSection from './components/FAQSection.vue'
+import ContactSection from './components/ContactSection.vue'
 import LandingFooter from './components/LandingFooter.vue'
 </script>
 
@@ -23,6 +24,7 @@ import LandingFooter from './components/LandingFooter.vue'
       <AppPreviewSection />
       <CollectionPointsSection />
       <FAQSection />
+      <ContactSection />
     </main>
     <LandingFooter />
   </div>

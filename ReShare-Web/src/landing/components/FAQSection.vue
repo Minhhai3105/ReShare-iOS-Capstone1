@@ -5,15 +5,23 @@ const activeQuestion = ref(0)
 const questions = [
   {
     question: 'ReShare là gì?',
-    answer: 'ReShare là nền tảng hỗ trợ quản lý quyên góp vật phẩm và kết nối quá trình trao tặng với các điểm tiếp nhận.',
+    answer: 'ReShare hỗ trợ hai luồng trao tặng: Quyên góp tập trung về Trạm và Kho đồ 0đ Cộng đồng.',
   },
   {
     question: 'Tôi có thể quyên góp những gì?',
-    answer: 'Hãy chọn những vật phẩm còn sử dụng tốt, sạch và an toàn. Danh mục phù hợp sẽ được hướng dẫn trong ứng dụng khi gửi yêu cầu.',
+    answer: 'Danh mục quyên góp hiện có trong ứng dụng là Quần áo, Sách vở và Gia dụng. Hãy tham khảo hướng dẫn tiếp nhận áp dụng cho yêu cầu của bạn.',
   },
   {
-    question: 'Tôi gửi yêu cầu quyên góp như thế nào?',
-    answer: 'Mở ứng dụng, chụp ảnh vật phẩm, kiểm tra thông tin gợi ý, chỉnh sửa nếu cần rồi gửi yêu cầu để tổ chức xem xét.',
+    question: 'Tôi gửi quyên góp như thế nào?',
+    answer: 'Trong ứng dụng, chụp ảnh vật phẩm, kiểm tra và xác nhận thông tin cùng danh mục gợi ý rồi gửi yêu cầu. Sau khi được duyệt, hãy làm theo thông tin tiếp nhận trong ứng dụng; việc duyệt chưa có nghĩa vật phẩm đã được tiếp nhận vào kho.',
+  },
+  {
+    question: 'Sau khi gửi thì bao lâu có phản hồi?',
+    answer: 'Thời gian phản hồi phụ thuộc vào quá trình tiếp nhận và xử lý của ReShare.',
+  },
+  {
+    question: 'Quyên góp tập trung về Trạm khác Kho đồ 0đ Cộng đồng như thế nào?',
+    answer: 'Quyên góp tập trung về Trạm là gửi yêu cầu để tổ chức xem xét và tiếp nhận vật phẩm tại Trạm. Kho đồ 0đ Cộng đồng là luồng P2P trao tặng trực tiếp giữa người dân: người nhận liên hệ người cho để thống nhất thời gian nhận.',
   },
   {
     question: 'AI hoạt động như thế nào?',
@@ -33,11 +41,11 @@ const questions = [
   },
   {
     question: 'Các điểm tiếp nhận ở đâu?',
-    answer: 'ReShare dự kiến có ba điểm tiếp nhận tại Đà Nẵng. Địa chỉ và thời gian hoạt động sẽ được cập nhật khi có thông tin chính thức.',
+    answer: 'Thông tin Hub đã được xác minh sẽ được cập nhật tại khu vực Hub trên trang này. Hiện thông tin đang sắp cập nhật.',
   },
   {
     question: 'Khi nào có kênh liên hệ với ReShare?',
-    answer: 'Kênh liên hệ chính thức sẽ được công bố trên trang này khi dự án sẵn sàng vận hành.',
+    answer: 'Biểu mẫu liên hệ nằm ở cuối trang và sẽ mở khi kênh tiếp nhận được kết nối. Trang sẽ báo rõ nếu kênh này chưa sẵn sàng.',
   },
 ]
 
