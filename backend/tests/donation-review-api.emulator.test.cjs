@@ -46,13 +46,13 @@ test('US10: Concurrent appraisal decisions in Firestore Emulator produce exactly
         'POST',
         `/v1/admin/donations/${donationId}/decide`,
         { authorization: 'Bearer staff-token' },
-        { action: 'approve' }
+        { action: 'approve', internalNote: 'Ghi chú chỉ dành cho nhân sự' }
       ),
       api.handle(
         'POST',
         `/v1/admin/donations/${donationId}/decide`,
         { authorization: 'Bearer staff-token' },
-        { action: 'reject', publicMessage: 'Từ chối do thừa' }
+        { action: 'reject', publicMessage: 'Từ chối do thừa', internalNote: 'Ghi chú chỉ dành cho nhân sự' }
       ),
     ]);
 
@@ -68,6 +68,11 @@ test('US10: Concurrent appraisal decisions in Firestore Emulator produce exactly
     const finalDoc = await db.doc(`donations/${donationId}`).get();
     assert.notEqual(finalDoc.data().status, 'pending', 'Trạng thái đơn phải không còn là pending');
     assert.equal(finalDoc.data().version, 2, 'Version phải tăng lên 2');
+    assert.equal(Object.hasOwn(finalDoc.data(), 'internalNote'), false);
+    assert.equal(Object.hasOwn(finalDoc.data(), 'reviewedBy'), false);
+    assert.equal(finalDoc.data().history[0].internalNote, undefined);
+    const privateReview = await db.doc(`donation_reviews/${donationId}`).get();
+    assert.equal(privateReview.data().internalNote, 'Ghi chú chỉ dành cho nhân sự');
 
     // AC5: Inventory không được phép tăng hoặc bị sửa đổi
     const inventorySnapshot = await db.collection('inventory').get();
@@ -77,6 +82,7 @@ test('US10: Concurrent appraisal decisions in Firestore Emulator produce exactly
       const db = getFirestore(app);
       await db.doc('staff_assignments/staff-1').delete();
       await db.doc('donations/don-emulator-concurrent').delete();
+      await db.doc('donation_reviews/don-emulator-concurrent').delete();
     } catch {
       // ignore
     }
