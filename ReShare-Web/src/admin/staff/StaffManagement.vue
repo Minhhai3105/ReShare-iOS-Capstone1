@@ -18,6 +18,8 @@ const showAudit = ref(false)
 const error = ref('')
 const success = ref('')
 const search = ref('')
+const roleFilter = ref('all')
+const statusFilter = ref('all')
 const lookupEmail = ref('')
 const target = ref(null)
 const role = ref(USER_ROLE.warehouseAdmin)
@@ -26,8 +28,13 @@ const pendingAction = ref(null)
 
 const visibleStaff = computed(() => {
   const query = search.value.trim().toLowerCase()
-  return staff.value.filter(person => !query ||
-    [person.displayName, person.email, person.uid].some(value => value?.toLowerCase().includes(query)))
+  return staff.value.filter(person => {
+    const matchesSearch = !query || [person.displayName, person.email, person.uid]
+      .some(value => value?.toLowerCase().includes(query))
+    const matchesRole = roleFilter.value === 'all' || person.assignment?.role === roleFilter.value
+    const status = person.disabled ? 'disabled' : person.assignment?.active ? 'active' : 'revoked'
+    return matchesSearch && matchesRole && (statusFilter.value === 'all' || status === statusFilter.value)
+  })
 })
 const activeCount = computed(() => staff.value.filter(person => person.assignment?.active && !person.disabled).length)
 const activeWarehouseIds = computed(() => new Set(warehouses.value.map(warehouse => warehouse.id)))
@@ -206,9 +213,28 @@ onMounted(refresh)
             <span>Tìm trong danh sách</span>
             <input v-model.trim="search" type="search" placeholder="Tên, email hoặc UID" autocomplete="off" />
           </label>
+          <div class="staff-filters">
+            <label class="staff-field">
+              <span>Vai trò</span>
+              <select v-model="roleFilter">
+                <option value="all">Tất cả vai trò</option>
+                <option :value="USER_ROLE.systemAdmin">Quản trị hệ thống</option>
+                <option :value="USER_ROLE.warehouseAdmin">Quản trị viên kho</option>
+              </select>
+            </label>
+            <label class="staff-field">
+              <span>Trạng thái</span>
+              <select v-model="statusFilter">
+                <option value="all">Tất cả trạng thái</option>
+                <option value="active">Đang hoạt động</option>
+                <option value="revoked">Đã thu hồi quyền</option>
+                <option value="disabled">Tài khoản bị khóa</option>
+              </select>
+            </label>
+          </div>
           <p v-if="isLoading" class="staff-empty" role="status">Đang tải nhân sự và danh sách kho…</p>
           <p v-else-if="visibleStaff.length === 0" class="staff-empty">
-            {{ search ? 'Không có nhân sự khớp tìm kiếm.' : 'Chưa có nhân sự được cấp quyền.' }}
+            {{ staff.length ? 'Không có nhân sự khớp bộ lọc.' : 'Chưa có nhân sự được cấp quyền.' }}
           </p>
           <ul v-else class="staff-list">
             <li v-for="person in visibleStaff" :key="person.uid" class="staff-person">
@@ -351,6 +377,8 @@ onMounted(refresh)
 .staff-panel h2 { margin: 0; font-size: 21px; }
 .staff-panel__heading p { margin-top: 4px; font-size: 14px; }
 .staff-field { display: grid; gap: 7px; margin-top: 20px; font-weight: 600; }
+.staff-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.staff-filters .staff-field { margin-top: 12px; }
 .staff-field input, .staff-field select { width: 100%; min-height: 46px; padding: 10px 13px; border: 1px solid var(--auth-border); border-radius: 10px; background: #fff; font: inherit; }
 .staff-field input:focus, .staff-field select:focus { border-color: var(--auth-primary); }
 .staff-alert { margin: 0; padding: 12px 16px; border-radius: 10px; }
@@ -393,4 +421,5 @@ onMounted(refresh)
 .staff-audit__list li span { color: var(--auth-text-secondary); overflow-wrap: anywhere; }
 @media (max-width: 840px) { .staff-page__layout { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { .staff-panel { padding: 20px; } .staff-page__heading, .staff-panel__heading { flex-wrap: wrap; } }
+@media (max-width: 460px) { .staff-filters { grid-template-columns: 1fr; } }
 </style>
