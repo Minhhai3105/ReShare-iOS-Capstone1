@@ -4,26 +4,33 @@ const { FieldValue } = require('firebase-admin/firestore');
 const STAFF_ROLES = new Set(['system_admin', 'warehouse_admin']);
 const WAREHOUSE_ID = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 
+class StaffAssignmentError extends Error {
+  constructor(status, message) {
+    super(message);
+    this.status = status;
+  }
+}
+
 async function setStaffAssignment({ db, auth, actorUid, targetUid, role, warehouseIds = [], bootstrap = false }) {
-  if (typeof targetUid !== 'string' || !targetUid || targetUid.includes('/')) throw new Error('Invalid target UID');
-  if (!STAFF_ROLES.has(role)) throw new Error('Invalid staff role');
+  if (typeof targetUid !== 'string' || !targetUid || targetUid.includes('/')) throw new StaffAssignmentError(400, 'Invalid target UID');
+  if (!STAFF_ROLES.has(role)) throw new StaffAssignmentError(400, 'Invalid staff role');
   if (!Array.isArray(warehouseIds) || warehouseIds.length > 10 ||
       new Set(warehouseIds).size !== warehouseIds.length ||
       !warehouseIds.every(id => typeof id === 'string' && WAREHOUSE_ID.test(id))) {
-    throw new Error('Invalid warehouse IDs');
+    throw new StaffAssignmentError(400, 'Invalid warehouse IDs');
   }
   if ((role === 'system_admin' && warehouseIds.length !== 0) ||
       (role === 'warehouse_admin' && warehouseIds.length === 0)) {
-    throw new Error('Warehouse assignment does not match role');
+    throw new StaffAssignmentError(400, 'Warehouse assignment does not match role');
   }
-  if (bootstrap && (role !== 'system_admin' || actorUid)) throw new Error('Invalid bootstrap request');
+  if (bootstrap && (role !== 'system_admin' || actorUid)) throw new StaffAssignmentError(400, 'Invalid bootstrap request');
   if (!bootstrap && (typeof actorUid !== 'string' || !actorUid || actorUid.includes('/'))) {
-    throw new Error('Actor UID required');
+    throw new StaffAssignmentError(400, 'Actor UID required');
   }
-  if (!bootstrap && actorUid === targetUid) throw new Error('System Admin cannot change own assignment');
+  if (!bootstrap && actorUid === targetUid) throw new StaffAssignmentError(400, 'System Admin cannot change own assignment');
 
   const user = await auth.getUser(targetUid);
-  if (user.disabled) throw new Error('Disabled account cannot receive staff access');
+  if (user.disabled) throw new StaffAssignmentError(409, 'Disabled account cannot receive staff access');
 
   const targetRef = db.collection('staff_assignments').doc(targetUid);
   const actorRef = bootstrap ? null : db.collection('staff_assignments').doc(actorUid);
@@ -40,12 +47,12 @@ async function setStaffAssignment({ db, auth, actorUid, targetUid, role, warehou
     ]);
 
     if (bootstrap) {
-      if (marker.exists || target.exists) throw new Error('System Admin already bootstrapped');
+      if (marker.exists || target.exists) throw new StaffAssignmentError(409, 'System Admin already bootstrapped');
     } else if (!actor.exists || actor.data().active !== true || actor.data().role !== 'system_admin') {
-      throw new Error('Only an active System Admin may assign staff access');
+      throw new StaffAssignmentError(403, 'Only an active System Admin may assign staff access');
     }
     if (warehouses.some(snapshot => !snapshot.exists || snapshot.data().status !== 'active')) {
-      throw new Error('Warehouse is not active or verified');
+      throw new StaffAssignmentError(409, 'Warehouse is not active or verified');
     }
 
     const before = target.exists ? target.data() : null;
@@ -59,9 +66,9 @@ async function setStaffAssignment({ db, auth, actorUid, targetUid, role, warehou
 async function revokeStaffAssignment({ db, actorUid, targetUid }) {
   if (typeof actorUid !== 'string' || !actorUid || actorUid.includes('/') ||
       typeof targetUid !== 'string' || !targetUid || targetUid.includes('/')) {
-    throw new Error('Valid actor and target UIDs required');
+    throw new StaffAssignmentError(400, 'Valid actor and target UIDs required');
   }
-  if (actorUid === targetUid) throw new Error('System Admin cannot revoke own assignment');
+  if (actorUid === targetUid) throw new StaffAssignmentError(400, 'System Admin cannot revoke own assignment');
   const actorRef = db.collection('staff_assignments').doc(actorUid);
   const targetRef = db.collection('staff_assignments').doc(targetUid);
   const auditRef = db.collection('staff_assignment_audit').doc(randomUUID());
@@ -69,9 +76,9 @@ async function revokeStaffAssignment({ db, actorUid, targetUid }) {
   await db.runTransaction(async transaction => {
     const [actor, target] = await Promise.all([transaction.get(actorRef), transaction.get(targetRef)]);
     if (!actor.exists || actor.data().active !== true || actor.data().role !== 'system_admin') {
-      throw new Error('Only an active System Admin may revoke staff access');
+      throw new StaffAssignmentError(403, 'Only an active System Admin may revoke staff access');
     }
-    if (!target.exists || target.data().active !== true) throw new Error('Active staff assignment not found');
+    if (!target.exists || target.data().active !== true) throw new StaffAssignmentError(404, 'Active staff assignment not found');
     const before = target.data();
     const after = { ...before, active: false, warehouseIds: [], updatedAt: FieldValue.serverTimestamp() };
     transaction.set(targetRef, after);
@@ -79,4 +86,4 @@ async function revokeStaffAssignment({ db, actorUid, targetUid }) {
   });
 }
 
-module.exports = { setStaffAssignment, revokeStaffAssignment };
+module.exports = { StaffAssignmentError, setStaffAssignment, revokeStaffAssignment };
