@@ -376,6 +376,16 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Contact records are accepted and accessed only by the trusted backend using Admin SDK.
+    match /contacts/{contactId} {
+      allow read, write: if false;
+    }
+
+    // Rate-limit records contain keyed anti-abuse metadata and are backend-only.
+    match /contact_rate_limits/{rateLimitId} {
+      allow read, write: if false;
+    }
+
     // 5. Campaigns & Hubs (Chiến dịch & Trạm tiếp nhận - Công khai để xem)
     match /campaigns/{campaignId} {
       allow read: if true;
