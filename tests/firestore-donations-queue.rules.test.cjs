@@ -12,6 +12,7 @@ test('US09: Warehouse Admin can only view donations in assigned warehouse; cross
   try {
     const admin = env.authenticatedContext('admin').firestore();
     const whAdminA = env.authenticatedContext('wh-admin-a').firestore();
+    const whAdminAB = env.authenticatedContext('wh-admin-ab').firestore();
     const whAdminB = env.authenticatedContext('wh-admin-b').firestore();
     const donor1 = env.authenticatedContext('donor-1').firestore();
     const anonymous = env.unauthenticatedContext().firestore();
@@ -41,6 +42,12 @@ test('US09: Warehouse Admin can only view donations in assigned warehouse; cross
         role: 'warehouse_admin',
         active: true,
         warehouseIds: ['kho-b'],
+      });
+      await db.doc('staff_assignments/wh-admin-ab').set({
+        uid: 'wh-admin-ab',
+        role: 'warehouse_admin',
+        active: true,
+        warehouseIds: ['kho-a', 'kho-b'],
       });
 
       // Setup donations
@@ -107,6 +114,9 @@ test('US09: Warehouse Admin can only view donations in assigned warehouse; cross
     // 8. Kiểm tra Query/List có giới hạn kho
     // Wh-admin-a query đúng kho của mình -> Thành công
     await assertSucceeds(whAdminA.collection('donations').where('hubId', '==', 'kho-a').get());
+    await assertSucceeds(whAdminAB.collection('donations')
+      .where('hubId', 'in', ['kho-a', 'kho-b'])
+      .orderBy('createdAt', 'desc').limit(11).get());
 
     // Wh-admin-a cố tình query kho khác (sửa request thủ công) -> Bị Backend Firestore Rules từ chối
     await assertFails(whAdminA.collection('donations').where('hubId', '==', 'kho-b').get());

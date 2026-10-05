@@ -79,7 +79,14 @@ export async function fetchQueueWarehouses(access) {
       throw createQueueError(error?.code === 'permission-denied' ? DONATION_QUEUE_ERROR.forbidden : DONATION_QUEUE_ERROR.network)
     }
   }
-  return access.warehouseIds.map((id) => ({ id, name: id }))
+  try {
+    return await Promise.all(access.warehouseIds.map(async (id) => {
+      const snapshot = await getDoc(doc(db, 'warehouses', id))
+      return { id, name: snapshot.exists() ? snapshot.data().name || id : id }
+    }))
+  } catch (error) {
+    throw createQueueError(error?.code === 'permission-denied' ? DONATION_QUEUE_ERROR.forbidden : DONATION_QUEUE_ERROR.network)
+  }
 }
 
 export function processAndPaginateDonations(source, access, query) {
@@ -182,7 +189,11 @@ export async function fetchDonationQueue(access, query) {
 
     // Search by exact donation ID avoids reading a whole collection for client-side text matching.
     if (query.search?.trim()) {
-      const snap = await getDoc(doc(db, 'donations', query.search.trim().replace(/^#/, '')))
+      const donationId = query.search.trim().replace(/^#/, '')
+      if (donationId.includes('/')) {
+        return { items: [], total: 0, page: 1, pageSize: DONATION_PAGE_SIZE, totalPages: 1, hasMore: false, nextCursor: null, statusCounts: null }
+      }
+      const snap = await getDoc(doc(db, 'donations', donationId))
       const items = snap.exists() ? [normalizeDoc(snap)].filter((item) =>
         (access.isAllWarehouses || warehouseIds.includes(item.hubId || item.warehouseId)) &&
         (!query.warehouseId || (item.hubId || item.warehouseId) === query.warehouseId) &&
