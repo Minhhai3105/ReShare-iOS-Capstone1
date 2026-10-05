@@ -1,5 +1,5 @@
-// Visible only from the explicit /admin/donations dev-preview route.
-// Nothing in this adapter writes to Firebase or changes warehouse stock.
+// Chỉ dùng cho đường dẫn xem thử /admin/receipt-preview khi phát triển.
+// Dữ liệu mô phỏng không ghi vào Firebase hoặc tồn kho.
 export const demoDonation = Object.freeze({
   id: 'DEMO-REQ-2026-001',
   status: 'approved',

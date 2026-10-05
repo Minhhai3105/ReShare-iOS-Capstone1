@@ -19,14 +19,14 @@ const createdReceipt = ref(null)
 const donation = ref(null)
 const options = ref(null)
 const form = reactive({ warehouseId: '', quantity: '', unitId: '', conditionId: '', note: '' })
-const backRoute = computed(() => isDemoPreview ? { name: 'admin-donation-receipt-preview' } : { name: ADMIN_ROUTE.home })
+const backRoute = { name: ADMIN_ROUTE.home }
 
 const allowedWarehouses = computed(() => (options.value?.warehouses ?? []).filter((warehouse) =>
   isDemoPreview || canAccessWarehouse(warehouse.id),
 ))
 const isApproved = computed(() => donation.value?.status === 'approved')
 const selectedWarehouse = computed(() => allowedWarehouses.value.find((item) => item.id === form.warehouseId))
-const validForm = computed(() => isApproved.value && selectedWarehouse.value &&
+const validForm = computed(() => !loadError.value && isApproved.value && selectedWarehouse.value &&
   Number.isFinite(Number(form.quantity)) && Number(form.quantity) > 0 && form.unitId && form.conditionId)
 
 async function load() {
@@ -78,7 +78,7 @@ async function submitReceipt() {
       unitId: form.unitId,
       conditionId: form.conditionId,
       note: form.note.trim(),
-      actorId: isDemoPreview ? 'preview-staff' : currentUser.value.uid,
+      actorId: isDemoPreview ? 'preview-staff' : currentUser.value.id,
     })
     createdReceipt.value = result ?? {}
     showConfirm.value = false
@@ -97,32 +97,20 @@ onMounted(load)
   <div class="admin-shell">
     <header class="topbar">
       <div class="brand"><img class="brand-logo" :src="brandLogo" alt="" /><strong>ReShare</strong><span class="brand-tag">PORTAL</span><span class="brand-caption">Hệ thống điều phối vận hành</span></div>
-      <div class="topbar__warehouse"><AuthIcon name="warehouse" :size="18" /><span><strong>Kho demo Hải Châu</strong><small>Khu vực Hải Châu &amp; Sơn Trà</small></span><span>⌄</span></div>
-      <span class="topbar__active"><i></i>Đang thao tác tại kho</span>
-      <span class="topbar__demo">Dữ liệu demo</span>
-      <span class="topbar__shift"><AuthIcon name="clock" :size="17" /><span><strong>Ca trực: Sáng</strong><small>(08:00 - 16:30)</small></span></span>
-      <button class="topbar__search" type="button"><AuthIcon name="search" :size="17" />Tìm kiếm hàng, mã đơn...<kbd>⌘K</kbd></button>
-      <button class="topbar__icon" type="button" aria-label="Thông báo"><AuthIcon name="bell" :size="19" /></button>
-      <div class="topbar__profile"><span class="profile-avatar">NV</span><span><strong>Nhân sự xem thử</strong><small>Quản trị kho (demo)</small></span><span>⌄</span></div>
+      <div class="topbar__warehouse"><AuthIcon name="warehouse" :size="18" /><span><strong>{{ selectedWarehouse?.name || 'Chưa chọn kho' }}</strong><small>{{ isDemoPreview ? 'Kho minh họa' : 'Kho thực nhận' }}</small></span></div>
+      <span v-if="isDemoPreview" class="topbar__demo">Dữ liệu demo</span>
+      <div class="topbar__profile"><span class="profile-avatar">NV</span><span><strong>{{ currentUser?.displayName || currentUser?.email || 'Nhân sự' }}</strong><small>{{ staffAssignment?.role || 'Chưa có quyền' }}</small></span></div>
     </header>
 
     <aside class="sidebar">
       <p class="sidebar__label">VẬN HÀNH KHO &amp; XỬ LÝ</p>
-      <a href="#overview"><AuthIcon name="dashboard" />Tổng quan</a>
-      <a href="#donations" class="is-active"><AuthIcon name="heart-handshake" />Yêu cầu quyên góp</a>
-      <a href="#warehouse"><AuthIcon name="warehouse" />Kho hàng</a>
-      <a href="#beneficiaries"><AuthIcon name="users" />Người thụ hưởng</a>
-      <a href="#reports"><AuthIcon name="chart" />Báo cáo</a>
-      <a href="#logs"><AuthIcon name="file-text" />Nhật ký</a>
-      <p class="sidebar__label sidebar__label--second">QUẢN TRỊ HỆ THỐNG</p>
-      <a href="#staff"><AuthIcon name="shield-check" />Nhân sự &amp; Phân quyền</a>
-      <a href="#settings"><AuthIcon name="settings" />Cấu hình chung</a>
-      <div class="station-status"><span>Trạng thái kết nối <b><i></i>Online</b></span><small>▣ Máy trạm: WH-SGN-02</small></div>
+      <RouterLink :to="backRoute"><AuthIcon name="dashboard" />Tổng quan</RouterLink>
+      <span class="sidebar__label sidebar__label--second">Ghi nhận thực nhận</span>
     </aside>
 
     <main class="admin-main">
     <div class="receipt-page">
-      <div class="breadcrumbs"><RouterLink :to="backRoute">‹ Quay lại chi tiết yêu cầu</RouterLink><span>Yêu cầu quyên góp</span><b>›</b><span>Chi tiết yêu cầu</span><b>›</b><strong>Ghi nhận thực nhận</strong></div>
+      <div class="breadcrumbs"><RouterLink :to="backRoute">‹ Về tổng quan</RouterLink><span>Yêu cầu quyên góp</span><b>›</b><strong>Ghi nhận thực nhận</strong></div>
 
       <div v-if="isDemoPreview" class="receipt-notice receipt-notice--demo" role="status">
         <AuthIcon name="info" /><div><strong>MÔI TRƯỜNG XEM THỬ <span>•</span> Dữ liệu mô phỏng quy trình tiếp nhận thực tế</strong>
@@ -164,7 +152,7 @@ onMounted(load)
             <div><dt>Mã yêu cầu</dt><dd>{{ donation.id || '—' }}</dd></div>
             <div><dt>Tên vật phẩm</dt><dd>{{ donation.itemName || '—' }}</dd></div>
             <div><dt>Người gửi</dt><dd>{{ donation.donorName || '—' }}</dd></div>
-            <div><dt>Kho dự kiến ban đầu (địa điểm demo đăng ký qua app)</dt><dd>{{ donation.expectedWarehouseName || '—' }}</dd></div>
+            <div><dt>Kho dự kiến ban đầu</dt><dd>{{ donation.expectedWarehouseName || '—' }}</dd></div>
             <div><dt>Tình trạng người gửi khai báo</dt><dd>{{ donation.declaredConditionName || '—' }}</dd></div>
             <div><dt>Trạng thái hồ sơ gốc</dt><dd>{{ donation.status === 'approved' ? 'Đã duyệt (approved)' : donation.status || '—' }}</dd></div>
           </dl>
@@ -180,7 +168,7 @@ onMounted(load)
                 <option value="" disabled>Chọn kho được phân công</option>
                 <option v-for="warehouse in allowedWarehouses" :key="warehouse.id" :value="warehouse.id">{{ warehouse.name }}</option>
               </select>
-              <small v-if="selectedWarehouse">Kho trong phân công của bạn</small>
+              <small v-if="selectedWarehouse">{{ isDemoPreview ? 'Kho minh họa' : 'Kho trong phân công của bạn' }}</small>
             </label>
 
             <div class="field-pair">
@@ -235,7 +223,7 @@ onMounted(load)
       </template>
 
       <div v-if="donation && options" class="sticky-actions">
-        <span class="sticky-actions__hint"><AuthIcon name="terminal" /> Phiên bản giao diện mẫu 1.0.4-rc <b>•</b> Sandbox ReShare Ops</span>
+        <span class="sticky-actions__hint"><AuthIcon name="terminal" />{{ isDemoPreview ? 'Chế độ xem thử, không lưu dữ liệu' : 'Ghi nhận sau khi kiểm đếm thực tế' }}</span>
         <div><RouterLink :to="backRoute" class="button button--soft">Hủy bỏ</RouterLink>
           <button type="submit" form="actual-receipt-form" class="button button--primary" :disabled="saving || !isApproved || Boolean(createdReceipt)"><AuthIcon name="check" />Xác nhận thực nhận</button></div>
       </div>
@@ -250,7 +238,7 @@ onMounted(load)
       </div>
     </div>
     </main>
-    <footer class="admin-footer"><span>© 2024 ReShare Circular Fashion Hub. Hệ thống điều phối nội bộ.</span><span>Trung tâm trợ giúp vận hành</span><span>Chính sách an toàn kho</span><b><i></i>Hệ thống máy chủ: Sẵn sàng</b></footer>
+    <footer class="admin-footer"><span>ReShare · Hệ thống điều phối nội bộ</span></footer>
   </div>
 </template>
 

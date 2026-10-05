@@ -28,13 +28,12 @@ export const adminRoutes = [
     component: () => import('./AdminHome.vue'),
     meta: { requiresAuth: true, roles: ADMIN_ROLES },
   },
-  {
-    path: '/admin/donations',
+  ...(import.meta.env.DEV ? [{
+    path: '/admin/receipt-preview',
     name: 'admin-donation-receipt-preview',
     component: () => import('./receipt/views/ActualReceipt.vue'),
-    // The auth guard allows this explicit preview entry only in Vite dev mode.
     meta: { requiresAuth: true, roles: ADMIN_ROLES, devPreview: true },
-  },
+  }] : []),
   {
     path: '/admin/donations/:donationId/receipt',
     name: 'admin-donation-receipt',
@@ -54,7 +53,6 @@ function getRouteDeniedReason(to) {
 
 export async function adminAuthGuard(to) {
   if (!to.path.startsWith('/admin')) return true
-  if (import.meta.env.DEV && to.meta.devPreview) return true
   await restoreSession()
   if (to.name === ADMIN_ROUTE.login && isAuthenticated.value && !getAccessDeniedReason()) {
     return { name: ADMIN_ROUTE.home }
