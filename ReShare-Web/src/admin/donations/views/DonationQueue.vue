@@ -7,12 +7,14 @@ import { resolveQueueAccess } from '../donation.service'
 import { QUEUE_VIEW_STATE, useDonationQueue } from '../useDonationQueue'
 import {
   DONATION_CATEGORY_LABEL,
+  DONATION_QUEUE_ERROR,
   DONATION_SORT,
   DONATION_STATUS,
   DONATION_STATUS_LABEL,
 } from '../donation.constants'
 
 const SKELETON_ROWS = 6
+const isDemo = import.meta.env.DEV
 const STATUS_TONE = {
   [DONATION_STATUS.pending]: 'warning',
   [DONATION_STATUS.approved]: 'info',
@@ -31,6 +33,7 @@ const {
   result,
   warehouses,
   isLoading,
+  errorStatus,
   lastUpdatedAt,
   viewState,
   hasActiveFilters,
@@ -94,7 +97,7 @@ watch(staffAssignment, refreshQueue)
         <div>
           <div class="donation-queue__title-row">
             <h1>Yêu cầu quyên góp</h1>
-            <span class="auth-chip donation-queue__env"><span class="auth-dot" />Dữ liệu thử nghiệm</span>
+            <span class="auth-chip donation-queue__env"><span class="auth-dot" />{{ isDemo ? 'Dữ liệu thử nghiệm' : 'Chưa kết nối dữ liệu' }}</span>
           </div>
           <p>Theo dõi yêu cầu gửi qua app và tình trạng xử lý</p>
         </div>
@@ -114,8 +117,8 @@ watch(staffAssignment, refreshQueue)
         <div>
           <strong>Thông báo điều phối</strong>
           <p>
-            Phạm vi hiển thị: <strong>{{ scopeLabel }}</strong>. Danh sách hiển thị các yêu cầu quyên góp tiếp nhận từ
-            ứng dụng di động ReShare.
+            Phạm vi hiển thị: <strong>{{ scopeLabel }}</strong>.
+            {{ isDemo ? 'Danh sách dưới đây chỉ là dữ liệu minh họa, không phải đơn thực.' : 'Danh sách sẽ xuất hiện khi API vận hành được kết nối.' }}
           </p>
         </div>
       </section>
@@ -245,9 +248,9 @@ watch(staffAssignment, refreshQueue)
 
         <div v-else-if="viewState === QUEUE_VIEW_STATE.error" class="queue-state queue-state--danger" role="alert">
           <span class="queue-state__icon"><AuthIcon name="cloud-off" :size="36" /></span>
-          <h2>Không tải được danh sách</h2>
-          <p>Máy chủ hoặc kết nối mạng đang gặp sự cố. Vui lòng thử lại.</p>
-          <button type="button" class="auth-btn auth-btn--primary" :disabled="isLoading" @click="refreshQueue">
+          <h2>{{ errorStatus === DONATION_QUEUE_ERROR.notConfigured ? 'Chưa kết nối dữ liệu vận hành' : 'Không tải được danh sách' }}</h2>
+          <p>{{ errorStatus === DONATION_QUEUE_ERROR.notConfigured ? 'Hàng đợi hiện chỉ có bản xem thử trong môi trường phát triển. Chưa có API đọc đơn theo quyền kho.' : 'Máy chủ hoặc kết nối mạng đang gặp sự cố. Vui lòng thử lại.' }}</p>
+          <button v-if="errorStatus !== DONATION_QUEUE_ERROR.notConfigured" type="button" class="auth-btn auth-btn--primary" :disabled="isLoading" @click="refreshQueue">
             <AuthIcon :name="isLoading ? 'loader' : 'refresh'" :size="18" :class="{ 'auth-spin': isLoading }" />Thử lại
           </button>
         </div>

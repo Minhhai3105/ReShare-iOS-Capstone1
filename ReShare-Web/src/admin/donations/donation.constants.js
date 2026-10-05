@@ -39,6 +39,7 @@ export const DONATION_QUEUE_ERROR = Object.freeze({
   forbidden: 403,
   server: 500,
   network: 'NETWORK_ERROR',
+  notConfigured: 'NOT_CONFIGURED',
 })
 
 export const DONATION_PAGE_SIZE = 10

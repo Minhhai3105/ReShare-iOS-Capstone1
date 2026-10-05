@@ -70,6 +70,7 @@ function canViewWarehouse(access, warehouseId) {
 
 export async function fetchQueueWarehouses(access) {
   if (!access) throw createQueueError(DONATION_QUEUE_ERROR.forbidden)
+  if (!import.meta.env.DEV) throw createQueueError(DONATION_QUEUE_ERROR.notConfigured)
   if (access.isAllWarehouses) return MOCK_WAREHOUSES.map(({ id, name }) => ({ id, name }))
   return access.warehouseIds.map((id) => ({ id, name: getWarehouseName(id) }))
 }
@@ -80,8 +81,9 @@ export async function fetchQueueWarehouses(access) {
  * @returns { items, total, page, pageSize, totalPages, statusCounts }
  */
 export async function fetchDonationQueue(access, query) {
-  await simulateRequest()
   if (!access) throw createQueueError(DONATION_QUEUE_ERROR.forbidden)
+  if (!import.meta.env.DEV) throw createQueueError(DONATION_QUEUE_ERROR.notConfigured)
+  await simulateRequest()
   // Giống backend: từ chối khi request chỉ định kho ngoài phân công, kể cả khi sửa request thủ công.
   if (query.warehouseId && !canViewWarehouse(access, query.warehouseId)) {
     throw createQueueError(DONATION_QUEUE_ERROR.forbidden)
