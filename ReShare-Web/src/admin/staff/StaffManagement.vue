@@ -220,7 +220,9 @@ onMounted(refresh)
                 <span :class="['staff-status', person.assignment?.active && !person.disabled ? 'staff-status--active' : 'staff-status--inactive']">
                   {{ person.disabled ? 'Tài khoản bị khóa' : person.assignment?.active ? 'Đang hoạt động' : 'Đã thu hồi' }}
                 </span>
-                <span>{{ roleLabel(person.assignment?.role) }}</span>
+                <span :class="['staff-scope', person.assignment?.role === USER_ROLE.systemAdmin ? 'staff-scope--system' : 'staff-scope--warehouse']">
+                  {{ person.assignment?.role === USER_ROLE.systemAdmin ? 'Toàn hệ thống' : 'Theo kho được gán' }}
+                </span>
                 <span>Kho: {{ warehouseLabel(person.assignment?.warehouseIds, person.assignment?.role) }}</span>
               </div>
               <div v-if="person.uid !== currentUser?.id && !person.disabled" class="staff-person__actions">
@@ -253,8 +255,12 @@ onMounted(refresh)
 
           <form v-else class="staff-form" @submit.prevent="prepareAssign">
             <div class="staff-target">
-              <strong>{{ personName(target) }}</strong>
-              <span>{{ target.email || target.uid }}</span>
+              <span class="staff-target__avatar" aria-hidden="true">{{ personName(target).slice(0, 1).toLocaleUpperCase('vi') }}</span>
+              <div class="staff-target__identity">
+                <strong>{{ personName(target) }}</strong>
+                <span>{{ target.email || 'Chưa có email' }}</span>
+                <small>UID: {{ target.uid }}</small>
+              </div>
             </div>
             <label class="staff-field">
               <span>Vai trò</span>
@@ -293,6 +299,15 @@ onMounted(refresh)
               <button type="button" class="auth-btn auth-btn--soft" :disabled="isSaving" @click="pendingAction = null">Quay lại</button>
             </div>
           </div>
+
+          <section class="staff-policy" aria-labelledby="staff-policy-title">
+            <h3 id="staff-policy-title">Quy chuẩn phân quyền</h3>
+            <ul>
+              <li>Quản trị viên kho phải được gán ít nhất một kho đang hoạt động.</li>
+              <li>Chỉ System Admin được cấp hoặc thu hồi quyền nhân sự.</li>
+              <li>Mỗi thay đổi được máy chủ ghi vào lịch sử với người thực hiện và thời điểm.</li>
+            </ul>
+          </section>
         </aside>
       </div>
 
@@ -351,11 +366,16 @@ onMounted(refresh)
 .staff-status { border-radius: 999px; padding: 4px 10px; font-weight: 600; }
 .staff-status--active { color: var(--auth-primary); background: var(--auth-primary-soft); }
 .staff-status--inactive { color: var(--auth-danger); background: var(--auth-danger-soft); }
+.staff-scope { border-radius: 999px; padding: 4px 10px; font-weight: 600; }
+.staff-scope--system { color: #6c39a1; background: #f3eafb; }
+.staff-scope--warehouse { color: #285b9a; background: #eaf2fc; }
 .staff-text-button { min-height: 44px; border: 0; background: none; color: var(--auth-danger); font: inherit; font-weight: 600; cursor: pointer; }
 .staff-form { display: grid; gap: 16px; margin-top: 14px; }
 .staff-form .staff-field { margin-top: 0; }
-.staff-target { display: grid; gap: 2px; padding: 12px 14px; border-radius: 10px; background: var(--auth-primary-soft); }
-.staff-target span { font-size: 14px; }
+.staff-target { display: flex; gap: 12px; align-items: center; padding: 14px; border-radius: 10px; background: var(--auth-primary-soft); }
+.staff-target__avatar { display: grid; place-items: center; flex: 0 0 42px; width: 42px; height: 42px; border-radius: 50%; background: var(--auth-primary); color: #fff; font-weight: 700; }
+.staff-target__identity { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.staff-target__identity span, .staff-target__identity small { color: var(--auth-text-secondary); font-size: 13px; }
 .staff-warehouses { display: grid; gap: 10px; margin: 0; padding: 14px; border: 1px solid var(--auth-border); border-radius: 10px; }
 .staff-warehouses legend { padding: 0 5px; font-weight: 600; }
 .staff-warehouses p { margin: 0; color: var(--auth-text-secondary); }
@@ -365,6 +385,9 @@ onMounted(refresh)
 .staff-confirm h3 { margin: 0 0 9px; }
 .staff-confirm p { margin: 6px 0; }
 .staff-confirm .staff-form__actions { margin-top: 16px; }
+.staff-policy { margin-top: 22px; padding: 16px 18px; border: 1px solid var(--auth-border); border-radius: 12px; background: #f8faf8; }
+.staff-policy h3 { margin: 0 0 8px; font-size: 15px; }
+.staff-policy ul { margin: 0; padding-left: 20px; color: var(--auth-text-secondary); font-size: 14px; line-height: 1.5; }
 .staff-audit__list { display: grid; gap: 15px; padding: 0; margin: 18px 0 0; list-style: none; }
 .staff-audit__list li { display: grid; gap: 2px; padding-top: 15px; border-top: 1px solid var(--auth-border); font-size: 14px; }
 .staff-audit__list li span { color: var(--auth-text-secondary); overflow-wrap: anywhere; }
