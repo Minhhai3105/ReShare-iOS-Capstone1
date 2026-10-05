@@ -15,19 +15,18 @@ const menu = [
       <div class="ac-brand"><span>R</span><strong>ReShare</strong><small>PORTAL</small></div>
       <nav aria-label="Điều hướng quản trị">
         <div class="ac-group-label">VẬN HÀNH KHO &amp; XỬ LÝ</div>
-        <button v-for="entry in menu" :key="entry.label" :class="['ac-nav-item', { active: entry.screen === (screen === 'Q' ? 'Q' : 'E') }]" :aria-current="entry.screen === (screen === 'Q' ? 'Q' : 'E') ? 'page' : undefined" @click="entry.screen && emit('navigate', entry.screen)"><AdminIcon :name="entry.icon" :size="19" />{{ entry.label }}</button>
+        <button v-for="entry in menu" :key="entry.label" :disabled="!entry.screen" :class="['ac-nav-item', { active: entry.screen === (screen === 'Q' ? 'Q' : 'E') }]" :aria-current="entry.screen === (screen === 'Q' ? 'Q' : 'E') ? 'page' : undefined" @click="entry.screen && emit('navigate', entry.screen)"><AdminIcon :name="entry.icon" :size="19" />{{ entry.label }}</button>
         <div class="ac-group-label second">QUẢN TRỊ HỆ THỐNG</div>
-        <button class="ac-nav-item"><AdminIcon name="shield" :size="19" />Nhân sự &amp; Phân quyền</button>
-        <button class="ac-nav-item"><AdminIcon name="settings" :size="19" />Cấu hình chung</button>
+        <button class="ac-nav-item" disabled><AdminIcon name="shield" :size="19" />Nhân sự &amp; Phân quyền</button>
+        <button class="ac-nav-item" disabled><AdminIcon name="settings" :size="19" />Cấu hình chung</button>
       </nav>
-      <div class="ac-station"><div><b>●</b> WH-SGN-02 Online <strong>0.12s</strong></div><small>Đồng bộ vận hành kho thời gian thực</small></div>
+      <div class="ac-station"><div>Bản xem thử RC1D-59</div><small>Không kết nối dữ liệu vận hành</small></div>
     </aside>
     <div class="ac-main">
       <header class="ac-topbar">
         <div class="ac-topbrand"><b>ReShare {{ screen === 'Q' ? 'Ops' : 'Portal' }}</b><small>{{ screen === 'Q' ? 'Cổng vận hành nội bộ' : 'Hệ thống điều phối vận hành' }}</small></div>
-        <div class="ac-warehouse"><b>Kho demo Hải Châu <em>DEMO</em></b><small>Đang thao tác tại kho &nbsp;•&nbsp; Ca trực: Sáng (08:00 - 16:30)</small></div>
-        <div class="ac-search"><AdminIcon name="search" :size="18" />Tìm kiếm vận đơn, người nhận, chứng từ... <kbd>⌘K</kbd></div>
-        <button class="ac-bell" aria-label="Thông báo demo"><AdminIcon name="bell" :size="20" /><i></i></button>
+        <div class="ac-warehouse"><b>Kho demo Hải Châu <em>DEMO</em></b><small>Phạm vi mô phỏng</small></div>
+        <div class="ac-search">Dữ liệu mẫu trong trình duyệt</div>
         <div class="ac-user"><span>Nguyễn Văn An<small>{{ role === 'warehouse_admin' ? 'Warehouse Admin' : role === 'viewer' ? 'Người xem' : 'System Admin' }}</small></span><span class="ac-avatar"><AdminIcon name="user" :size="17" /></span></div>
       </header>
       <main class="ac-content"><slot /><div class="ac-preview"><span>RC1D-59 · Preview dữ liệu mock</span><button @click="emit('navigate', 'E')">E · Chờ duyệt</button><button @click="emit('navigate', 'F')">F · Đã duyệt</button><button @click="emit('navigate', 'Q')">Q · Báo cáo</button><label>Vai trò: <select :value="role" @change="emit('role', ($event.target as HTMLSelectElement).value as 'system_admin' | 'warehouse_admin' | 'viewer')"><option value="system_admin">System Admin</option><option value="warehouse_admin">Warehouse Admin · Hải Châu</option><option value="viewer">Người xem</option></select></label></div></main>

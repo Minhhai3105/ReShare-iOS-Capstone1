@@ -28,6 +28,7 @@ const items = ref(
     staffConfirmation: { ...item.staffConfirmation }
   }))
 );
+// Vai trò ở đây chỉ thay đổi dữ liệu mô phỏng, không cấp quyền truy cập thật.
 const scopedItems = computed(() => items.value.filter(item => demoRole.value !== 'warehouse_admin' || item.warehouseId === 'hai-chau'));
 const pendingItems = computed(() => scopedItems.value.filter(item => ['ai-01', 'ai-02', 'ai-03', 'ai-04'].includes(item.id)));
 const approvedItems = computed(() => scopedItems.value.filter(item => item.staffConfirmation.status === 'confirmed'));
@@ -95,19 +96,18 @@ const operationMenu = [
             <nav class="e-nav" aria-label="Điều hướng quản trị">
               <div class="menu-group">
                 <div class="menu-label">Vận hành kho &amp; xử lý</div>
-                <button v-for="entry in operationMenu" :key="entry.label" type="button" :class="['e-nav-item', { active: entry.active }]" :aria-current="entry.active ? 'page' : undefined" @click="entry.label === 'Báo cáo' ? setScreen('Q') : entry.label === 'Yêu cầu quyên góp' ? setScreen('E') : undefined">
+                <button v-for="entry in operationMenu" :key="entry.label" type="button" :disabled="entry.label !== 'Báo cáo' && entry.label !== 'Yêu cầu quyên góp'" :class="['e-nav-item', { active: entry.active }]" :aria-current="entry.active ? 'page' : undefined" @click="entry.label === 'Báo cáo' ? setScreen('Q') : setScreen('E')">
                   <AdminIcon :name="entry.icon" :size="20" />{{ entry.label }}
                 </button>
               </div>
               <div class="menu-group">
                 <div class="menu-label">Quản trị hệ thống</div>
-                <button type="button" class="e-nav-item"><AdminIcon name="shield" :size="20" />Nhân sự &amp; Phân quyền</button>
-                <button type="button" class="e-nav-item"><AdminIcon name="settings" :size="20" />Cấu hình chung</button>
+                <button type="button" class="e-nav-item" disabled><AdminIcon name="shield" :size="20" />Nhân sự &amp; Phân quyền</button>
+                <button type="button" class="e-nav-item" disabled><AdminIcon name="settings" :size="20" />Cấu hình chung</button>
               </div>
             </nav>
             <div class="sidebar-status">
-              <div class="status-row"><strong>Trạng thái kết nối</strong><span class="connection-state"><span class="status-dot online"></span>Online</span></div>
-              <div class="status-row station"><AdminIcon name="monitor" :size="14" />Máy trạm: WH-SGN-02</div>
+              <div class="status-row"><strong>Trạng thái</strong><span class="connection-state">Bản xem thử</span></div>
             </div>
           </aside>
 
@@ -119,7 +119,6 @@ const operationMenu = [
               <span class="demo-pill">Dữ liệu<br />demo</span>
               <div class="shift-pill"><AdminIcon name="clock" /><span>Ca trực: Sáng<br />(08:00 - 16:30)</span></div>
               <div class="e-search-box"><AdminIcon name="search" /><span>Tìm kiện hàng,<br />mã đơn...</span><kbd>⌘K</kbd></div>
-              <button type="button" class="notification-button" aria-label="Thông báo demo"><AdminIcon name="bell" /><i></i></button>
               <div class="e-user-pill"><span class="user-avatar"><AdminIcon name="user" /></span><div><strong>Nguyễn<br />Văn An</strong><small>{{ demoRole === 'warehouse_admin' ? 'Quản trị viên kho' : demoRole === 'viewer' ? 'Người xem demo' : 'Quản trị viên hệ thống' }}</small></div><AdminIcon name="chevron" :size="14" /></div>
             </header>
 
@@ -153,8 +152,8 @@ const operationMenu = [
                     <div class="photo-surface"><div class="photo-privacy-box">
                       <div class="privacy-icon"><AdminIcon name="lock" :size="28" /></div>
                       <div class="privacy-title">Ảnh chỉ hiển thị khi được cấp quyền xem</div>
-                      <div class="privacy-copy">Hình ảnh tải lên từ ứng dụng người dùng được mã hóa và bảo vệ quyền riêng tư.<br />Quyền truy cập ảnh tạm thời (short-lived token) sẽ được cấp sau khi nhân sự đăng nhập và xác thực thẩm quyền duyệt đơn.</div>
-                      <span class="privacy-footnote"><AdminIcon name="shield" :size="12" />Không sử dụng liên kết công khai vĩnh viễn cho ảnh quyên góp.</span>
+                      <div class="privacy-copy">Bản xem thử không tải ảnh thật. Việc xem ảnh quyên góp cần API kiểm tra quyền theo đơn và kho trước khi hiển thị.</div>
+                      <span class="privacy-footnote"><AdminIcon name="shield" :size="12" />Chưa kết nối dịch vụ cấp quyền ảnh.</span>
                     </div></div>
                   </div>
 
@@ -192,11 +191,11 @@ const operationMenu = [
 
               <div class="detail-card assessment-card">
                 <div class="card-title-row"><h3><AdminIcon name="gavel" />Thao tác thẩm định hồ sơ</h3><div class="e-actions"><button type="button" class="secondary-button" :disabled="!canReview" @click="openReviewAction('rejected')"><AdminIcon name="close" :size="16" />Từ chối yêu cầu</button><button type="button" class="primary-button" :disabled="!canReview" @click="openReviewAction('confirmed')"><AdminIcon name="check" :size="16" />Duyệt yêu cầu</button></div></div>
-                <ul class="assessment-instructions"><li>Thao tác <strong>"Duyệt yêu cầu"</strong> sẽ yêu cầu bước xác nhận lại thông tin vật phẩm và kho phụ trách. Sau khi máy chủ thẩm định, trạng thái đơn sẽ chuyển sang "Đã duyệt" (approved).</li><li>Thao tác <strong>"Từ chối yêu cầu"</strong> bắt buộc nhập lý do từ chối gửi về cho người dùng qua ứng dụng.</li><li>Hệ thống tự động khóa nút khi đang gửi yêu cầu để ngăn chặn thao tác trùng lặp.</li></ul>
+                <ul class="assessment-instructions"><li><strong>"Duyệt yêu cầu"</strong> chỉ đổi trạng thái của dữ liệu mô phỏng trong trình duyệt.</li><li><strong>"Từ chối yêu cầu"</strong> yêu cầu nhập lý do nhưng chưa gửi thông báo cho người dùng.</li><li>Quyền thao tác và trạng thái đơn thật phải được kiểm tra lại ở backend.</li></ul>
                 <p v-if="actionMessage" class="mock-action-message" role="status">{{ actionMessage }}</p>
               </div>
 
-              <footer class="e-footer"><div>© 2024 ReShare Circular Fashion Hub. Hệ thống điều phối nội bộ. <span>•</span><strong>● Hệ thống máy chủ: Sẵn sàng</strong><br />Trung tâm trợ giúp vận hành &nbsp;&nbsp; Chính sách an toàn kho</div></footer>
+              <footer class="e-footer"><div>ReShare · Bản xem thử RC1D-59 <span>•</span> Không kết nối dữ liệu vận hành</div></footer>
 
               <div v-if="reviewAction" class="review-modal-backdrop" @click.self="reviewAction = null" @keydown.esc="reviewAction = null">
                 <section class="review-dialog" role="dialog" aria-modal="true" aria-labelledby="review-dialog-title">
