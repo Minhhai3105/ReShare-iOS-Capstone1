@@ -109,9 +109,14 @@ function createImageApi({ db, verifyToken, cloudinary, cloudName, apiKey, apiSec
     return {};
   }
 
-  async function isActiveSystemAdmin(uid) {
+  async function canStaffReadDonation(uid, donation) {
     const assignment = await db.collection('staff_assignments').doc(uid).get();
-    return assignment.exists && assignment.data().active === true && assignment.data().role === 'system_admin';
+    if (!assignment.exists || assignment.data().active !== true) return false;
+    const staff = assignment.data();
+    if (staff.role === 'system_admin') return true;
+    const warehouseId = donation.hubId || donation.warehouseId;
+    return staff.role === 'warehouse_admin' && !!warehouseId &&
+      Array.isArray(staff.warehouseIds) && staff.warehouseIds.includes(warehouseId);
   }
 
   async function readAccess(uid, body) {
@@ -121,7 +126,7 @@ function createImageApi({ db, verifyToken, cloudinary, cloudName, apiKey, apiSec
     const donation = await recordSnapshot('donation', donationId);
     if (!donation.exists) throw new ApiError(404, 'Donation not found');
     const data = donation.data();
-    if (data.donorId !== uid && !(await isActiveSystemAdmin(uid))) throw new ApiError(403, 'Access denied');
+    if (data.donorId !== uid && !(await canStaffReadDonation(uid, data))) throw new ApiError(403, 'Access denied');
     if (data.imageProvider !== 'cloudinary' || !(data.imagePublicIds || []).includes(publicId)) {
       throw new ApiError(404, 'Image not attached to donation');
     }

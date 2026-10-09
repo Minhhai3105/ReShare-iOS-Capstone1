@@ -388,9 +388,15 @@ service cloud.firestore {
         && request.resource.data.id == donationId
         && request.resource.data.donorId == request.auth.uid
         && request.resource.data.status == 'pending'
+        && !request.resource.data.keys().hasAny(['internalNote', 'reviewedBy', 'history'])
         && validNewDonation();
-      allow update: if request.auth != null && isSystemAdmin();
+      // Review decisions go through the trusted API so private fields stay separate.
+      allow update: if false;
       allow delete: if false;
+    }
+
+    match /donation_reviews/{donationId} {
+      allow read, write: if false;
     }
 
     // Contact records are accepted and accessed only by the trusted backend using Admin SDK.

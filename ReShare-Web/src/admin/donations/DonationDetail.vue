@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import AuthShell from '../auth/components/AuthShell.vue'
 import { decideDemoDonation, loadDemoDonation, statusLabels, steps } from './donation.demo'
+import { decideDonation } from './donation.service'
 
 // Auth belongs to the routed adapter; the shared view has no Firebase dependency.
 const props = defineProps({
@@ -76,16 +77,28 @@ async function submit() {
   const ticket = generation
   submitting.value = true
   try {
-    const result = await decideDemoDonation({
-      donation: donation.value, action: action.value, publicMessage: publicMessage.value,
-      internalNote: internalNote.value, actor: props.actorId, scenario: scenario.value,
-      authorize: (hubId) => hubId === props.warehouseId && props.authorizeWarehouse(hubId),
-    })
+    let result
+    if (props.localPreview || donation.value.id === 'demo-001') {
+      result = await decideDemoDonation({
+        donation: donation.value, action: action.value, publicMessage: publicMessage.value,
+        internalNote: internalNote.value, actor: props.actorId, scenario: scenario.value,
+        authorize: (hubId) => hubId === props.warehouseId && props.authorizeWarehouse(hubId),
+      })
+      success.value = 'Đã lưu quyết định trong bộ nhớ demo. Không gửi thông báo thật; không cập nhật inventory.'
+    } else {
+      result = await decideDonation({
+        donationId: donation.value.id,
+        action: action.value,
+        publicMessage: publicMessage.value,
+        internalNote: internalNote.value,
+        expectedVersion: donation.value.version,
+      })
+      success.value = `Đã thẩm định thành công đơn quyên góp: ${actionLabels[action.value]}. Không làm thay đổi inventory.`
+    }
     if (ticket !== generation) return
     donation.value = result
     publicMessage.value = ''
     internalNote.value = ''
-    success.value = 'Đã lưu quyết định trong bộ nhớ demo. Không gửi thông báo thật; không cập nhật inventory.'
   } catch (cause) {
     if (ticket !== generation) return
     error.value = messages[cause.code] || 'Không lưu được quyết định. Hãy thử lại.'

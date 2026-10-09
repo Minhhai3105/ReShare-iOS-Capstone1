@@ -10,6 +10,7 @@ import {
 } from './donation.mock'
 import { DONATION_PAGE_SIZE, DONATION_QUEUE_ERROR, DONATION_SORT } from './donation.constants'
 import { ADMIN_ROLES, USER_ROLE } from '../auth/auth.constants'
+import { auth } from '../auth/firebase.js'
 
 const SCENARIO_ERROR = {
   [MOCK_DONATION_SCENARIO.error]: DONATION_QUEUE_ERROR.server,
@@ -132,3 +133,26 @@ export async function fetchDonationQueue(access, query) {
 
   return { items, total, page, pageSize: DONATION_PAGE_SIZE, totalPages, statusCounts }
 }
+
+export async function decideDonation({ donationId, action, publicMessage, internalNote, expectedVersion }) {
+  const token = await auth.currentUser?.getIdToken()
+  if (!token) {
+    throw createQueueError(DONATION_QUEUE_ERROR.forbidden)
+  }
+  const response = await fetch(`/v1/admin/donations/${donationId}/decide`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ action, publicMessage, internalNote, expectedVersion }),
+  })
+  if (!response.ok) {
+    if (response.status === 409) throw Object.assign(new Error('CONFLICT'), { code: 'CONFLICT' })
+    if (response.status === 403) throw Object.assign(new Error('FORBIDDEN'), { code: 'FORBIDDEN' })
+    throw Object.assign(new Error('NETWORK'), { code: 'NETWORK' })
+  }
+  const data = await response.json()
+  return data.donation
+}
+

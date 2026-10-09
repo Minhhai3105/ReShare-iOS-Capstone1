@@ -180,13 +180,21 @@ test('donor owns pending donation; warehouse admin is blocked until warehouse sc
     }));
     await assertFails(env.authenticatedContext('other').firestore().doc(`donations/${recordId}`).get());
     await assertSucceeds(donor.doc(`donations/${recordId}`).get());
+    await assertFails(donor.doc(`donation_reviews/${recordId}`).get());
+    await assertFails(admin.doc(`donation_reviews/${recordId}`).get());
     await assertSucceeds(donor.collection('donations').where('donorId', '==', 'donor').orderBy('createdAt', 'desc').get());
     await assertFails(donor.doc('donations/invalid-status').set({ ...donation, id: 'invalid-status', status: 'approved' }));
+    await assertFails(donor.doc('donations/invalid-private-note').set({
+      ...donation, id: 'invalid-private-note', internalNote: 'Không được ghi từ client',
+    }));
     await assertFails(warehouse.doc(`donations/${recordId}`).get());
     await assertFails(warehouse.doc(`donations/${recordId}`).update({ status: 'approved' }));
     await assertFails(staleAdmin.doc(`donations/${recordId}`).get());
     await assertSucceeds(admin.doc(`donations/${recordId}`).get());
-    await assertSucceeds(admin.doc(`donations/${recordId}`).update({ status: 'approved' }));
+    await assertFails(admin.doc(`donations/${recordId}`).update({ status: 'approved' }));
+    await env.withSecurityRulesDisabled(async context => {
+      await context.firestore().doc(`donations/${recordId}`).update({ status: 'approved' });
+    });
     await assertSucceeds(donor.runTransaction(async transaction => {
       const reference = donor.doc(`donations/${recordId}`);
       const existing = await transaction.get(reference);
