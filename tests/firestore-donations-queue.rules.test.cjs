@@ -1,4 +1,5 @@
 const { test } = require('node:test');
+const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { assertFails, assertSucceeds, initializeTestEnvironment } = require('@firebase/rules-unit-testing');
@@ -118,6 +119,14 @@ test('US09: Warehouse Admin can only view donations in assigned warehouse; cross
     await assertSucceeds(whAdminAB.collection('donations')
       .where('warehouseId', 'in', ['kho-a', 'kho-b'])
       .orderBy('createdAt', 'desc').limit(11).get());
+    const scopedQuery = whAdminAB.collection('donations')
+      .where('warehouseId', 'in', ['kho-a', 'kho-b'])
+      .orderBy('createdAt', 'desc').orderBy('__name__', 'desc');
+    const firstPage = await assertSucceeds(scopedQuery.limit(1).get());
+    const secondPage = await assertSucceeds(scopedQuery.startAfter(firstPage.docs[0]).limit(1).get());
+    assert.equal(firstPage.size, 1);
+    assert.equal(secondPage.size, 1);
+    assert.notEqual(firstPage.docs[0].id, secondPage.docs[0].id);
 
     // Wh-admin-a cố tình query kho khác (sửa request thủ công) -> Bị Backend Firestore Rules từ chối
     await assertFails(whAdminA.collection('donations').where('warehouseId', '==', 'kho-b').get());
