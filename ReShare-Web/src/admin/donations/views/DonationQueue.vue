@@ -41,7 +41,7 @@ const {
   resetFilters,
 } = useDonationQueue(getAccess)
 
-// Phạm vi đang áp dụng; cập nhật mỗi lần làm mới để phản ánh phân công mới hoặc quyền mock.
+// Phạm vi đang áp dụng; cập nhật mỗi lần làm mới để phản ánh phân công mới.
 const access = ref(null)
 const scopeLabel = computed(() => {
   if (!access.value) return 'Không có phạm vi kho'
@@ -78,6 +78,12 @@ function formatDonationCode(id) {
 function formatCreatedAt(createdAt) {
   const date = new Date(createdAt)
   return `${dateFormatter.format(date)} ${hourFormatter.format(date)}`
+}
+
+function warehouseLabel(donation) {
+  if (!donation.warehouseId) return 'Chưa gán kho'
+  return warehouses.value.find((warehouse) => warehouse.id === donation.warehouseId)?.name
+    || donation.warehouseName || donation.warehouseId
 }
 
 function refreshQueue() {
@@ -118,7 +124,7 @@ watch(staffAssignment, refreshQueue)
           <strong>Thông báo điều phối</strong>
           <p>
             Phạm vi hiển thị: <strong>{{ scopeLabel }}</strong>.
-            Danh sách lấy từ Firestore và chỉ hiển thị theo phạm vi kho được phân công.
+            Danh sách lấy từ Firestore. Đơn chưa được phân kho chỉ System Admin thấy.
           </p>
         </div>
       </section>
@@ -225,7 +231,7 @@ watch(staffAssignment, refreshQueue)
                   <span class="queue-table__title">{{ donation.title }}</span>
                   <span class="queue-table__sub">{{ DONATION_CATEGORY_LABEL[donation.category] }}</span>
                 </td>
-                <td :class="{ 'queue-table__muted': !donation.warehouseName }">{{ donation.warehouseName ?? 'Chưa gán kho' }}</td>
+                <td :class="{ 'queue-table__muted': !donation.warehouseId }">{{ warehouseLabel(donation) }}</td>
                 <td class="queue-table__nowrap">{{ formatCreatedAt(donation.createdAt) }}</td>
                 <td>
                   <span class="queue-status" :class="`queue-status--${STATUS_TONE[donation.status]}`">
@@ -248,9 +254,9 @@ watch(staffAssignment, refreshQueue)
 
         <div v-else-if="viewState === QUEUE_VIEW_STATE.error" class="queue-state queue-state--danger" role="alert">
           <span class="queue-state__icon"><AuthIcon name="cloud-off" :size="36" /></span>
-          <h2>{{ errorStatus === DONATION_QUEUE_ERROR.notConfigured ? 'Chưa kết nối dữ liệu vận hành' : 'Không tải được danh sách' }}</h2>
-          <p>{{ errorStatus === DONATION_QUEUE_ERROR.notConfigured ? 'Hàng đợi hiện chỉ có bản xem thử trong môi trường phát triển. Chưa có API đọc đơn theo quyền kho.' : 'Máy chủ hoặc kết nối mạng đang gặp sự cố. Vui lòng thử lại.' }}</p>
-          <button v-if="errorStatus !== DONATION_QUEUE_ERROR.notConfigured" type="button" class="auth-btn auth-btn--primary" :disabled="isLoading" @click="refreshQueue">
+          <h2>{{ errorStatus === DONATION_QUEUE_ERROR.indexRequired ? 'Chưa có chỉ mục Firestore' : 'Không tải được danh sách' }}</h2>
+          <p>{{ errorStatus === DONATION_QUEUE_ERROR.indexRequired ? 'Bộ lọc này cần chỉ mục Firestore được triển khai. Hãy báo người quản trị hệ thống.' : 'Máy chủ hoặc kết nối mạng đang gặp sự cố. Vui lòng thử lại.' }}</p>
+          <button type="button" class="auth-btn auth-btn--primary" :disabled="isLoading" @click="refreshQueue">
             <AuthIcon :name="isLoading ? 'loader' : 'refresh'" :size="18" :class="{ 'auth-spin': isLoading }" />Thử lại
           </button>
         </div>

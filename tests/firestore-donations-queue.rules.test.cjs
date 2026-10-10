@@ -58,7 +58,7 @@ test('US09: Warehouse Admin can only view donations in assigned warehouse; cross
         category: 'clothing',
         condition: 'good',
         status: 'pending',
-        hubId: 'kho-a',
+        warehouseId: 'kho-a',
         createdAt: new Date(),
       });
 
@@ -69,7 +69,7 @@ test('US09: Warehouse Admin can only view donations in assigned warehouse; cross
         category: 'books',
         condition: 'new',
         status: 'pending',
-        hubId: 'kho-b',
+        warehouseId: 'kho-b',
         createdAt: new Date(),
       });
 
@@ -80,6 +80,7 @@ test('US09: Warehouse Admin can only view donations in assigned warehouse; cross
         category: 'household',
         condition: 'fair',
         status: 'pending',
+        hubId: 'kho-a', // Điểm minh họa không được coi là kho đã phân công.
         createdAt: new Date(),
       });
     });
@@ -113,13 +114,16 @@ test('US09: Warehouse Admin can only view donations in assigned warehouse; cross
 
     // 8. Kiểm tra Query/List có giới hạn kho
     // Wh-admin-a query đúng kho của mình -> Thành công
-    await assertSucceeds(whAdminA.collection('donations').where('hubId', '==', 'kho-a').get());
+    await assertSucceeds(whAdminA.collection('donations').where('warehouseId', '==', 'kho-a').get());
     await assertSucceeds(whAdminAB.collection('donations')
-      .where('hubId', 'in', ['kho-a', 'kho-b'])
+      .where('warehouseId', 'in', ['kho-a', 'kho-b'])
       .orderBy('createdAt', 'desc').limit(11).get());
 
     // Wh-admin-a cố tình query kho khác (sửa request thủ công) -> Bị Backend Firestore Rules từ chối
-    await assertFails(whAdminA.collection('donations').where('hubId', '==', 'kho-b').get());
+    await assertFails(whAdminA.collection('donations').where('warehouseId', '==', 'kho-b').get());
+
+    // Không thể lợi dụng hubId trùng kho để thấy đơn chưa phân kho.
+    await assertFails(whAdminA.collection('donations').where('hubId', '==', 'kho-a').get());
 
     // Wh-admin-a query toàn bộ không lọc kho -> Bị từ chối vì chứa document ngoài phạm vi
     await assertFails(whAdminA.collection('donations').get());

@@ -1,34 +1,11 @@
-// Lớp truy cập dữ liệu hàng đợi quyên góp. Hiện dùng mock; khi có Firestore/API chỉ thay phần thân hàm,
-// giữ nguyên chữ ký và dạng kết quả để composable và giao diện không phải sửa.
-import {
-  MOCK_DONATIONS,
-  MOCK_DONATION_SCENARIO,
-  MOCK_WAREHOUSES,
-  getMockAccessOverride,
-  getMockDonationScenario,
-  getMockDonorName,
-} from './donation.mock.js'
+// Hàng đợi quyên góp đọc Firestore; warehouseId là kho được phân công, hubId chỉ là điểm minh họa trong app.
 import { DONATION_PAGE_SIZE, DONATION_QUEUE_ERROR, DONATION_SORT } from './donation.constants.js'
 import { ADMIN_ROLES, USER_ROLE } from '../auth/auth.constants.js'
 import { db } from '../auth/firebase.js'
 import { collection, doc, documentId, getDoc, getDocs, limit, orderBy, query as firestoreQuery, startAfter, where } from 'firebase/firestore'
 
-const SCENARIO_ERROR = {
-  [MOCK_DONATION_SCENARIO.error]: DONATION_QUEUE_ERROR.server,
-  [MOCK_DONATION_SCENARIO.network]: DONATION_QUEUE_ERROR.network,
-  [MOCK_DONATION_SCENARIO.forbidden]: DONATION_QUEUE_ERROR.forbidden,
-}
-
 function createQueueError(status) {
   return Object.assign(new Error(String(status)), { status })
-}
-
-// Giả lập độ trễ mạng (400–900ms, kịch bản "slow" 3s) và lỗi theo kịch bản mock.
-async function simulateRequest() {
-  const scenario = getMockDonationScenario()
-  const delayMs = scenario === MOCK_DONATION_SCENARIO.slow ? 3000 : 400 + Math.random() * 500
-  await new Promise((resolve) => setTimeout(resolve, delayMs))
-  if (SCENARIO_ERROR[scenario]) throw createQueueError(SCENARIO_ERROR[scenario])
 }
 
 // Bỏ dấu tiếng Việt để tìm "nguyen" khớp "Nguyễn".
@@ -47,18 +24,12 @@ function toDayBoundary(date, isEndOfDay) {
   return new Date(`${date}T${isEndOfDay ? '23:59:59.999' : '00:00:00'}`).getTime()
 }
 
-function getWarehouseName(warehouseId) {
-  if (!warehouseId) return null
-  return MOCK_WAREHOUSES.find((warehouse) => warehouse.id === warehouseId)?.name ?? warehouseId
-}
-
 /**
  * Phạm vi xem hàng đợi theo phân công (staff_assignments). Trả về null nếu không có quyền.
- * Khi dev có thể ghi đè bằng reshareMock.setDonationAccess(...) để thử từng vai trò.
  */
 export function resolveQueueAccess(assignment) {
-  const access = (import.meta.env.DEV ? getMockAccessOverride() : null) ?? assignment
-  if (!access || access.active === false || !ADMIN_ROLES.includes(access.role)) return null
+  const access = assignment
+  if (!access || access.active !== true || !ADMIN_ROLES.includes(access.role)) return null
   return {
     role: access.role,
     warehouseIds: Array.isArray(access.warehouseIds) ? access.warehouseIds : [],
@@ -96,11 +67,11 @@ export function processAndPaginateDonations(source, access, query) {
 
   const matchesScopeAndFilters = source.filter((donation) => {
     const createdTime = new Date(donation.createdAt).getTime()
-    const donorName = donation.donorName || getMockDonorName(donation.donorId)
-    const assignedHub = donation.hubId || donation.warehouseId
+    const donorName = donation.donorName || donation.donorId || ''
+    const assignedWarehouse = donation.warehouseId
     return (
-      (access.isAllWarehouses || (assignedHub && access.warehouseIds.includes(assignedHub))) &&
-      (!query.warehouseId || assignedHub === query.warehouseId) &&
+      (access.isAllWarehouses || (assignedWarehouse && access.warehouseIds.includes(assignedWarehouse))) &&
+      (!query.warehouseId || assignedWarehouse === query.warehouseId) &&
       (!query.category || donation.category === query.category) &&
       (fromTime === null || createdTime >= fromTime) &&
       (toTime === null || createdTime <= toTime) &&
@@ -129,8 +100,8 @@ export function processAndPaginateDonations(source, access, query) {
   const page = Math.min(Math.max(1, query.page ?? 1), totalPages)
   const items = sorted.slice((page - 1) * DONATION_PAGE_SIZE, page * DONATION_PAGE_SIZE).map((donation) => ({
     ...donation,
-    donorName: donation.donorName || getMockDonorName(donation.donorId),
-    warehouseName: getWarehouseName(donation.hubId || donation.warehouseId),
+    donorName: donation.donorName || donation.donorId || 'Chưa có tên',
+    warehouseName: donation.warehouseName || donation.warehouseId || null,
   }))
 
   return { items, total, page, pageSize: DONATION_PAGE_SIZE, totalPages, statusCounts }
@@ -154,21 +125,14 @@ export async function fetchDonationQueue(access, query) {
     return { items: [], total: 0, page: 1, pageSize: DONATION_PAGE_SIZE, totalPages: 1, statusCounts: {} }
   }
 
-  // Kịch bản minh họa chỉ chạy khi lập trình viên chủ động bật trong môi trường dev.
-  if (import.meta.env.DEV && getMockDonationScenario() !== MOCK_DONATION_SCENARIO.normal) {
-    await simulateRequest()
-    const source = getMockDonationScenario() === MOCK_DONATION_SCENARIO.empty ? [] : MOCK_DONATIONS
-    return processAndPaginateDonations(source, access, query)
-  }
-
   try {
     const constraints = []
     const warehouseIds = access.warehouseIds
     if (query.warehouseId) {
-      constraints.push(where('hubId', '==', query.warehouseId))
+      constraints.push(where('warehouseId', '==', query.warehouseId))
     } else if (!access.isAllWarehouses) {
       if (warehouseIds.length > 10) throw createQueueError(DONATION_QUEUE_ERROR.server)
-      constraints.push(where('hubId', warehouseIds.length === 1 ? '==' : 'in', warehouseIds.length === 1 ? warehouseIds[0] : warehouseIds))
+      constraints.push(where('warehouseId', warehouseIds.length === 1 ? '==' : 'in', warehouseIds.length === 1 ? warehouseIds[0] : warehouseIds))
     }
     if (query.category) constraints.push(where('category', '==', query.category))
     if (query.status) constraints.push(where('status', '==', query.status))
@@ -177,12 +141,11 @@ export async function fetchDonationQueue(access, query) {
 
     const normalizeDoc = (docSnap) => {
       const data = docSnap.data()
-      const assignedHub = data.hubId || data.warehouseId
       return {
         ...data,
         id: docSnap.id,
-        donorName: data.donorName || data.donorId,
-        warehouseName: data.hubName || data.warehouseName || assignedHub || null,
+        donorName: data.donorName || data.donorId || 'Chưa có tên',
+        warehouseName: data.warehouseName || data.warehouseId || null,
         createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : String(data.createdAt || ''),
       }
     }
@@ -195,8 +158,8 @@ export async function fetchDonationQueue(access, query) {
       }
       const snap = await getDoc(doc(db, 'donations', donationId))
       const items = snap.exists() ? [normalizeDoc(snap)].filter((item) =>
-        (access.isAllWarehouses || warehouseIds.includes(item.hubId || item.warehouseId)) &&
-        (!query.warehouseId || (item.hubId || item.warehouseId) === query.warehouseId) &&
+        (access.isAllWarehouses || warehouseIds.includes(item.warehouseId)) &&
+        (!query.warehouseId || item.warehouseId === query.warehouseId) &&
         (!query.category || item.category === query.category) &&
         (!query.status || item.status === query.status) &&
         (!query.dateFrom || new Date(item.createdAt) >= new Date(`${query.dateFrom}T00:00:00`)) &&
@@ -219,6 +182,7 @@ export async function fetchDonationQueue(access, query) {
     }
   } catch (error) {
     if (error?.status) throw error
-    throw createQueueError(error?.code === 'permission-denied' ? DONATION_QUEUE_ERROR.forbidden : DONATION_QUEUE_ERROR.network)
+    throw createQueueError(error?.code === 'permission-denied' ? DONATION_QUEUE_ERROR.forbidden
+      : error?.code === 'failed-precondition' ? DONATION_QUEUE_ERROR.indexRequired : DONATION_QUEUE_ERROR.network)
   }
 }

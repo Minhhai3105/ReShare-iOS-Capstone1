@@ -26,6 +26,7 @@ test('US09: resolveQueueAccess maps roles and warehouse scope correctly', () => 
 
   // Inactive or unauthorized role
   assert.equal(resolveQueueAccess({ role: 'warehouse_admin', active: false }), null);
+  assert.equal(resolveQueueAccess({ role: 'warehouse_admin' }), null);
   assert.equal(resolveQueueAccess({ role: 'donor', active: true }), null);
 });
 
@@ -45,10 +46,11 @@ test('US09: Warehouse Admin is forbidden from requesting another warehouse', asy
 
 test('US09: processAndPaginateDonations filters strictly by assigned warehouse and supports stable pagination', () => {
   const testDonations = [
-    { id: 'qg-1', hubId: 'wh_dn_01', status: 'pending', createdAt: '2026-10-01T10:00:00Z', title: 'Áo khoác', donorId: 'd-1' },
-    { id: 'qg-2', hubId: 'wh_dn_02', status: 'pending', createdAt: '2026-10-02T10:00:00Z', title: 'Sách', donorId: 'd-2' },
-    { id: 'qg-3', hubId: 'wh_dn_01', status: 'approved', createdAt: '2026-10-03T10:00:00Z', title: 'Nồi cơm', donorId: 'd-1' },
-    { id: 'qg-4', hubId: 'wh_dn_03', status: 'pending', createdAt: '2026-10-04T10:00:00Z', title: 'Quạt', donorId: 'd-3' },
+    { id: 'qg-1', warehouseId: 'wh_dn_01', status: 'pending', createdAt: '2026-10-01T10:00:00Z', title: 'Áo khoác', donorId: 'd-1' },
+    { id: 'qg-2', warehouseId: 'wh_dn_02', status: 'pending', createdAt: '2026-10-02T10:00:00Z', title: 'Sách', donorId: 'd-2' },
+    { id: 'qg-3', warehouseId: 'wh_dn_01', status: 'approved', createdAt: '2026-10-03T10:00:00Z', title: 'Nồi cơm', donorId: 'd-1' },
+    { id: 'qg-4', warehouseId: 'wh_dn_03', status: 'pending', createdAt: '2026-10-04T10:00:00Z', title: 'Quạt', donorId: 'd-3' },
+    { id: 'qg-5', hubId: 'wh_dn_01', status: 'pending', createdAt: '2026-10-05T10:00:00Z', title: 'Đơn chưa phân kho', donorId: 'd-4' },
   ];
 
   const whAdminAccess = {
@@ -68,16 +70,16 @@ test('US09: processAndPaginateDonations filters strictly by assigned warehouse a
   assert.equal(whResult.total, 2);
   assert.deepEqual(whResult.items.map((i) => i.id), ['qg-3', 'qg-1']);
 
-  // System Admin thấy toàn bộ 4 đơn
+  // System Admin thấy cả đơn chưa phân kho.
   const sysResult = processAndPaginateDonations(testDonations, sysAdminAccess, {});
-  assert.equal(sysResult.total, 4);
+  assert.equal(sysResult.total, 5);
 
   // Lọc theo trạng thái
   const pendingResult = processAndPaginateDonations(testDonations, sysAdminAccess, { status: 'pending' });
-  assert.equal(pendingResult.total, 3);
+  assert.equal(pendingResult.total, 4);
   assert.ok(pendingResult.items.every((i) => i.status === 'pending'));
 
   // Kiểm tra chip đếm statusCounts độc lập với bộ lọc trạng thái
-  assert.equal(pendingResult.statusCounts.pending, 3);
+  assert.equal(pendingResult.statusCounts.pending, 4);
   assert.equal(pendingResult.statusCounts.approved, 1);
 });

@@ -371,11 +371,12 @@ service cloud.firestore {
           && data.condition in ['new', 'like_new', 'good', 'fair']
           && data.createdAt is timestamp
           && data.imageProvider == 'cloudinary'
+          && !data.keys().hasAny(['warehouseId', 'warehouseName'])
           && validCloudinaryImages('donation', donationId);
       }
 
       function canStaffReadDonation() {
-        let assignedWarehouse = resource.data.get('warehouseId', resource.data.get('hubId', null));
+        let assignedWarehouse = resource.data.get('warehouseId', null);
         return isSystemAdmin() || (
           assignedWarehouse != null && canReadWarehouse(assignedWarehouse)
         );
