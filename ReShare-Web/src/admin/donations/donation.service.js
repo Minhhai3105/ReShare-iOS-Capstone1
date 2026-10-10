@@ -1,32 +1,11 @@
-// Lớp truy cập dữ liệu hàng đợi quyên góp. Hiện dùng mock; khi có Firestore/API chỉ thay phần thân hàm,
-// giữ nguyên chữ ký và dạng kết quả để composable và giao diện không phải sửa.
-import {
-  MOCK_DONATIONS,
-  MOCK_DONATION_SCENARIO,
-  MOCK_WAREHOUSES,
-  getMockAccessOverride,
-  getMockDonationScenario,
-  getMockDonorName,
-} from './donation.mock'
-import { DONATION_PAGE_SIZE, DONATION_QUEUE_ERROR, DONATION_SORT } from './donation.constants'
-import { ADMIN_ROLES, USER_ROLE } from '../auth/auth.constants'
-
-const SCENARIO_ERROR = {
-  [MOCK_DONATION_SCENARIO.error]: DONATION_QUEUE_ERROR.server,
-  [MOCK_DONATION_SCENARIO.network]: DONATION_QUEUE_ERROR.network,
-  [MOCK_DONATION_SCENARIO.forbidden]: DONATION_QUEUE_ERROR.forbidden,
-}
+// Hàng đợi quyên góp đọc Firestore; warehouseId là kho được phân công, hubId chỉ là điểm minh họa trong app.
+import { DONATION_PAGE_SIZE, DONATION_QUEUE_ERROR, DONATION_SORT } from './donation.constants.js'
+import { ADMIN_ROLES, USER_ROLE } from '../auth/auth.constants.js'
+import { db } from '../auth/firebase.js'
+import { collection, doc, documentId, getDoc, getDocs, limit, orderBy, query as firestoreQuery, startAfter, where } from 'firebase/firestore'
 
 function createQueueError(status) {
   return Object.assign(new Error(String(status)), { status })
-}
-
-// Giả lập độ trễ mạng (400–900ms, kịch bản "slow" 3s) và lỗi theo kịch bản mock.
-async function simulateRequest() {
-  const scenario = getMockDonationScenario()
-  const delayMs = scenario === MOCK_DONATION_SCENARIO.slow ? 3000 : 400 + Math.random() * 500
-  await new Promise((resolve) => setTimeout(resolve, delayMs))
-  if (SCENARIO_ERROR[scenario]) throw createQueueError(SCENARIO_ERROR[scenario])
 }
 
 // Bỏ dấu tiếng Việt để tìm "nguyen" khớp "Nguyễn".
@@ -45,18 +24,12 @@ function toDayBoundary(date, isEndOfDay) {
   return new Date(`${date}T${isEndOfDay ? '23:59:59.999' : '00:00:00'}`).getTime()
 }
 
-function getWarehouseName(warehouseId) {
-  if (!warehouseId) return null
-  return MOCK_WAREHOUSES.find((warehouse) => warehouse.id === warehouseId)?.name ?? warehouseId
-}
-
 /**
  * Phạm vi xem hàng đợi theo phân công (staff_assignments). Trả về null nếu không có quyền.
- * Khi dev có thể ghi đè bằng reshareMock.setDonationAccess(...) để thử từng vai trò.
  */
 export function resolveQueueAccess(assignment) {
-  const access = getMockAccessOverride() ?? assignment
-  if (!access || access.active === false || !ADMIN_ROLES.includes(access.role)) return null
+  const access = assignment
+  if (!access || access.active !== true || !ADMIN_ROLES.includes(access.role)) return null
   return {
     role: access.role,
     warehouseIds: Array.isArray(access.warehouseIds) ? access.warehouseIds : [],
@@ -67,45 +40,46 @@ export function resolveQueueAccess(assignment) {
 function canViewWarehouse(access, warehouseId) {
   return access.isAllWarehouses || access.warehouseIds.includes(warehouseId)
 }
-
 export async function fetchQueueWarehouses(access) {
   if (!access) throw createQueueError(DONATION_QUEUE_ERROR.forbidden)
-  if (!import.meta.env.DEV) throw createQueueError(DONATION_QUEUE_ERROR.notConfigured)
-  if (access.isAllWarehouses) return MOCK_WAREHOUSES.map(({ id, name }) => ({ id, name }))
-  return access.warehouseIds.map((id) => ({ id, name: getWarehouseName(id) }))
+  if (access.isAllWarehouses) {
+    try {
+      const snapshot = await getDocs(collection(db, 'warehouses'))
+      return snapshot.docs.map((docSnap) => ({ id: docSnap.id, name: docSnap.data().name || docSnap.id }))
+    } catch (error) {
+      throw createQueueError(error?.code === 'permission-denied' ? DONATION_QUEUE_ERROR.forbidden : DONATION_QUEUE_ERROR.network)
+    }
+  }
+  try {
+    return await Promise.all(access.warehouseIds.map(async (id) => {
+      const snapshot = await getDoc(doc(db, 'warehouses', id))
+      return { id, name: snapshot.exists() ? snapshot.data().name || id : id }
+    }))
+  } catch (error) {
+    throw createQueueError(error?.code === 'permission-denied' ? DONATION_QUEUE_ERROR.forbidden : DONATION_QUEUE_ERROR.network)
+  }
 }
 
-/**
- * @param access kết quả resolveQueueAccess
- * @param query { search, status, warehouseId, category, dateFrom, dateTo, sort, page }
- * @returns { items, total, page, pageSize, totalPages, statusCounts }
- */
-export async function fetchDonationQueue(access, query) {
-  if (!access) throw createQueueError(DONATION_QUEUE_ERROR.forbidden)
-  if (!import.meta.env.DEV) throw createQueueError(DONATION_QUEUE_ERROR.notConfigured)
-  await simulateRequest()
-  // Giống backend: từ chối khi request chỉ định kho ngoài phân công, kể cả khi sửa request thủ công.
-  if (query.warehouseId && !canViewWarehouse(access, query.warehouseId)) {
-    throw createQueueError(DONATION_QUEUE_ERROR.forbidden)
-  }
-
+export function processAndPaginateDonations(source, access, query) {
   const keyword = normalizeText(query.search ?? '')
   const fromTime = toDayBoundary(query.dateFrom, false)
   const toTime = toDayBoundary(query.dateTo, true)
-  const source = getMockDonationScenario() === MOCK_DONATION_SCENARIO.empty ? [] : MOCK_DONATIONS
 
   const matchesScopeAndFilters = source.filter((donation) => {
     const createdTime = new Date(donation.createdAt).getTime()
+    const donorName = donation.donorName || donation.donorId || ''
+    const assignedWarehouse = donation.warehouseId
     return (
-      (access.isAllWarehouses || access.warehouseIds.includes(donation.hubId)) &&
-      (!query.warehouseId || donation.hubId === query.warehouseId) &&
+      (access.isAllWarehouses || (assignedWarehouse && access.warehouseIds.includes(assignedWarehouse))) &&
+      (!query.warehouseId || assignedWarehouse === query.warehouseId) &&
       (!query.category || donation.category === query.category) &&
       (fromTime === null || createdTime >= fromTime) &&
       (toTime === null || createdTime <= toTime) &&
       (!keyword ||
         normalizeText(donation.id).includes(keyword) ||
-        normalizeText(getMockDonorName(donation.donorId)).includes(keyword) ||
-        donation.donorId.includes(keyword))
+        normalizeText(donorName).includes(keyword) ||
+        (donation.donorId && donation.donorId.includes(keyword)) ||
+        (donation.title && normalizeText(donation.title).includes(keyword)))
     )
   })
 
@@ -119,16 +93,96 @@ export async function fetchDonationQueue(access, query) {
   // Sắp theo ngày tạo rồi theo id để thứ tự ổn định: chuyển trang không lặp hay mất dòng.
   const sorted = matchesScopeAndFilters
     .filter((donation) => !query.status || donation.status === query.status)
-    .sort((a, b) => direction * (a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)))
+    .sort((a, b) => direction * (String(a.createdAt).localeCompare(String(b.createdAt)) || a.id.localeCompare(b.id)))
 
   const total = sorted.length
   const totalPages = Math.max(1, Math.ceil(total / DONATION_PAGE_SIZE))
   const page = Math.min(Math.max(1, query.page ?? 1), totalPages)
   const items = sorted.slice((page - 1) * DONATION_PAGE_SIZE, page * DONATION_PAGE_SIZE).map((donation) => ({
     ...donation,
-    donorName: getMockDonorName(donation.donorId),
-    warehouseName: getWarehouseName(donation.hubId),
+    donorName: donation.donorName || donation.donorId || 'Chưa có tên',
+    warehouseName: donation.warehouseName || donation.warehouseId || null,
   }))
 
   return { items, total, page, pageSize: DONATION_PAGE_SIZE, totalPages, statusCounts }
+}
+
+/**
+ * @param access kết quả resolveQueueAccess
+ * @param query { search, status, warehouseId, category, dateFrom, dateTo, sort, page }
+ * @returns { items, total, page, pageSize, totalPages, statusCounts }
+ */
+export async function fetchDonationQueue(access, query) {
+  if (!access) throw createQueueError(DONATION_QUEUE_ERROR.forbidden)
+
+  // Giống backend: từ chối khi request chỉ định kho ngoài phân công, kể cả khi sửa request thủ công.
+  if (query.warehouseId && !canViewWarehouse(access, query.warehouseId)) {
+    throw createQueueError(DONATION_QUEUE_ERROR.forbidden)
+  }
+
+  // Nhân sự kho chưa được gán kho nào thì hàng đợi rỗng.
+  if (!access.isAllWarehouses && access.warehouseIds.length === 0) {
+    return { items: [], total: 0, page: 1, pageSize: DONATION_PAGE_SIZE, totalPages: 1, statusCounts: {} }
+  }
+
+  try {
+    const constraints = []
+    const warehouseIds = access.warehouseIds
+    if (query.warehouseId) {
+      constraints.push(where('warehouseId', '==', query.warehouseId))
+    } else if (!access.isAllWarehouses) {
+      if (warehouseIds.length > 10) throw createQueueError(DONATION_QUEUE_ERROR.server)
+      constraints.push(where('warehouseId', warehouseIds.length === 1 ? '==' : 'in', warehouseIds.length === 1 ? warehouseIds[0] : warehouseIds))
+    }
+    if (query.category) constraints.push(where('category', '==', query.category))
+    if (query.status) constraints.push(where('status', '==', query.status))
+    if (query.dateFrom) constraints.push(where('createdAt', '>=', new Date(`${query.dateFrom}T00:00:00`)))
+    if (query.dateTo) constraints.push(where('createdAt', '<=', new Date(`${query.dateTo}T23:59:59.999`)))
+
+    const normalizeDoc = (docSnap) => {
+      const data = docSnap.data()
+      return {
+        ...data,
+        id: docSnap.id,
+        donorName: data.donorName || data.donorId || 'Chưa có tên',
+        warehouseName: data.warehouseName || data.warehouseId || null,
+        createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : String(data.createdAt || ''),
+      }
+    }
+
+    // Search by exact donation ID avoids reading a whole collection for client-side text matching.
+    if (query.search?.trim()) {
+      const donationId = query.search.trim().replace(/^#/, '')
+      if (donationId.includes('/')) {
+        return { items: [], total: 0, page: 1, pageSize: DONATION_PAGE_SIZE, totalPages: 1, hasMore: false, nextCursor: null, statusCounts: null }
+      }
+      const snap = await getDoc(doc(db, 'donations', donationId))
+      const items = snap.exists() ? [normalizeDoc(snap)].filter((item) =>
+        (access.isAllWarehouses || warehouseIds.includes(item.warehouseId)) &&
+        (!query.warehouseId || item.warehouseId === query.warehouseId) &&
+        (!query.category || item.category === query.category) &&
+        (!query.status || item.status === query.status) &&
+        (!query.dateFrom || new Date(item.createdAt) >= new Date(`${query.dateFrom}T00:00:00`)) &&
+        (!query.dateTo || new Date(item.createdAt) <= new Date(`${query.dateTo}T23:59:59.999`))) : []
+      return { items, total: items.length, page: 1, pageSize: DONATION_PAGE_SIZE, totalPages: 1, hasMore: false, nextCursor: null, statusCounts: null }
+    }
+
+    const direction = query.sort === DONATION_SORT.newestFirst ? 'desc' : 'asc'
+    constraints.push(orderBy('createdAt', direction), orderBy(documentId(), direction))
+    if (query.cursor) constraints.push(startAfter(query.cursor))
+    constraints.push(limit(DONATION_PAGE_SIZE + 1))
+    const q = firestoreQuery(collection(db, 'donations'), ...constraints)
+    const snapshot = await getDocs(q)
+    const pageDocs = snapshot.docs.slice(0, DONATION_PAGE_SIZE)
+    return {
+      items: pageDocs.map(normalizeDoc), total: null, page: query.page || 1,
+      pageSize: DONATION_PAGE_SIZE, totalPages: null,
+      hasMore: snapshot.docs.length > DONATION_PAGE_SIZE,
+      nextCursor: pageDocs.at(-1) || null, statusCounts: null,
+    }
+  } catch (error) {
+    if (error?.status) throw error
+    throw createQueueError(error?.code === 'permission-denied' ? DONATION_QUEUE_ERROR.forbidden
+      : error?.code === 'failed-precondition' ? DONATION_QUEUE_ERROR.indexRequired : DONATION_QUEUE_ERROR.network)
+  }
 }
