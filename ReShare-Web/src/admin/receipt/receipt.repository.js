@@ -1,8 +1,7 @@
-import { auth, db } from '../auth/firebase'
-import { doc, getDoc, collection, getDocs } from 'firebase/firestore'
+import { auth } from '../auth/firebase'
 import { demoReceiptAdapter } from './receipt.demo'
 
-const apiBase = (import.meta.env.VITE_ADMIN_API_BASE_URL || 'https://reshare-ios-capstone1-1.onrender.com').replace(/\/$/, '')
+const apiBase = (import.meta.env?.VITE_ADMIN_API_BASE_URL || 'https://reshare-ios-capstone1-1.onrender.com').replace(/\/$/, '')
 
 async function request(path, body, method = 'POST') {
   const user = auth?.currentUser
@@ -17,6 +16,7 @@ async function request(path, body, method = 'POST') {
         ...(body === undefined || body === null ? {} : { 'Content-Type': 'application/json' }),
       },
       body: body === undefined || body === null ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(90000),
     })
   } catch {
     throw new Error('Không thể kết nối máy chủ quản trị. Vui lòng kiểm tra mạng và thử lại.')
@@ -34,53 +34,25 @@ async function request(path, body, method = 'POST') {
 
 export const liveReceiptAdapter = {
   async getDonation(donationId) {
-    try {
-      const res = await request(`donations/${donationId}`, null, 'GET')
-      if (res?.donation) return res.donation
-    } catch (err) {
-      if (db) {
-        try {
-          const snap = await getDoc(doc(db, 'donations', donationId))
-          if (snap.exists()) {
-            const data = snap.data()
-            return {
-              id: snap.id,
-              status: data.status,
-              itemName: data.title || data.itemName || 'Vật phẩm quyên góp',
-              donorName: data.donorName || data.donorDisplayName || 'Người gửi ẩn danh',
-              declaredQuantity: data.quantity || 1,
-              declaredUnitName: data.unitName || data.unit || 'chiếc',
-              expectedWarehouseId: data.warehouseId || data.hubId || '',
-              expectedWarehouseName: data.warehouseName || data.hubName || 'Kho tiếp nhận',
-              declaredConditionName: data.condition || 'Chưa phân loại',
-            }
-          }
-        } catch {}
-      }
-      throw err
+    const res = await request(`donations/${encodeURIComponent(donationId)}`, null, 'GET')
+    const data = res.donation
+    if (!data) throw new Error('Không tìm thấy đơn quyên góp.')
+    return {
+      id: data.id,
+      status: data.status,
+      itemName: data.title || data.itemName || 'Vật phẩm quyên góp',
+      donorName: data.donor?.name || data.donorName || data.donorId || 'Người gửi',
+      declaredQuantity: data.quantity ?? 1,
+      declaredUnitName: data.unitName || data.unit || 'chiếc',
+      expectedWarehouseId: data.warehouseId || '',
+      expectedWarehouseName: data.warehouseName || '',
+      declaredConditionName: data.condition || 'Chưa phân loại',
     }
   },
 
   async getOptions() {
-    let warehouses = []
-    try {
-      const res = await request('warehouses', null, 'GET')
-      if (res?.warehouses?.length) warehouses = res.warehouses
-    } catch {
-      if (db) {
-        try {
-          const snap = await getDocs(collection(db, 'warehouses'))
-          warehouses = snap.docs.map(d => ({ id: d.id, name: d.data().name || d.id }))
-        } catch {}
-      }
-    }
-
-    if (!warehouses.length) {
-      warehouses = [
-        { id: 'demo-warehouse-hai-chau', name: 'Kho Hải Châu' },
-        { id: 'demo-warehouse-son-tra', name: 'Kho Sơn Trà' },
-      ]
-    }
+    const res = await request('warehouses', null, 'GET')
+    const warehouses = res.warehouses || []
 
     return {
       warehouses,
@@ -100,7 +72,7 @@ export const liveReceiptAdapter = {
   },
 
   async createReceipt(payload) {
-    const res = await request(`donations/${payload.donationId}/receipt`, {
+    const res = await request(`donations/${encodeURIComponent(payload.donationId)}/receipt`, {
       warehouseId: payload.warehouseId,
       quantity: payload.quantity,
       unitId: payload.unitId,

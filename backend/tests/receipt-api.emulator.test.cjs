@@ -33,7 +33,8 @@ test('US12: receipt creation, idempotency, warehouse access, and state transitio
       id: 'don-emu-1',
       title: 'Bộ bàn ghế học sinh',
       donorId: 'donor-1',
-      hubId: 'kho-hai-chau',
+      hubId: 'minh-hoa-kho-son-tra',
+      warehouseId: 'kho-hai-chau',
       status: 'approved',
       quantity: 2,
       createdAt: FieldValue.serverTimestamp(),
@@ -43,7 +44,8 @@ test('US12: receipt creation, idempotency, warehouse access, and state transitio
       id: 'don-emu-pending',
       title: 'Tủ sách cũ',
       donorId: 'donor-2',
-      hubId: 'kho-hai-chau',
+      hubId: 'minh-hoa-kho-son-tra',
+      warehouseId: 'kho-hai-chau',
       status: 'pending',
       quantity: 1,
       createdAt: FieldValue.serverTimestamp(),
@@ -100,6 +102,7 @@ test('US12: receipt creation, idempotency, warehouse access, and state transitio
         quantity: 2,
         unitId: 'set',
         conditionId: 'good',
+        note: 'Hàng đúng mô tả, tiếp nhận đủ 2 bộ bàn ghế',
       }
     );
     assert.equal(replayResponse.status, 201);

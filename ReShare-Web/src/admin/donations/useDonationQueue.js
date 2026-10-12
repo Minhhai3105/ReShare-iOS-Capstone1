@@ -23,6 +23,7 @@ export function useDonationQueue(getAccess) {
   const lastUpdatedAt = ref(null)
   let latestRequestId = 0
   let reloadTimer = null
+  const cursors = new Map([[1, null]])
 
   // Chỉ nhận kết quả của lần gọi mới nhất để bỏ phản hồi đến muộn khi đổi bộ lọc liên tục.
   async function load() {
@@ -30,10 +31,11 @@ export function useDonationQueue(getAccess) {
     isLoading.value = true
     errorStatus.value = null
     try {
-      const data = await fetchDonationQueue(getAccess(), { ...filters, page: page.value })
+      const data = await fetchDonationQueue(getAccess(), { ...filters, page: page.value, cursor: cursors.get(page.value) })
       if (requestId !== latestRequestId) return
       result.value = data
       page.value = data.page
+      if (data.hasMore && data.nextCursor) cursors.set(data.page + 1, data.nextCursor)
       lastUpdatedAt.value = new Date()
     } catch (error) {
       if (requestId !== latestRequestId) return
@@ -52,11 +54,15 @@ export function useDonationQueue(getAccess) {
   }
 
   function refresh() {
+    cursors.clear()
+    cursors.set(1, null)
+    page.value = 1
     loadWarehouses()
     load()
   }
 
   function goToPage(nextPage) {
+    if (nextPage < 1 || (nextPage > 1 && !cursors.has(nextPage))) return
     page.value = nextPage
     load()
   }
@@ -72,6 +78,8 @@ export function useDonationQueue(getAccess) {
       clearTimeout(reloadTimer)
       reloadTimer = setTimeout(
         () => {
+          cursors.clear()
+          cursors.set(1, null)
           page.value = 1
           load()
         },

@@ -1,6 +1,6 @@
 const { ApiError } = require('./image-api.cjs');
 
-function createReceiptApi({ db, auth, verifyToken, serverTimestamp }) {
+function createReceiptApi({ db, verifyToken, serverTimestamp }) {
   if (!db || !verifyToken) throw new Error('Receipt API configuration is incomplete');
   const now = serverTimestamp || (() => new Date());
 
@@ -40,20 +40,19 @@ function createReceiptApi({ db, auth, verifyToken, serverTimestamp }) {
 
   async function handle(method, path, headers, body) {
     const receiptMatch = /^\/v1\/admin\/donations\/([^/]+)\/receipt$/.exec(path);
-    const isPostReceipt = (method === 'POST' && (receiptMatch || path === '/v1/admin/receipts'));
+    const isPostReceipt = (method === 'POST' && receiptMatch);
     const isGetReceipt = (method === 'GET' && receiptMatch);
-    const isGetDonation = (method === 'GET' && /^\/v1\/admin\/donations\/([^/]+)$/.exec(path));
 
     if (isPostReceipt) {
-      const donationId = receiptMatch ? receiptMatch[1] : body?.donationId;
+      const donationId = receiptMatch[1];
       if (!donationId || typeof donationId !== 'string') {
         throw new ApiError(400, 'donationId is required');
       }
 
       const staff = await getStaffAssignment(headers);
 
-      const warehouseId = body?.warehouseId?.trim();
-      if (!warehouseId || typeof warehouseId !== 'string') {
+      const warehouseId = typeof body?.warehouseId === 'string' ? body.warehouseId.trim() : '';
+      if (!warehouseId) {
         throw new ApiError(400, 'warehouseId is required');
       }
 
@@ -64,13 +63,13 @@ function createReceiptApi({ db, auth, verifyToken, serverTimestamp }) {
         throw new ApiError(400, 'Số lượng thực nhận phải lớn hơn 0');
       }
 
-      const unitId = body?.unitId?.trim();
-      if (!unitId || typeof unitId !== 'string') {
+      const unitId = typeof body?.unitId === 'string' ? body.unitId.trim() : '';
+      if (!['piece', 'kg', 'bag', 'box', 'set'].includes(unitId)) {
         throw new ApiError(400, 'unitId is required');
       }
 
-      const conditionId = body?.conditionId?.trim();
-      if (!conditionId || typeof conditionId !== 'string') {
+      const conditionId = typeof body?.conditionId === 'string' ? body.conditionId.trim() : '';
+      if (!['good', 'minor-wear', 'damaged'].includes(conditionId)) {
         throw new ApiError(400, 'conditionId is required');
       }
 
@@ -88,11 +87,20 @@ function createReceiptApi({ db, auth, verifyToken, serverTimestamp }) {
         }
 
         const donationData = donationDoc.data();
+        if (!donationData.warehouseId || donationData.warehouseId !== warehouseId) {
+          throw new ApiError(409, 'Đơn quyên góp chưa được phân đúng kho thực nhận');
+        }
+        assertWarehouseAccess(staff, donationData.warehouseId);
 
         // Idempotency check: if receipt document already exists
         const existingReceipt = await transaction.get(receiptRef);
         if (existingReceipt.exists) {
           const existingData = existingReceipt.data();
+          if (existingData.warehouseId !== warehouseId || existingData.quantity !== quantity ||
+              existingData.unitId !== unitId || existingData.conditionId !== conditionId ||
+              existingData.note !== note) {
+            throw new ApiError(409, 'Phiếu thực nhận đã tồn tại với nội dung khác');
+          }
           return {
             ...existingData,
             createdAt: existingData.createdAt?.toDate?.().toISOString() || existingData.createdAt,
@@ -171,32 +179,6 @@ function createReceiptApi({ db, auth, verifyToken, serverTimestamp }) {
           receipt: {
             ...data,
             createdAt: data.createdAt?.toDate?.().toISOString() || data.createdAt,
-          },
-        },
-      };
-    }
-
-    if (isGetDonation) {
-      const donationId = isGetDonation[1];
-      const staff = await getStaffAssignment(headers);
-      const donationDoc = await db.collection('donations').doc(donationId).get();
-      if (!donationDoc.exists) throw new ApiError(404, 'Không tìm thấy đơn quyên góp');
-      const data = donationDoc.data();
-      const warehouseId = data.warehouseId || data.hubId;
-      if (warehouseId) assertWarehouseAccess(staff, warehouseId);
-      return {
-        status: 200,
-        body: {
-          donation: {
-            id: donationDoc.id,
-            status: data.status,
-            itemName: data.title || data.itemName || 'Vật phẩm quyên góp',
-            donorName: data.donorName || data.donorDisplayName || 'Người gửi',
-            declaredQuantity: data.quantity || 1,
-            declaredUnitName: data.unitName || data.unit || 'chiếc',
-            expectedWarehouseId: warehouseId || '',
-            expectedWarehouseName: data.warehouseName || data.hubName || '',
-            declaredConditionName: data.condition || 'Chưa phân loại',
           },
         },
       };

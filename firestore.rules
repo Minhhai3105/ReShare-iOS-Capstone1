@@ -371,17 +371,14 @@ service cloud.firestore {
           && data.condition in ['new', 'like_new', 'good', 'fair']
           && data.createdAt is timestamp
           && data.imageProvider == 'cloudinary'
+          && !data.keys().hasAny(['warehouseId', 'warehouseName'])
           && validCloudinaryImages('donation', donationId);
       }
 
-      function canStaffReadDonation(docData) {
-        let path = /databases/$(database)/documents/staff_assignments/$(request.auth.uid);
-        let staffWarehouseIds = get(path).data.get('warehouseIds', []);
-        let targetWarehouseId = docData.get('warehouseId', docData.get('hubId', ''));
+      function canStaffReadDonation() {
+        let assignedWarehouse = resource.data.get('warehouseId', null);
         return isSystemAdmin() || (
-          activeStaffWithRole('warehouse_admin')
-          && staffWarehouseIds is list
-          && targetWarehouseId in staffWarehouseIds
+          assignedWarehouse != null && canReadWarehouse(assignedWarehouse)
         );
       }
 
@@ -389,22 +386,28 @@ service cloud.firestore {
       allow get: if request.auth != null && (
         resource == null ||
         resource.data.donorId == request.auth.uid ||
-        canStaffReadDonation(resource.data)
+        canStaffReadDonation()
       );
       allow list: if request.auth != null && (
         resource.data.donorId == request.auth.uid ||
-        canStaffReadDonation(resource.data)
+        canStaffReadDonation()
       );
       allow create: if request.auth != null
         && request.resource.data.id == donationId
         && request.resource.data.donorId == request.auth.uid
         && request.resource.data.status == 'pending'
+        && !request.resource.data.keys().hasAny(['internalNote', 'reviewedBy', 'history'])
         && validNewDonation();
-      allow update: if request.auth != null && isSystemAdmin();
+      // Review decisions go through the trusted API so private fields stay separate.
+      allow update: if false;
       allow delete: if false;
     }
 
-    // Phiếu thực nhận (US12): lưu khi nhân sự tiếp nhận hàng tại kho
+    match /donation_reviews/{donationId} {
+      allow read, write: if false;
+    }
+
+    // Phiếu thực nhận chỉ đọc được theo phân công kho; mọi thao tác ghi qua API tin cậy.
     match /receipts/{receiptId} {
       allow read: if request.auth != null && (
         isSystemAdmin() ||

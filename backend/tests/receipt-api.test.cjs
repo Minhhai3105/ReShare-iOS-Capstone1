@@ -13,7 +13,8 @@ function setup() {
       title: 'Quần áo mùa đông',
       donorId: 'donor-1',
       status: 'approved',
-      hubId: 'kho-a',
+      hubId: 'minh-hoa-kho-b',
+      warehouseId: 'kho-a',
       quantity: 5,
       createdAt: new Date(),
     }],
@@ -22,7 +23,8 @@ function setup() {
       title: 'Sách giáo khoa',
       donorId: 'donor-2',
       status: 'pending',
-      hubId: 'kho-a',
+      hubId: 'minh-hoa-kho-b',
+      warehouseId: 'kho-a',
       quantity: 10,
       createdAt: new Date(),
     }],
@@ -207,4 +209,25 @@ test('US12: idempotent retry returns existing receipt without duplicating', asyn
   assert.equal(second.status, 201);
   assert.equal(second.body.receipt.id, 'rcp_don-approved');
   assert.equal(second.body.receipt.idempotentReplay, true);
+});
+
+test('US12: warehouseId from request cannot reassign a donation', async () => {
+  const { api, documents } = setup();
+  await assert.rejects(api.handle('POST', '/v1/admin/donations/don-approved/receipt',
+    { authorization: 'Bearer worker-b-token' },
+    { warehouseId: 'kho-b', quantity: 5, unitId: 'piece', conditionId: 'good' }), { status: 409 });
+  assert.equal(documents.has('receipts/rcp_don-approved'), false);
+  delete documents.get('donations/don-approved').warehouseId;
+  await assert.rejects(api.handle('POST', '/v1/admin/donations/don-approved/receipt',
+    { authorization: 'Bearer admin-token' },
+    { warehouseId: 'kho-a', quantity: 5, unitId: 'piece', conditionId: 'good' }), { status: 409 });
+});
+
+test('US12: retry with changed receipt content is rejected', async () => {
+  const { api } = setup();
+  const headers = { authorization: 'Bearer worker-a-token' };
+  await api.handle('POST', '/v1/admin/donations/don-approved/receipt', headers,
+    { warehouseId: 'kho-a', quantity: 5, unitId: 'piece', conditionId: 'good' });
+  await assert.rejects(api.handle('POST', '/v1/admin/donations/don-approved/receipt', headers,
+    { warehouseId: 'kho-a', quantity: 50, unitId: 'piece', conditionId: 'good' }), { status: 409 });
 });
