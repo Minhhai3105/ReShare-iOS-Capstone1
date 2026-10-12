@@ -31,6 +31,8 @@ test('Cloudinary record requires three distinct image IDs from a server-owned ba
     await assertFails(donor.doc(`donations/${recordId}`).set({ ...donation, imagePublicIds: ids.slice(0, 2) }));
     await assertFails(donor.doc(`donations/${recordId}`).set({ ...donation, imagePublicIds: [ids[0], ids[0], ids[1]] }));
     await assertFails(donor.doc(`donations/${recordId}`).set({ ...donation, category: 'other' }));
+    await assertFails(donor.doc(`donations/${recordId}`).set({ ...donation, warehouseId: 'kho-a' }));
+    await assertFails(donor.doc(`donations/${recordId}`).set({ ...donation, warehouseName: 'Kho A' }));
     await assertSucceeds(donor.doc(`donations/${recordId}`).set(donation));
     await assertFails(donor.doc(`donations/${recordId}`).set(donation));
 
