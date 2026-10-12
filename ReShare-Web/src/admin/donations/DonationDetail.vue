@@ -201,6 +201,7 @@ watch(enlarged, async (value) => {
             <li v-for="(state, index) in steps" :key="state" :class="{ completed: donation.status !== 'rejected' && index <= steps.indexOf(donation.status) }" :aria-current="donation.status === state ? 'step' : undefined"><span>{{ index + 1 }}</span>{{ statusLabels[state] }}</li>
           </ol>
           <p v-if="donation.status === 'rejected'" class="rejected">Đơn đã bị từ chối; không tiếp tục luồng tiếp nhận.</p>
+          <RouterLink v-if="!localPreview && donation.status === 'approved' && donation.warehouseId" :to="{ name: 'admin-donation-receipt', params: { donationId: donation.id } }">Ghi nhận hàng thực nhận →</RouterLink>
           <p v-if="donation.statusNote"><strong>Nội dung công khai cho donor:</strong> {{ donation.statusNote }}</p>
         </section>
         <div class="detail-grid">

@@ -407,6 +407,15 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Phiếu thực nhận chỉ đọc được theo phân công kho; mọi thao tác ghi qua API tin cậy.
+    match /receipts/{receiptId} {
+      allow read: if request.auth != null && (
+        isSystemAdmin() ||
+        (activeStaffWithRole('warehouse_admin') && canReadWarehouse(resource.data.warehouseId))
+      );
+      allow write: if false;
+    }
+
     // Contact records are accepted and accessed only by the trusted backend using Admin SDK.
     match /contacts/{contactId} {
       allow read, write: if false;
