@@ -114,7 +114,7 @@ function createImageApi({ db, verifyToken, cloudinary, cloudName, apiKey, apiSec
     if (!assignment.exists || assignment.data().active !== true) return false;
     const staff = assignment.data();
     if (staff.role === 'system_admin') return true;
-    const warehouseId = donation.hubId || donation.warehouseId;
+    const warehouseId = donation.warehouseId;
     return staff.role === 'warehouse_admin' && !!warehouseId &&
       Array.isArray(staff.warehouseIds) && staff.warehouseIds.includes(warehouseId);
   }

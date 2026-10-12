@@ -63,7 +63,8 @@ function setup() {
   documents.set('donations/don-1', {
     id: 'don-1',
     donorId: 'donor-1',
-    hubId: 'kho-a',
+    hubId: 'kho-b',
+    warehouseId: 'kho-a',
     title: 'Áo khoác ấm',
     status: 'pending',
     version: 1,
@@ -72,7 +73,8 @@ function setup() {
   documents.set('donations/don-2', {
     id: 'don-2',
     donorId: 'donor-1',
-    hubId: 'kho-b',
+    hubId: 'kho-a',
+    warehouseId: 'kho-b',
     title: 'Sách vở',
     status: 'pending',
     version: 1,
@@ -216,4 +218,28 @@ test('US10: Concurrent conflicting decision on already decided donation returns 
     ),
     (err) => err.status === 409
   );
+});
+
+test('US10: illustrative hub cannot authorize an unassigned donation', async () => {
+  const { api, documents } = setup();
+  const donation = documents.get('donations/don-1');
+  delete donation.warehouseId;
+  await assert.rejects(
+    api.handle('GET', '/v1/admin/donations/don-1', { authorization: 'Bearer wh-b-token' }),
+    { status: 403 },
+  );
+  await assert.rejects(
+    api.handle('POST', '/v1/admin/donations/don-1/decide', { authorization: 'Bearer wh-b-token' }, { action: 'approve' }),
+    { status: 403 },
+  );
+  assert.equal((await api.handle('GET', '/v1/admin/donations/don-1', { authorization: 'Bearer admin-token' })).status, 200);
+});
+
+test('US10: awaiting donor information blocks further decisions until a separate update', async () => {
+  const { api } = setup();
+  const headers = { authorization: 'Bearer wh-a-token' };
+  await api.handle('POST', '/v1/admin/donations/don-1/decide', headers,
+    { action: 'information', publicMessage: 'Vui lòng bổ sung ảnh.' });
+  await assert.rejects(api.handle('POST', '/v1/admin/donations/don-1/decide', headers,
+    { action: 'approve', expectedVersion: 2 }), { status: 409 });
 });

@@ -33,7 +33,8 @@ test('US10: Concurrent appraisal decisions in Firestore Emulator produce exactly
     await db.doc(`donations/${donationId}`).set({
       id: donationId,
       donorId: 'donor-1',
-      hubId: 'kho-emulator-1',
+      hubId: 'illustration-only',
+      warehouseId: 'kho-emulator-1',
       title: 'Đơn quyên góp thử nghiệm',
       status: 'pending',
       version: 1,

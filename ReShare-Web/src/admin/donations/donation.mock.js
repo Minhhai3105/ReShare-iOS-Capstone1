@@ -1,4 +1,4 @@
-import { DONATION_CATEGORY, DONATION_STATUS } from './donation.constants'
+import { DONATION_CATEGORY, DONATION_STATUS } from './donation.constants.js'
 
 // Giống warehouses/{id} (BE US02-T02). Dữ liệu demo, chưa phải kho vận hành thật.
 export const MOCK_WAREHOUSES = Object.freeze([
@@ -108,7 +108,7 @@ export function getMockAccessOverride() {
 // Dùng trong Console khi dev, sau đó bấm "Làm mới":
 // reshareMock.setDonationScenario('error' | 'network' | 'forbidden' | 'empty' | 'slow' | 'normal')
 // reshareMock.setDonationAccess({ role: 'warehouse_admin', warehouseIds: ['wh_dn_01'] }) — null để dùng quyền thật
-if (import.meta.env.DEV) {
+if (import.meta.env?.DEV) {
   globalThis.reshareMock = {
     ...globalThis.reshareMock,
     setDonationScenario: (scenario) => {

@@ -50,7 +50,7 @@ function createDonationReviewApi({ db, verifyToken, serverTimestamp }) {
     }
 
     if ((action === 'reject' || action === 'information') && (!publicMessage || !publicMessage.trim())) {
-      throw new ApiError(400, action === 'reject' 
+      throw new ApiError(400, action === 'reject'
         ? 'Public rejection reason is required for the donor.'
         : 'Information request message is required for the donor.');
     }
@@ -77,7 +77,7 @@ function createDonationReviewApi({ db, verifyToken, serverTimestamp }) {
         : (Array.isArray(data.history) ? data.history : []);
 
       // Warehouse authorization check
-      const assignedWarehouse = data.hubId || data.warehouseId;
+      const assignedWarehouse = data.warehouseId;
       if (staff.role === 'warehouse_admin') {
         if (!assignedWarehouse || !staff.warehouseIds.includes(assignedWarehouse)) {
           throw new ApiError(403, 'You are not authorized to appraise donations for this warehouse.');
@@ -88,10 +88,10 @@ function createDonationReviewApi({ db, verifyToken, serverTimestamp }) {
       if (data.status !== 'pending') {
         throw new ApiError(409, `Donation is already in ${data.status} state.`);
       }
-      if (data.reviewState === 'needs_information' && action === 'information') {
-        throw new ApiError(409, 'Donation is already awaiting information from donor.');
+      if (data.reviewState === 'needs_information') {
+        throw new ApiError(409, 'Donation is awaiting information from donor.');
       }
-      if (expectedVersion !== undefined && data.version !== expectedVersion) {
+      if (expectedVersion !== undefined && (data.version || 1) !== expectedVersion) {
         throw new ApiError(409, 'Donation was updated by another staff member. Please reload before deciding.');
       }
 
@@ -138,21 +138,14 @@ function createDonationReviewApi({ db, verifyToken, serverTimestamp }) {
       // Inventory check: AC5 specifies that approval MUST NOT increase inventory.
       // We explicitly ensure no writes are made to inventory collections.
 
-      return {
-        id: donationId,
-        ...data,
-        ...updateData,
-        internalNote: cleanInternalNote || null,
-        reviewedBy: staff.uid,
-        history: [...previousReviews, historyEntry],
-      };
+      return { id: donationId, version: nextVersion };
     });
 
     return {
       status: 200,
       body: {
         status: 'success',
-        donation: result,
+        donation: (await get(result.id, headers)).body.donation,
       },
     };
   }
@@ -162,7 +155,7 @@ function createDonationReviewApi({ db, verifyToken, serverTimestamp }) {
     const doc = await db.collection('donations').doc(donationId).get();
     if (!doc.exists) throw new ApiError(404, 'Donation not found');
     const data = doc.data();
-    const assignedWarehouse = data.hubId || data.warehouseId;
+    const assignedWarehouse = data.warehouseId;
     if (staff.role === 'warehouse_admin' && (!assignedWarehouse || !staff.warehouseIds.includes(assignedWarehouse))) {
       throw new ApiError(403, 'Forbidden: not your assigned warehouse');
     }
