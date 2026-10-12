@@ -2,10 +2,12 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import AuthShell from '../auth/components/AuthShell.vue'
 import { decideDemoDonation, loadDemoDonation, statusLabels, steps } from './donation.demo'
+import { decideDonation, getDonationForReview, getDonationImageUrl } from './donation.service'
+import { staffAssignment } from '../auth/auth.store'
 
 // Auth belongs to the routed adapter; the shared view has no Firebase dependency.
 const props = defineProps({
-  warehouseId: { type: String, required: true },
+  warehouseId: { type: String, default: '' },
   donationId: { type: String, required: true },
   actorId: { type: String, required: true },
   authorizeWarehouse: { type: Function, required: true },
@@ -21,15 +23,21 @@ const scenario = ref('normal')
 const selectedImage = ref(0)
 const enlarged = ref(false)
 const imageDialog = ref(null)
+const imageLoading = ref(false)
+const imageError = ref(false)
 const action = ref('approve')
 const publicMessage = ref('')
 const internalNote = ref('')
 let generation = 0
-const allowed = computed(() => donation.value && props.authorizeWarehouse(donation.value.hubId)
-  && donation.value.hubId === props.warehouseId)
+const allowed = computed(() => {
+  if (!donation.value) return false
+  if (props.localPreview) return props.authorizeWarehouse(donation.value.hubId) && donation.value.hubId === props.warehouseId
+  const warehouseId = donation.value.warehouseId
+  return warehouseId ? props.authorizeWarehouse(warehouseId) : staffAssignment.value?.role === 'system_admin'
+})
 const canDecide = computed(() => allowed.value && donation.value.status === 'pending'
   && donation.value.reviewState !== 'needs_information' && !conflict.value)
-const activeImage = computed(() => donation.value?.images[selectedImage.value])
+const activeImage = computed(() => donation.value?.images?.[selectedImage.value])
 const actionLabels = { approve: 'Duyệt donation', reject: 'Từ chối donation', information: 'Yêu cầu bổ sung' }
 const messages = {
   NETWORK: 'Không thể kết nối. Dữ liệu và quyết định chưa được lưu; hãy thử lại.',
@@ -39,7 +47,39 @@ const messages = {
   VALIDATION: 'Kiểm tra nội dung công khai và độ dài ghi chú.',
 }
 function formatDate(value) {
-  return new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date(value))
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? 'Chưa có' : new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Ho_Chi_Minh' }).format(date)
+}
+function normalizeReviewDonation(record) {
+  return {
+    ...record,
+    warehouseId: record.warehouseId || '',
+    donor: record.donor || { name: record.donorName || record.donorId || 'Người gửi', email: null },
+    version: record.version || 1,
+    quantity: record.quantity ?? 'Chưa có dữ liệu',
+    deliveryMethod: record.deliveryMethod || 'Chưa có dữ liệu',
+    images: (record.imagePublicIds?.length ? [] : (record.images || (record.imageUrl ? [record.imageUrl] : [])))
+      .filter((url) => typeof url === 'string' && /^(https:\/\/|data:image\/)/.test(url))
+      .map((url, index) => ({ url, alt: `Ảnh vật phẩm ${index + 1}` })),
+    history: (record.history || []).map((event) => ({
+      ...event,
+      at: event.at || event.timestamp,
+      label: event.label || ({ approve: 'Đã duyệt', reject: 'Đã từ chối', information: 'Yêu cầu bổ sung' }[event.action] || 'Cập nhật trạng thái'),
+      actor: event.actor || event.actorUid || '',
+      from: event.from || event.fromStatus || '',
+      to: event.to || event.toStatus || '',
+    })),
+  }
+}
+async function loadImages(record, ticket) {
+  if (!record.imagePublicIds?.length) return
+  imageLoading.value = true
+  const results = await Promise.allSettled(record.imagePublicIds.map((publicId) => getDonationImageUrl(record.id, publicId)))
+  if (ticket !== generation) return
+  donation.value.images = results.flatMap((result, index) => result.status === 'fulfilled'
+    ? [{ url: result.value, alt: `Ảnh vật phẩm ${index + 1}` }] : [])
+  imageError.value = results.some((result) => result.status === 'rejected')
+  imageLoading.value = false
 }
 async function load(resetForm = false) {
   const ticket = ++generation
@@ -50,15 +90,20 @@ async function load(resetForm = false) {
   conflict.value = false
   enlarged.value = false
   selectedImage.value = 0
+  imageLoading.value = false
+  imageError.value = false
   if (resetForm) {
     action.value = 'approve'
     publicMessage.value = ''
     internalNote.value = ''
   }
   try {
-    const result = await loadDemoDonation(props.warehouseId, props.donationId, scenario.value)
+    const result = props.localPreview
+      ? await loadDemoDonation(props.warehouseId, props.donationId, scenario.value)
+      : await getDonationForReview(props.donationId)
     if (ticket !== generation) return
-    donation.value = result
+    donation.value = props.localPreview ? result : normalizeReviewDonation(result)
+    if (!props.localPreview) loadImages(result, ticket)
   } catch (cause) {
     if (ticket === generation) error.value = messages[cause.code] || 'Không tải được donation.'
   } finally {
@@ -76,16 +121,29 @@ async function submit() {
   const ticket = generation
   submitting.value = true
   try {
-    const result = await decideDemoDonation({
-      donation: donation.value, action: action.value, publicMessage: publicMessage.value,
-      internalNote: internalNote.value, actor: props.actorId, scenario: scenario.value,
-      authorize: (hubId) => hubId === props.warehouseId && props.authorizeWarehouse(hubId),
-    })
+    let result
+    if (props.localPreview) {
+      result = await decideDemoDonation({
+        donation: donation.value, action: action.value, publicMessage: publicMessage.value,
+        internalNote: internalNote.value, actor: props.actorId, scenario: scenario.value,
+        authorize: (hubId) => hubId === props.warehouseId && props.authorizeWarehouse(hubId),
+      })
+      success.value = 'Đã lưu quyết định trong bộ nhớ demo. Không gửi thông báo thật; không cập nhật inventory.'
+    } else {
+      result = await decideDonation({
+        donationId: donation.value.id,
+        action: action.value,
+        publicMessage: publicMessage.value,
+        internalNote: internalNote.value,
+        expectedVersion: donation.value.version,
+      })
+      success.value = `Đã thẩm định thành công đơn quyên góp: ${actionLabels[action.value]}. Không làm thay đổi inventory.`
+    }
     if (ticket !== generation) return
-    donation.value = result
+    donation.value = props.localPreview ? result : normalizeReviewDonation(result)
+    if (!props.localPreview) loadImages(result, ticket)
     publicMessage.value = ''
     internalNote.value = ''
-    success.value = 'Đã lưu quyết định trong bộ nhớ demo. Không gửi thông báo thật; không cập nhật inventory.'
   } catch (cause) {
     if (ticket !== generation) return
     error.value = messages[cause.code] || 'Không lưu được quyết định. Hãy thử lại.'
@@ -110,10 +168,10 @@ watch(enlarged, async (value) => {
   <AuthShell :show-server-status="false">
     <div class="donation-page">
       <p v-if="localPreview" class="eyebrow">PREVIEW LOCAL ĐỘC LẬP · KHÔNG CẦN ĐĂNG NHẬP</p>
-      <RouterLink v-else :to="{ name: 'admin-home' }">← Về quản trị</RouterLink>
-      <header class="page-heading"><div><p class="eyebrow">THẨM ĐỊNH DONATION</p><h1>Chi tiết donation</h1></div><span class="demo-tag">DEMO / MOCK · RC1D-67</span></header>
-      <p class="demo-notice">Dữ liệu và ảnh minh họa mock; quyết định chỉ lưu trong bộ nhớ và mất khi tải lại trang. Backend quyết định donation chưa có. {{ localPreview ? 'Preview local dùng nhân sự và kho mock; không đọc/ghi Firebase hoặc gọi API thật.' : 'Quyền đăng nhập/kho vẫn dùng auth hiện tại.' }}</p>
-      <div class="demo-controls">
+      <RouterLink v-else :to="{ name: 'admin-donation-queue' }">← Về hàng đợi</RouterLink>
+      <header class="page-heading"><div><p class="eyebrow">THẨM ĐỊNH QUYÊN GÓP</p><h1>Chi tiết đơn quyên góp</h1></div><span v-if="localPreview" class="demo-tag">DEMO / MOCK · RC1D-67</span></header>
+      <p v-if="localPreview" class="demo-notice">Dữ liệu và ảnh minh họa mock; quyết định chỉ lưu trong bộ nhớ và mất khi tải lại trang. Preview local không đọc/ghi Firebase hoặc gọi API thật.</p>
+      <div v-if="localPreview" class="demo-controls">
         <label for="scenario">Tình huống demo</label>
         <select id="scenario" v-model="scenario" :disabled="loading || submitting" @change="load(true)">
           <option value="normal">Pending — xử lý bình thường</option>
@@ -130,6 +188,7 @@ watch(enlarged, async (value) => {
         </select>
         <button :disabled="loading || submitting" @click="load()">Tải lại dữ liệu</button>
       </div>
+      <button v-else :disabled="loading || submitting" @click="load()">Tải lại dữ liệu</button>
       <p v-if="loading" role="status" class="notice">Đang tải donation…</p>
       <div v-if="error" role="alert" class="notice error">{{ error }} <button v-if="conflict" :disabled="submitting" @click="refreshAfterConflict">Tải trạng thái mới</button></div>
       <p v-if="success" role="status" class="notice success">{{ success }}</p>
@@ -137,7 +196,7 @@ watch(enlarged, async (value) => {
       <template v-if="donation && allowed">
         <section class="card status-card" aria-labelledby="status-title">
           <div class="section-heading"><h2 id="status-title">{{ statusLabels[donation.status] }}</h2><span>Phiên bản {{ donation.version }}</span></div>
-          <p v-if="donation.reviewState === 'needs_information'" class="notice">Chờ donor bổ sung thông tin. Donation vẫn pending; khóa quyết định trong demo cho đến khi có dữ liệu bổ sung từ backend.</p>
+          <p v-if="donation.reviewState === 'needs_information'" class="notice">Chờ người gửi bổ sung thông tin; chưa thể đưa ra quyết định tiếp theo.</p>
           <ol class="stepper" aria-label="Tiến trình donation">
             <li v-for="(state, index) in steps" :key="state" :class="{ completed: donation.status !== 'rejected' && index <= steps.indexOf(donation.status) }" :aria-current="donation.status === state ? 'step' : undefined"><span>{{ index + 1 }}</span>{{ statusLabels[state] }}</li>
           </ol>
@@ -147,13 +206,15 @@ watch(enlarged, async (value) => {
         <div class="detail-grid">
           <div class="details">
             <section class="card" aria-labelledby="item-title">
-              <p class="eyebrow">{{ donation.id }} · Kho {{ donation.hubId }}</p><h2 id="item-title">{{ donation.title }}</h2>
+              <p class="eyebrow">{{ donation.id }} · Kho {{ donation.warehouseId || (localPreview ? donation.hubId : 'chưa phân công') }}</p><h2 id="item-title">{{ donation.title }}</h2>
               <figure v-if="activeImage" class="gallery">
                 <button class="main-image" aria-label="Phóng to ảnh đang chọn" @click="enlarged = true"><img :src="activeImage.url" :alt="activeImage.alt" /></button>
                 <figcaption>Ảnh {{ selectedImage + 1 }}/{{ donation.images.length }} · Nhấn ảnh để phóng to</figcaption>
                 <div class="thumbnails"><button v-for="(photo, index) in donation.images" :key="photo.url" :aria-label="`Xem ảnh ${index + 1}`" :aria-pressed="selectedImage === index" @click="selectedImage = index"><img :src="photo.url" :alt="photo.alt" /></button></div>
               </figure>
-              <p v-else class="notice">Donor chưa cung cấp ảnh.</p>
+              <p v-if="imageLoading" role="status" class="notice">Đang tải ảnh…</p>
+              <p v-if="imageError" role="alert" class="notice error">Một số ảnh chưa tải được. Bạn có thể tải lại trang.</p>
+              <p v-else-if="!activeImage && !imageLoading" class="notice">Người gửi chưa cung cấp ảnh.</p>
               <dl class="facts"><div><dt>Danh mục</dt><dd>{{ donation.category }}</dd></div><div><dt>Tình trạng khai báo</dt><dd>{{ donation.condition }}</dd></div><div><dt>Số lượng khai báo</dt><dd>{{ donation.quantity }}</dd></div><div><dt>Hình thức giao</dt><dd>{{ donation.deliveryMethod }}</dd></div></dl>
               <p class="description">{{ donation.description }}</p>
             </section>
@@ -186,12 +247,12 @@ watch(enlarged, async (value) => {
                 <label v-for="(label, value) in actionLabels" :key="value" class="radio"><input v-model="action" type="radio" :value="value" name="decision" />{{ label }}</label>
                 <label for="public-message">{{ action === 'reject' ? 'Lý do từ chối công khai *' : action === 'information' ? 'Nội dung yêu cầu bổ sung *' : 'Lời nhắn công khai (tùy chọn)' }}</label>
                 <textarea id="public-message" v-model="publicMessage" :required="action !== 'approve'" maxlength="1000" rows="4" aria-describedby="public-help" />
-                <small id="public-help">Donor sẽ thấy nội dung này khi backend được kết nối. {{ publicMessage.length }}/1000</small>
+                <small id="public-help">Người gửi sẽ thấy nội dung này. {{ publicMessage.length }}/1000</small>
                 <label for="internal-note">Internal note (tùy chọn)</label>
                 <textarea id="internal-note" v-model="internalNote" maxlength="2000" rows="3" aria-describedby="internal-help" />
                 <small id="internal-help">Ghi chú riêng cho nhân sự; lưu tách khỏi lý do công khai. {{ internalNote.length }}/2000</small>
                 <p class="notice">Duyệt chỉ chuyển sang “Đã duyệt”, không tăng tồn kho. Inventory cần nghiệp vụ tiếp nhận riêng.</p>
-                <button type="submit" class="submit" :class="{ danger: action === 'reject' }">{{ submitting ? 'Đang lưu…' : `${actionLabels[action]} (demo)` }}</button>
+                <button type="submit" class="submit" :class="{ danger: action === 'reject' }">{{ submitting ? 'Đang lưu…' : `${actionLabels[action]}${localPreview ? ' (demo)' : ''}` }}</button>
               </fieldset>
             </form>
             <div v-if="donation.internalNote" class="internal"><strong>Ghi chú nội bộ đã lưu</strong><p>{{ donation.internalNote }}</p></div>

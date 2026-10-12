@@ -8,9 +8,10 @@ const route = useRoute()
 
 <template>
   <DonationDetail
-    :warehouse-id="route.params.warehouseId"
+    :warehouse-id="route.params.warehouseId || ''"
     :donation-id="route.params.donationId"
     :actor-id="currentUser?.id || ''"
     :authorize-warehouse="canAccessWarehouse"
+    :local-preview="route.name === 'admin-donation-detail-preview'"
   />
 </template>

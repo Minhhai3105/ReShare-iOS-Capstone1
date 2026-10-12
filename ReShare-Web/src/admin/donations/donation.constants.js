@@ -39,6 +39,7 @@ export const DONATION_QUEUE_ERROR = Object.freeze({
   forbidden: 403,
   server: 500,
   network: 'NETWORK_ERROR',
+  indexRequired: 'INDEX_REQUIRED',
   notConfigured: 'NOT_CONFIGURED',
 })
 
