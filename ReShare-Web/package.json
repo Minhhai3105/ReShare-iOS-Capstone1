@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "test:landing": "npm run build && node --test verify-landing.mjs",
     "test:queue": "node --test tests/donation.service.test.mjs"
   },
   "dependencies": {
