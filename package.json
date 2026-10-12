@@ -2,8 +2,10 @@
   "name": "reshare-firebase-tests",
   "private": true,
   "scripts": {
-    "test:rules": "node --test tests/*.rules.test.cjs",
-    "test:rules:emulator": "firebase emulators:exec --only firestore --project demo-reshare 'npm run test:rules'"
+    "test:rules": "node --test --test-concurrency=1 tests/*.rules.test.cjs",
+    "test:rules:emulator": "firebase emulators:exec --only firestore --project demo-reshare 'npm run test:rules'",
+    "test:backend:emulator": "firebase emulators:exec --only firestore --project demo-reshare 'npm --prefix backend test'",
+    "test:all:emulator": "firebase emulators:exec --only firestore --project demo-reshare 'npm run test:rules && npm --prefix backend test'"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "5.0.1"

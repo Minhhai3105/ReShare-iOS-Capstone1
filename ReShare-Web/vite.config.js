@@ -4,8 +4,15 @@ import vue from '@vitejs/plugin-vue'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
+  const siteUrl = env.PUBLIC_SITE_URL?.trim()
+  const socialImageUrl = siteUrl ? new URL('/og-image.jpg', siteUrl).href : '/og-image.jpg'
   return {
-    plugins: [vue()],
+    plugins: [vue(), {
+      name: 'reshare-social-preview',
+      transformIndexHtml(html) {
+        return html.replaceAll('content="/og-image.jpg"', `content="${socialImageUrl}"`)
+      },
+    }],
     resolve: {
       alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
     },

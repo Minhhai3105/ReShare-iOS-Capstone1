@@ -22,7 +22,7 @@ const form = reactive({ warehouseId: '', quantity: '', unitId: '', conditionId: 
 const backRoute = { name: ADMIN_ROUTE.home }
 
 const allowedWarehouses = computed(() => (options.value?.warehouses ?? []).filter((warehouse) =>
-  isDemoPreview || canAccessWarehouse(warehouse.id),
+  isDemoPreview || (warehouse.id === donation.value?.expectedWarehouseId && canAccessWarehouse(warehouse.id)),
 ))
 const isApproved = computed(() => donation.value?.status === 'approved')
 const selectedWarehouse = computed(() => allowedWarehouses.value.find((item) => item.id === form.warehouseId))
@@ -41,7 +41,8 @@ async function load() {
     ])
     donation.value = record
     options.value = config
-    const firstAllowed = (config.warehouses ?? []).find((warehouse) => isDemoPreview || canAccessWarehouse(warehouse.id))
+    const firstAllowed = (config.warehouses ?? []).find((warehouse) =>
+      isDemoPreview || (warehouse.id === record.expectedWarehouseId && canAccessWarehouse(warehouse.id)))
     form.warehouseId = firstAllowed?.id ?? ''
     if (isDemoPreview) {
       form.quantity = '10'

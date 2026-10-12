@@ -371,26 +371,49 @@ service cloud.firestore {
           && data.condition in ['new', 'like_new', 'good', 'fair']
           && data.createdAt is timestamp
           && data.imageProvider == 'cloudinary'
+          && !data.keys().hasAny(['warehouseId', 'warehouseName'])
           && validCloudinaryImages('donation', donationId);
+      }
+
+      function canStaffReadDonation() {
+        let assignedWarehouse = resource.data.get('warehouseId', null);
+        return isSystemAdmin() || (
+          assignedWarehouse != null && canReadWarehouse(assignedWarehouse)
+        );
       }
 
       // Cho phép kiểm tra ID chưa tồn tại để transaction tạo đơn có thể retry an toàn.
       allow get: if request.auth != null && (
         resource == null ||
         resource.data.donorId == request.auth.uid ||
-        isSystemAdmin()
+        canStaffReadDonation()
       );
       allow list: if request.auth != null && (
         resource.data.donorId == request.auth.uid ||
-        isSystemAdmin()
+        canStaffReadDonation()
       );
       allow create: if request.auth != null
         && request.resource.data.id == donationId
         && request.resource.data.donorId == request.auth.uid
         && request.resource.data.status == 'pending'
+        && !request.resource.data.keys().hasAny(['internalNote', 'reviewedBy', 'history'])
         && validNewDonation();
-      allow update: if request.auth != null && isSystemAdmin();
+      // Review decisions go through the trusted API so private fields stay separate.
+      allow update: if false;
       allow delete: if false;
+    }
+
+    match /donation_reviews/{donationId} {
+      allow read, write: if false;
+    }
+
+    // Phiếu thực nhận chỉ đọc được theo phân công kho; mọi thao tác ghi qua API tin cậy.
+    match /receipts/{receiptId} {
+      allow read: if request.auth != null && (
+        isSystemAdmin() ||
+        (activeStaffWithRole('warehouse_admin') && canReadWarehouse(resource.data.warehouseId))
+      );
+      allow write: if false;
     }
 
     // Contact records are accepted and accessed only by the trusted backend using Admin SDK.
