@@ -2,6 +2,7 @@
 import { DONATION_PAGE_SIZE, DONATION_QUEUE_ERROR, DONATION_SORT } from './donation.constants.js'
 import { ADMIN_ROLES, USER_ROLE } from '../auth/auth.constants.js'
 import { db } from '../auth/firebase.js'
+import { auth } from '../auth/firebase.js'
 import { collection, doc, documentId, getDoc, getDocs, limit, orderBy, query as firestoreQuery, startAfter, where } from 'firebase/firestore'
 
 function createQueueError(status) {
@@ -184,5 +185,52 @@ export async function fetchDonationQueue(access, query) {
     if (error?.status) throw error
     throw createQueueError(error?.code === 'permission-denied' ? DONATION_QUEUE_ERROR.forbidden
       : error?.code === 'failed-precondition' ? DONATION_QUEUE_ERROR.indexRequired : DONATION_QUEUE_ERROR.network)
+  }
+}
+
+const reviewApiBase = (import.meta.env?.VITE_ADMIN_API_BASE_URL || 'https://reshare-ios-capstone1-1.onrender.com').replace(/\/$/, '')
+
+async function reviewRequest(path, body) {
+  const token = await auth.currentUser?.getIdToken()
+  if (!token) throw Object.assign(new Error('FORBIDDEN'), { code: 'FORBIDDEN' })
+  let response
+  try {
+    response = await fetch(`${reviewApiBase}${path}`, {
+      method: body === undefined ? 'GET' : 'POST',
+      headers: { Authorization: `Bearer ${token}`, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(90000),
+    })
+  } catch {
+    throw Object.assign(new Error('NETWORK'), { code: 'NETWORK' })
+  }
+  if (!response.ok) {
+    const code = { 400: 'VALIDATION', 401: 'FORBIDDEN', 403: 'FORBIDDEN', 404: 'NOT_FOUND', 409: 'CONFLICT' }[response.status] || 'NETWORK'
+    throw Object.assign(new Error(code), { code })
+  }
+  return (await response.json()).donation
+}
+
+export const getDonationForReview = (donationId) => reviewRequest(`/v1/admin/donations/${encodeURIComponent(donationId)}`)
+
+export const decideDonation = ({ donationId, action, publicMessage, internalNote, expectedVersion }) =>
+  reviewRequest(`/v1/admin/donations/${encodeURIComponent(donationId)}/decide`, {
+    action, publicMessage, internalNote, expectedVersion,
+  })
+
+export async function getDonationImageUrl(donationId, publicId) {
+  const token = await auth.currentUser?.getIdToken()
+  if (!token) throw Object.assign(new Error('FORBIDDEN'), { code: 'FORBIDDEN' })
+  try {
+    const response = await fetch(`${reviewApiBase}/v1/images/read-access`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ donationId, publicId }),
+      signal: AbortSignal.timeout(90000),
+    })
+    if (!response.ok) throw new Error('IMAGE_ACCESS_FAILED')
+    return (await response.json()).url
+  } catch {
+    throw Object.assign(new Error('IMAGE_ACCESS_FAILED'), { code: 'IMAGE_ACCESS_FAILED' })
   }
 }

@@ -225,7 +225,7 @@ watch(staffAssignment, refreshQueue)
 
             <tbody v-else-if="viewState === QUEUE_VIEW_STATE.ready" :class="{ 'is-refreshing': isLoading }">
               <tr v-for="donation in result.items" :key="donation.id">
-                <td><span class="queue-code auth-mono">{{ formatDonationCode(donation.id) }}</span></td>
+                <td><RouterLink class="queue-code auth-mono" :to="{ name: 'admin-donation-detail', params: { donationId: donation.id } }">{{ formatDonationCode(donation.id) }}</RouterLink></td>
                 <td>{{ donation.donorName }}</td>
                 <td>
                   <span class="queue-table__title">{{ donation.title }}</span>
