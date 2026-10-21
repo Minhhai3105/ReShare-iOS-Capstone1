@@ -190,7 +190,7 @@ export async function fetchDonationQueue(access, query) {
 
 const reviewApiBase = (import.meta.env?.VITE_ADMIN_API_BASE_URL || 'https://reshare-ios-capstone1-1.onrender.com').replace(/\/$/, '')
 
-async function reviewRequest(path, body) {
+async function reviewRequest(path, body, responseField = 'donation') {
   const token = await auth.currentUser?.getIdToken()
   if (!token) throw Object.assign(new Error('FORBIDDEN'), { code: 'FORBIDDEN' })
   let response
@@ -205,10 +205,14 @@ async function reviewRequest(path, body) {
     throw Object.assign(new Error('NETWORK'), { code: 'NETWORK' })
   }
   if (!response.ok) {
+    let payload
+    try { payload = await response.json() } catch {}
     const code = { 400: 'VALIDATION', 401: 'FORBIDDEN', 403: 'FORBIDDEN', 404: 'NOT_FOUND', 409: 'CONFLICT' }[response.status] || 'NETWORK'
-    throw Object.assign(new Error(code), { code })
+    const errorText = payload?.error || payload?.message
+    throw Object.assign(new Error(errorText || code), { code, serverMessage: errorText })
   }
-  return (await response.json()).donation
+  const result = await response.json()
+  return responseField ? result[responseField] : result
 }
 
 export const getDonationForReview = (donationId) => reviewRequest(`/v1/admin/donations/${encodeURIComponent(donationId)}`)
@@ -217,6 +221,14 @@ export const decideDonation = ({ donationId, action, publicMessage, internalNote
   reviewRequest(`/v1/admin/donations/${encodeURIComponent(donationId)}/decide`, {
     action, publicMessage, internalNote, expectedVersion,
   })
+
+export const confirmDonationCategory = ({ donationId, category, expectedVersion }) =>
+  reviewRequest(`/v1/admin/donations/${encodeURIComponent(donationId)}/confirm-category`, { category, expectedVersion })
+
+export const assignDonationWarehouse = ({ donationId, warehouseId, expectedVersion }) =>
+  reviewRequest(`/v1/admin/donations/${encodeURIComponent(donationId)}/assign-warehouse`, { warehouseId, expectedVersion })
+
+export const getAiAgreementSummary = () => reviewRequest('/v1/admin/donations/ai-summary', undefined, null)
 
 export async function getDonationImageUrl(donationId, publicId) {
   const token = await auth.currentUser?.getIdToken()
