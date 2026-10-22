@@ -292,6 +292,7 @@ test('US07: staff confirmation preserves AI and donor choices and rejects wrong 
 
   const saved = await api.handle('POST', path, { authorization: 'Bearer wh-a-token' }, body);
   assert.equal(saved.body.donation.staffConfirmedCategory, 'clothing');
+  assert.equal(saved.body.donation.staffConfirmedBy, 'worker-a');
   assert.equal(saved.body.donation.staffConfirmationVersion, 1);
   assert.equal(documents.get('donations/don-1').aiPredictedCategory, 'books');
   assert.equal(documents.get('donations/don-1').donorConfirmedCategory, 'clothing');

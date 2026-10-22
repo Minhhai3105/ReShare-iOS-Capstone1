@@ -299,6 +299,7 @@ function createDonationReviewApi({ db, verifyToken, serverTimestamp }) {
         internalNote: review.internalNote || null,
         reviewedBy: review.reviewedBy || null,
         staffConfirmedCategory: review.staffConfirmedCategory || null,
+        staffConfirmedBy: review.staffConfirmedBy || null,
         staffConfirmedAt: review.staffConfirmedAt?.toDate?.().toISOString() ||
           (review.staffConfirmedAt instanceof Date ? review.staffConfirmedAt.toISOString() : (review.staffConfirmedAt || null)),
         staffConfirmationVersion: review.staffConfirmationVersion || 0,
