@@ -6,7 +6,7 @@ const activeFlow = ref('donate')
 const donationScreens = [
   { label: 'Khám phá', type: 'explore', caption: 'Trang chủ và các nhu cầu mới' },
   { label: 'Quyên góp', type: 'donate', caption: 'Chụp ảnh và bắt đầu quyên góp' },
-  { label: 'Gợi ý danh mục', type: 'category', caption: 'Xem kết quả gợi ý từ AI' },
+  { label: 'Chọn danh mục', type: 'category', caption: 'Tự chọn danh mục vật phẩm' },
   { label: 'Xác nhận thông tin', type: 'review', caption: 'Kiểm tra và gửi yêu cầu' },
 ]
 
@@ -126,9 +126,9 @@ const screens = computed(() =>
               </template>
 
               <template v-else-if="screen.type === 'category'">
-                <div class="screen-info"><span>ⓘ</span><small>AI gợi ý danh mục phù hợp cho món đồ của bạn</small></div>
+                <div class="screen-info"><span>ⓘ</span><small>Chọn danh mục phù hợp cho món đồ của bạn</small></div>
                 <div class="screen-result">
-                  <b>Kết quả gợi ý</b>
+                  <b>Danh mục vật phẩm</b>
                   <div class="screen-category-row">
                     <div class="screen-category screen-category--selected">
                       <span><svg viewBox="0 0 24 24"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z" /><path d="m4 7.5 8 4.5 8-4.5M12 12v9" /></svg></span>
@@ -139,16 +139,16 @@ const screens = computed(() =>
                       <b>Sách</b>
                     </div>
                   </div>
-                  <small>2 gợi ý phù hợp nhất cho hình ảnh vừa chụp</small>
+                  <small>Bạn có thể chọn lại trước khi gửi yêu cầu</small>
                 </div>
                 <div class="screen-action-row">
                   <div>
                     <span><svg viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5" /><path d="M5.5 9a7 7 0 0 1 11.8-2L20 12M4 12l2.7 5a7 7 0 0 0 11.8-2" /></svg></span>
-                    <b>Gợi ý lại</b>
+                    <b>Chọn lại</b>
                   </div>
                   <div class="screen-action-row__selected">
                     <span><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6" /></svg></span>
-                    <b>Chọn danh mục</b>
+                    <b>Xác nhận</b>
                   </div>
                 </div>
               </template>
