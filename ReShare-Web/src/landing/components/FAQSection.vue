@@ -13,7 +13,7 @@ const questions = [
   },
   {
     question: 'Tôi gửi quyên góp như thế nào?',
-    answer: 'Trong ứng dụng, chụp ảnh vật phẩm, kiểm tra và xác nhận thông tin cùng danh mục gợi ý rồi gửi yêu cầu. Sau khi được duyệt, hãy làm theo thông tin tiếp nhận trong ứng dụng; việc duyệt chưa có nghĩa vật phẩm đã được tiếp nhận vào kho.',
+    answer: 'Trong ứng dụng, chụp ảnh vật phẩm, tự chọn danh mục, nhập số lượng, đơn vị và tình trạng rồi gửi yêu cầu. Khi có điểm tiếp nhận hoạt động, hãy làm theo hướng dẫn bàn giao; việc duyệt chưa có nghĩa vật phẩm đã vào kho.',
   },
   {
     question: 'Sau khi gửi thì bao lâu có phản hồi?',
@@ -25,15 +25,15 @@ const questions = [
   },
   {
     question: 'AI hoạt động như thế nào?',
-    answer: 'AI có thể phân tích ảnh để gợi ý danh mục vật phẩm. Đây chỉ là gợi ý; người dùng luôn cần kiểm tra và xác nhận thông tin.',
+    answer: 'Khi đăng món ở Kho đồ 0đ, AI phân tích ảnh để gợi ý danh mục Sách vở, Quần áo hoặc Gia dụng. Người dùng cần kiểm tra và có thể chọn lại.',
   },
   {
-    question: 'Tôi có thể chỉnh sửa thông tin do AI gợi ý không?',
-    answer: 'Có. Bạn có thể xem lại và chỉnh sửa thông tin trước khi gửi yêu cầu.',
+    question: 'Tôi có thể đổi danh mục AI gợi ý không?',
+    answer: 'Có. Khi đăng món ở Kho đồ 0đ, bạn có thể chọn lại danh mục trước khi đăng.',
   },
   {
     question: 'Được duyệt có nghĩa là vật phẩm đã vào kho chưa?',
-    answer: 'Chưa. Sau khi yêu cầu được duyệt, bạn cần mang hoặc gửi vật phẩm đến điểm tiếp nhận. Kho ghi nhận đồ sau khi tiếp nhận thực tế.',
+    answer: 'Chưa. Khi có điểm tiếp nhận hoạt động, bạn cần bàn giao vật phẩm theo hướng dẫn. Kho chỉ ghi nhận đồ sau khi kiểm nhận thực tế, rồi mới phân phối.',
   },
   {
     question: 'Làm thế nào để nhận đồ?',

@@ -1,11 +1,11 @@
 <script setup>
 const steps = [
   { number: '01', icon: 'package', title: 'Mở ứng dụng', body: 'Người dùng truy cập ReShare để bắt đầu quy trình quyên góp.' },
-  { number: '02', icon: 'camera', title: 'Chụp ảnh', body: 'Người dùng chụp ảnh món đồ để hệ thống bắt đầu nhận diện.' },
-  { number: '03', icon: 'scan', title: 'Kiểm tra thông tin', body: 'Người dùng xem lại danh mục, số lượng và tình trạng gợi ý.' },
+  { number: '02', icon: 'camera', title: 'Chụp ảnh', body: 'Người dùng chụp ảnh món đồ để gửi cùng yêu cầu quyên góp.' },
+  { number: '03', icon: 'scan', title: 'Nhập thông tin', body: 'Người dùng tự chọn danh mục, nhập số lượng, đơn vị và tình trạng vật phẩm.' },
   { number: '04', icon: 'document', title: 'Gửi yêu cầu', body: 'Yêu cầu được gửi đến tổ chức để xem xét và xác nhận.' },
   { number: '05', icon: 'shield', title: 'Duyệt yêu cầu', body: 'Nhân sự xem xét thông tin. Đơn được duyệt chưa có nghĩa vật phẩm đã vào kho.' },
-  { number: '06', icon: 'truck', title: 'Bàn giao và nhập kho', body: 'Khi điểm tiếp nhận hoạt động, kho kiểm nhận vật phẩm thực tế rồi mới ghi nhận tồn kho.' },
+  { number: '06', icon: 'truck', title: 'Bàn giao và nhập kho', body: 'Khi điểm tiếp nhận hoạt động, kho kiểm nhận đồ thực tế, ghi nhận tồn kho rồi mới phân phối.' },
 ]
 </script>
 
