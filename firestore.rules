@@ -368,7 +368,22 @@ service cloud.firestore {
           && data.title.size() <= 120
           && data.description is string
           && data.category in ['clothing', 'books', 'household']
+          && (!data.keys().hasAny(['donorConfirmedCategory']) ||
+              data.donorConfirmedCategory == data.category)
+          && (data.keys().hasAll(['aiPredictedCategory', 'aiConfidence', 'aiModelVersion']) ||
+              !data.keys().hasAny(['aiPredictedCategory', 'aiConfidence', 'aiModelVersion']))
+          && (!data.keys().hasAny(['aiPredictedCategory']) ||
+              (data.aiPredictedCategory in ['clothing', 'books', 'household']
+                && data.aiConfidence is number
+                && data.aiConfidence >= 0
+                && data.aiConfidence <= 1
+                && data.aiModelVersion == 'ReShare_v8_baseline_01'))
           && data.condition in ['new', 'like_new', 'good', 'fair']
+          && ((!data.keys().hasAny(['quantity', 'unitId'])) ||
+              (data.keys().hasAll(['quantity', 'unitId'])
+                && data.quantity is number
+                && data.quantity > 0
+                && data.unitId in ['piece', 'kg', 'bag', 'box', 'set']))
           && data.createdAt is timestamp
           && data.imageProvider == 'cloudinary'
           && !data.keys().hasAny(['warehouseId', 'warehouseName'])

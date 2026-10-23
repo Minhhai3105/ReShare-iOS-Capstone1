@@ -1,8 +1,9 @@
 import Foundation
 import FirebaseAuth
+import OSLog
 import UIKit
 
-enum CloudinaryImagePurpose: String, Encodable, Sendable {
+nonisolated enum CloudinaryImagePurpose: String, Encodable, Sendable {
     case catalogItem = "catalog_item"
     case donation
 
@@ -58,8 +59,9 @@ enum CloudinaryImageError: LocalizedError {
 /// iOS chỉ nhận chữ ký từ backend ReShare. API secret Cloudinary không nằm trong app.
 final class CloudinaryImageService {
     static let shared = CloudinaryImageService()
+    private let logger = Logger(subsystem: "ReShare", category: "ImageUpload")
 
-    private struct UploadIntentRequest: Encodable {
+    private nonisolated struct UploadIntentRequest: Encodable {
         let purpose: CloudinaryImagePurpose
         let recordId: String
         let clientImageId: String
@@ -103,41 +105,48 @@ final class CloudinaryImageService {
 
     private init() {}
 
-    func uploadImages(_ images: [UIImage], purpose: CloudinaryImagePurpose, recordId: String) async throws -> [CloudinaryUploadedImage] {
+    func uploadImages(
+        _ images: [UIImage],
+        purpose: CloudinaryImagePurpose,
+        recordId: String,
+        maxPixelDimension: CGFloat? = nil,
+        onProgress: (@MainActor (Int, Int) -> Void)? = nil
+    ) async throws -> [CloudinaryUploadedImage] {
         guard !images.isEmpty else { return [] }
         var uploaded: [CloudinaryUploadedImage] = []
+        let startedAt = Date()
 
         do {
-            var preparedImages: [(jpeg: Data, intent: UploadIntent)] = []
-            for image in images {
-                guard let jpeg = image.jpegData(compressionQuality: 0.7) else {
-                    throw CloudinaryImageError.invalidImage
-                }
-                let clientImageId = UUID().uuidString.lowercased()
-                let intent: UploadIntent = try await backendRequest(
-                    "v1/images/upload-intents",
-                    body: UploadIntentRequest(purpose: purpose, recordId: recordId, clientImageId: clientImageId)
-                )
-                guard intent.deliveryType == purpose.deliveryType,
-                      intent.publicId.hasPrefix("\(purpose.pathPrefix)/\(recordId)/"),
-                      !intent.cloudName.isEmpty,
-                      !intent.cloudName.contains("/"),
-                      !intent.apiKey.isEmpty,
-                      !intent.signature.isEmpty else {
-                    throw CloudinaryImageError.invalidServerResponse
-                }
-                preparedImages.append((jpeg, intent))
-            }
+            let preparedJPEGs = try await Task.detached(priority: .userInitiated) {
+                try images.map { try Self.prepareJPEG($0, maxPixelDimension: maxPixelDimension) }
+            }.value
+            logger.info("Chuẩn bị \(preparedJPEGs.count) ảnh: \(Date().timeIntervalSince(startedAt), privacy: .public)s")
+            onProgress?(0, preparedJPEGs.count)
 
-            var uploadedByIndex = [CloudinaryUploadedImage?](repeating: nil, count: preparedImages.count)
-            for batchStart in stride(from: 0, to: preparedImages.count, by: 3) {
-                let batchEnd = min(batchStart + 3, preparedImages.count)
+            var uploadedByIndex = [CloudinaryUploadedImage?](repeating: nil, count: preparedJPEGs.count)
+            for batchStart in stride(from: 0, to: preparedJPEGs.count, by: 3) {
+                let batchEnd = min(batchStart + 3, preparedJPEGs.count)
                 let results = await withTaskGroup(of: (Int, Result<CloudinaryUploadedImage, Error>).self) { group in
                     for index in batchStart..<batchEnd {
-                        let jpeg = preparedImages[index].jpeg
-                        let intent = preparedImages[index].intent
+                        let jpeg = preparedJPEGs[index]
                         group.addTask {
                             do {
+                                let intent: UploadIntent = try await self.backendRequest(
+                                    "v1/images/upload-intents",
+                                    body: UploadIntentRequest(
+                                        purpose: purpose,
+                                        recordId: recordId,
+                                        clientImageId: UUID().uuidString.lowercased()
+                                    )
+                                )
+                                guard intent.deliveryType == purpose.deliveryType,
+                                      intent.publicId.hasPrefix("\(purpose.pathPrefix)/\(recordId)/"),
+                                      !intent.cloudName.isEmpty,
+                                      !intent.cloudName.contains("/"),
+                                      !intent.apiKey.isEmpty,
+                                      !intent.signature.isEmpty else {
+                                    throw CloudinaryImageError.invalidServerResponse
+                                }
                                 return (index, .success(try await self.upload(jpeg, intent: intent, purpose: purpose)))
                             } catch {
                                 return (index, .failure(error))
@@ -145,7 +154,12 @@ final class CloudinaryImageService {
                         }
                     }
                     var results: [(Int, Result<CloudinaryUploadedImage, Error>)] = []
-                    for await result in group { results.append(result) }
+                    var successfulResults = 0
+                    for await result in group {
+                        if case .success = result.1 { successfulResults += 1 }
+                        results.append(result)
+                        onProgress?(uploaded.count + successfulResults, preparedJPEGs.count)
+                    }
                     return results
                 }
 
@@ -161,6 +175,7 @@ final class CloudinaryImageService {
                 }
                 if let firstError { throw firstError }
             }
+            logger.info("Hoàn tất tải \(preparedJPEGs.count) ảnh: \(Date().timeIntervalSince(startedAt), privacy: .public)s")
             return uploadedByIndex.compactMap { $0 }
         } catch {
             if !uploaded.isEmpty {
@@ -172,6 +187,34 @@ final class CloudinaryImageService {
             }
             throw error
         }
+    }
+
+    private nonisolated static func prepareJPEG(_ image: UIImage, maxPixelDimension: CGFloat?) throws -> Data {
+        guard let maxPixelDimension, maxPixelDimension > 0 else {
+            guard let jpeg = image.jpegData(compressionQuality: 0.7) else { throw CloudinaryImageError.invalidImage }
+            return jpeg
+        }
+        let rawWidth = CGFloat(image.cgImage?.width ?? Int(image.size.width * image.scale))
+        let rawHeight = CGFloat(image.cgImage?.height ?? Int(image.size.height * image.scale))
+        let isRotated = [.left, .leftMirrored, .right, .rightMirrored].contains(image.imageOrientation)
+        let width = isRotated ? rawHeight : rawWidth
+        let height = isRotated ? rawWidth : rawHeight
+        let longestSide = max(width, height)
+        guard longestSide > maxPixelDimension else {
+            guard let jpeg = image.jpegData(compressionQuality: 0.7) else { throw CloudinaryImageError.invalidImage }
+            return jpeg
+        }
+        let targetSize = CGSize(width: width * maxPixelDimension / longestSide,
+                                height: height * maxPixelDimension / longestSide)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+        return UIGraphicsImageRenderer(size: targetSize, format: format)
+            .jpegData(withCompressionQuality: 0.7) { _ in
+                UIColor.white.setFill()
+                UIRectFill(CGRect(origin: .zero, size: targetSize))
+                image.draw(in: CGRect(origin: .zero, size: targetSize))
+            }
     }
 
     func deleteImages(_ images: [CloudinaryUploadedImage], purpose: CloudinaryImagePurpose, recordId: String) async throws {
@@ -197,6 +240,8 @@ final class CloudinaryImageService {
     }
 
     private func upload(_ jpeg: Data, intent: UploadIntent, purpose: CloudinaryImagePurpose) async throws -> CloudinaryUploadedImage {
+        let startedAt = Date()
+        defer { logger.info("Cloudinary \(jpeg.count) bytes: \(Date().timeIntervalSince(startedAt), privacy: .public)s") }
         guard let cloudName = intent.cloudName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
               let url = URL(string: "https://api.cloudinary.com/v1_1/\(cloudName)/image/upload") else {
             throw CloudinaryImageError.invalidServerResponse
@@ -244,6 +289,8 @@ final class CloudinaryImageService {
     }
 
     private func backendRequest<Request: Encodable, Response: Decodable>(_ path: String, body: Request) async throws -> Response {
+        let startedAt = Date()
+        defer { logger.info("Image API \(path, privacy: .public): \(Date().timeIntervalSince(startedAt), privacy: .public)s") }
         let rawBaseURL = (Bundle.main.object(forInfoDictionaryKey: "RESHARE_IMAGE_API_BASE_URL") as? String)
             ?? "https://reshare-ios-capstone1-1.onrender.com"
         guard let baseURL = URL(string: rawBaseURL),
