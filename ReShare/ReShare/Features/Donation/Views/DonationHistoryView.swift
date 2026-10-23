@@ -202,7 +202,7 @@ struct HistoryItemCard: View {
             VStack(alignment: .leading, spacing: 5) {
                 // Hàng 1: Danh mục + Badge trạng thái
                 HStack {
-                    Text("\(item.category.title.uppercased()) • 1 ITEM")
+                    Text("\(item.category.title.uppercased()) • \(declaredQuantityLabel)")
                         .font(.system(size: 10, weight: .bold))
                         .foregroundColor(Color(red: 0.35, green: 0.45, blue: 0.35))
 
@@ -294,6 +294,13 @@ struct HistoryItemCard: View {
         case "hub-lienchieu": return "Demo Liên Chiểu"
         default: return "Chưa có điểm tiếp nhận"
         }
+    }
+
+    private var declaredQuantityLabel: String {
+        guard let quantity = item.quantity,
+              let unitId = item.unitId else { return "Chưa khai báo số lượng" }
+        let unit = DonationUnit(rawValue: unitId)?.title ?? unitId
+        return "\(quantity.formatted()) \(unit)"
     }
 
     // Icon placeholder khi chưa có ảnh mạng

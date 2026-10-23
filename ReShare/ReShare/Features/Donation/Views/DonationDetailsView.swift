@@ -46,7 +46,13 @@ struct DonationDetailsView: View {
 
     // MARK: - State dữ liệu
     @State private var itemTitle: String = ""
+    @State private var quantityText: String = ""
+    @State private var selectedUnit: DonationUnit = .piece
     @State private var selectedCategory: DonationCategory = .clothing
+    @State private var aiPrediction: CatalogCategoryClassifier.Prediction? = nil
+    @State private var isClassifying: Bool = false
+    @State private var didClassify: Bool = false
+    @State private var didConfirmCategory: Bool = false
     @State private var selectedCondition: ItemCondition = .good
     @State private var selectedHubIndex: Int = 0
     @State private var notes: String = ""
@@ -67,6 +73,7 @@ struct DonationDetailsView: View {
 
     @State private var navigateToSuccess: Bool = false
     @State private var isSubmitting: Bool = false
+    @State private var submitStatus: String? = nil
     @State private var donationDocumentId: String = UUID().uuidString
     @State private var confirmationCode: String = "#DEMO-\(Calendar.current.component(.year, from: Date()))-\(Int.random(in: 1000...9999))"
     @State private var submittedItem: DonationItem? = nil
@@ -114,6 +121,7 @@ struct DonationDetailsView: View {
         .navigationTitle("Thông tin quyên góp")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
+        .onAppear(perform: classifyFirstPhoto)
         .toolbar(.visible, for: .navigationBar)
         .preferredColorScheme(.light)
         .environment(\.colorScheme, .light)
@@ -215,9 +223,71 @@ struct DonationDetailsView: View {
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(textDark)
                     Spacer()
-                    Picker("Danh mục", selection: $selectedCategory) {
+                    Picker("Danh mục", selection: Binding(
+                        get: { selectedCategory },
+                        set: { selectedCategory = $0; didConfirmCategory = true }
+                    )) {
                         ForEach(DonationCategory.allCases) { cat in
                             Text(cat.title).tag(cat)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .tint(primaryGreen)
+                }
+                .padding(14)
+                .background(Color.white)
+                .cornerRadius(12)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(cardBorderColor, lineWidth: 1)
+                )
+
+                if isClassifying {
+                    Text("Đang phân tích ảnh đầu tiên… Bạn vẫn có thể chọn danh mục thủ công.")
+                        .font(.system(size: 12))
+                        .foregroundColor(textMuted)
+                } else if let aiPrediction {
+                    Text("AI gợi ý: \(aiPrediction.category.title) · \(Int((aiPrediction.confidence * 100).rounded()))% tin cậy\(aiPrediction.confidence < 0.6 ? " (thấp, hãy chọn thủ công)" : "")")
+                        .font(.system(size: 12))
+                        .foregroundColor(textMuted)
+                } else if didClassify {
+                    Text("Không có gợi ý AI. Bạn có thể chọn danh mục thủ công.")
+                        .font(.system(size: 12))
+                        .foregroundColor(textMuted)
+                }
+
+                if didConfirmCategory {
+                    Label("Đã xác nhận danh mục: \(selectedCategory.title)", systemImage: "checkmark.circle.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(primaryGreen)
+                        .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                        .padding(.horizontal, 14)
+                        .background(primaryGreen.opacity(0.08))
+                        .cornerRadius(12)
+                } else {
+                    Button {
+                        didConfirmCategory = true
+                    } label: {
+                        Label("Chạm để xác nhận danh mục: \(selectedCategory.title)", systemImage: "checkmark.circle")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                            .padding(.horizontal, 14)
+                            .background(primaryGreen)
+                            .cornerRadius(12)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                HStack(spacing: 12) {
+                    TextField("Số lượng (VD: 2)", text: $quantityText)
+                        .keyboardType(.decimalPad)
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(textDark)
+
+                    Picker("Đơn vị", selection: $selectedUnit) {
+                        ForEach(DonationUnit.allCases) { unit in
+                            Text(unit.title).tag(unit)
                         }
                     }
                     .pickerStyle(.menu)
@@ -387,6 +457,8 @@ struct DonationDetailsView: View {
             HStack(spacing: 8) {
                 if isSubmitting {
                     ProgressView().tint(.white)
+                    Text(submitStatus ?? "Đang lưu đơn...")
+                        .font(.system(size: 15, weight: .semibold))
                 } else {
                     Text("Lưu đơn thử nghiệm")
                         .font(.system(size: 16, weight: .bold))
@@ -401,13 +473,23 @@ struct DonationDetailsView: View {
             .cornerRadius(16)
             .shadow(color: Color(red: 0.11, green: 0.35, blue: 0.20).opacity(0.3), radius: 8, y: 4)
         }
-        .disabled(isSubmitting || itemTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || capturedImages.count < 3)
+        .disabled(isSubmitting)
+    }
+
+    private var declaredQuantity: Double? {
+        let input = quantityText.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: ",", with: ".")
+        guard let quantity = Double(input), quantity.isFinite, quantity > 0 else { return nil }
+        return quantity
     }
 
     // MARK: - Logic gửi đơn quyên góp 2 bước (Storage -> Firestore) với cơ chế phục hồi
     private func submitDonation() {
-        guard capturedImages.count >= 3, !itemTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            self.errorMessage = "Vui lòng chụp ít nhất 3 ảnh và nhập tên món đồ."
+        guard (3...6).contains(capturedImages.count),
+              !itemTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let quantity = declaredQuantity,
+              didConfirmCategory else {
+            self.errorMessage = "Vui lòng chọn 3–6 ảnh, nhập tên, số lượng lớn hơn 0 và xác nhận danh mục."
             self.showErrorAlert = true
             return
         }
@@ -418,6 +500,9 @@ struct DonationDetailsView: View {
         }
 
         isSubmitting = true
+        submitStatus = "Đang chuẩn bị ảnh..."
+        let confirmedCategory = selectedCategory
+        let submittedPrediction = aiPrediction
         let selectedHub = daNangHubs[selectedHubIndex]
         let deliveryText = deliveryMethod == 0 ? "drop_off" : "pickup"
 
@@ -425,23 +510,31 @@ struct DonationDetailsView: View {
             // Bước 1: Upload ảnh Cloudinary có chữ ký (nếu chưa upload trước đó)
             var finalAssets = uploadedImageAssets
             if finalAssets.isEmpty && !capturedImages.isEmpty {
+                let uploadStartedAt = Date()
                 do {
                     print("📤 [Cloudinary] Đang tải \(capturedImages.count) ảnh quyên góp...")
                     finalAssets = try await CloudinaryImageService.shared.uploadImages(
                         capturedImages,
                         purpose: .donation,
-                        recordId: donationDocumentId
+                        recordId: donationDocumentId,
+                        maxPixelDimension: 2048,
+                        onProgress: { completed, total in
+                            submitStatus = "Đang tải ảnh \(completed)/\(total)..."
+                        }
                     )
                     await MainActor.run {
                         self.uploadedImageAssets = finalAssets
                     }
                     print("✅ [Cloudinary] Đã tải \(finalAssets.count) ảnh quyên góp.")
+                    print("⏱️ [Donation] Tải ảnh: \(Int(Date().timeIntervalSince(uploadStartedAt).rounded())) giây")
                 } catch {
                     print("❌ [Cloudinary] Tải ảnh thất bại: \(error.localizedDescription)")
+                    print("⏱️ [Donation] Tải ảnh thất bại sau \(Int(Date().timeIntervalSince(uploadStartedAt).rounded())) giây")
                     await MainActor.run {
                         self.errorMessage = storageErrorMessage(error)
                         self.showErrorAlert = true
                         self.isSubmitting = false
+                        self.submitStatus = nil
                     }
                     return
                 }
@@ -454,7 +547,7 @@ struct DonationDetailsView: View {
                 donorId: currentUserId,
                 title: itemTitle,
                 description: notes.isEmpty ? "Đơn thử nghiệm tại điểm mẫu \(selectedHub.name)" : notes,
-                category: selectedCategory,
+                category: confirmedCategory,
                 condition: selectedCondition,
                 status: .pending,
                 imageUrl: nil,
@@ -466,25 +559,37 @@ struct DonationDetailsView: View {
                 campaignId: campaignId,
                 hubId: selectedHub.id,
                 deliveryMethod: deliveryText,
-                confirmationCode: confirmationCode
+                confirmationCode: confirmationCode,
+                quantity: quantity,
+                unitId: selectedUnit.rawValue,
+                aiPredictedCategory: submittedPrediction?.category,
+                aiConfidence: submittedPrediction?.confidence,
+                aiModelVersion: submittedPrediction == nil ? nil : CatalogCategoryClassifier.modelVersion,
+                donorConfirmedCategory: confirmedCategory
             )
 
+            await MainActor.run { self.submitStatus = "Đang lưu đơn..." }
+            let firestoreStartedAt = Date()
             do {
                 print("🚀 [Firestore] Đang ghi đơn quyên góp vào collection 'donations'...")
                 try await FirestoreService.shared.createDonation(newItem)
                 print("✅ [Firestore] Đơn quyên góp đã được ghi thành công vào Cloud Firestore!")
+                print("⏱️ [Donation] Ghi đơn: \(Int(Date().timeIntervalSince(firestoreStartedAt).rounded())) giây")
 
                 await MainActor.run {
                     self.submittedItem = newItem
                     self.isSubmitting = false
+                    self.submitStatus = nil
                     self.navigateToSuccess = true
                 }
             } catch {
                 print("❌ [Firestore] Ghi đơn quyên góp thất bại: \(error.localizedDescription)")
+                print("⏱️ [Donation] Ghi đơn thất bại sau \(Int(Date().timeIntervalSince(firestoreStartedAt).rounded())) giây")
                 await MainActor.run {
                     self.errorMessage = "Không thể tạo đơn quyên góp: \(error.localizedDescription). Ảnh của bạn đã được tải lên và sẵn sàng thử lại."
                     self.showErrorAlert = true
                     self.isSubmitting = false
+                    self.submitStatus = nil
                 }
             }
         }
@@ -498,6 +603,22 @@ struct DonationDetailsView: View {
             return "Không thể kết nối dịch vụ ảnh. Vui lòng kiểm tra mạng và thử lại."
         }
         return "Không thể chuẩn bị hoặc tải ảnh lên. Vui lòng thử lại."
+    }
+
+    private func classifyFirstPhoto() {
+        guard !didClassify, !isClassifying, let image = capturedImages.first else { return }
+        isClassifying = true
+        CatalogCategoryClassifier.predict(from: image) { prediction in
+            aiPrediction = prediction
+            isClassifying = false
+            didClassify = true
+            if let prediction, prediction.confidence >= 0.6, !didConfirmCategory {
+                selectedCategory = prediction.category
+            }
+            if let prediction {
+                print("[Core ML] \(CatalogCategoryClassifier.modelVersion): \(Int(prediction.durationMs.rounded())) ms")
+            }
+        }
     }
 }
 

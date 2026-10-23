@@ -1,5 +1,21 @@
 import Foundation
 
+enum DonationUnit: String, CaseIterable, Identifiable {
+    case piece, kg, bag, box, set
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .piece: return "chiếc"
+        case .kg: return "kg"
+        case .bag: return "túi"
+        case .box: return "thùng/hộp"
+        case .set: return "bộ"
+        }
+    }
+}
+
 
 struct DonationItem: Identifiable, Codable {
     //id: String: Để map trực tiếp với Document ID từ Firestore
@@ -25,6 +41,12 @@ struct DonationItem: Identifiable, Codable {
     var hubId: String? = nil
     var deliveryMethod: String? = nil
     var confirmationCode: String? = nil
+    var quantity: Double? = nil
+    var unitId: String? = nil
+    var aiPredictedCategory: DonationCategory? = nil
+    var aiConfidence: Double? = nil
+    var aiModelVersion: String? = nil
+    var donorConfirmedCategory: DonationCategory? = nil
 
     /// Helper lấy URL ảnh: ưu tiên ảnh đầu tiên trong mảng images, fallback về imageUrl
     var primaryImageUrl: String? {

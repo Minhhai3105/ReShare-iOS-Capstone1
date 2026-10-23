@@ -19,6 +19,7 @@ test('Cloudinary record requires three distinct image IDs from a server-owned ba
     const donation = {
       id: recordId, donorId: 'donor', title: 'Sách giáo khoa', description: 'Còn sử dụng tốt',
       category: 'books', condition: 'good', status: 'pending', createdAt: new Date(),
+      quantity: 2, unitId: 'piece',
       imageProvider: 'cloudinary', imagePublicIds: ids,
     };
     await assertFails(donor.doc(`donations/${recordId}`).set({ ...donation, imageProvider: null, imagePublicIds: null }));
@@ -31,10 +32,39 @@ test('Cloudinary record requires three distinct image IDs from a server-owned ba
     await assertFails(donor.doc(`donations/${recordId}`).set({ ...donation, imagePublicIds: ids.slice(0, 2) }));
     await assertFails(donor.doc(`donations/${recordId}`).set({ ...donation, imagePublicIds: [ids[0], ids[0], ids[1]] }));
     await assertFails(donor.doc(`donations/${recordId}`).set({ ...donation, category: 'other' }));
+    await assertFails(donor.doc(`donations/${recordId}`).set({ ...donation, quantity: 0 }));
+    await assertFails(donor.doc(`donations/${recordId}`).set({ ...donation, quantity: '2' }));
+    await assertFails(donor.doc(`donations/${recordId}`).set({ ...donation, unitId: 'unknown' }));
+    const { quantity, ...withoutQuantity } = donation;
+    await assertFails(donor.doc(`donations/${recordId}`).set(withoutQuantity));
+    const { unitId, ...withoutUnit } = donation;
+    await assertFails(donor.doc(`donations/${recordId}`).set(withoutUnit));
     await assertFails(donor.doc(`donations/${recordId}`).set({ ...donation, warehouseId: 'kho-a' }));
     await assertFails(donor.doc(`donations/${recordId}`).set({ ...donation, warehouseName: 'Kho A' }));
-    await assertSucceeds(donor.doc(`donations/${recordId}`).set(donation));
+    const withAi = {
+      ...donation,
+      aiPredictedCategory: 'books', aiConfidence: 0.83,
+      aiModelVersion: 'ReShare_v8_baseline_01', donorConfirmedCategory: 'books',
+    };
+    await assertFails(donor.doc(`donations/${recordId}`).set({ ...withAi, aiConfidence: 1.1 }));
+    await assertFails(donor.doc(`donations/${recordId}`).set({ ...withAi, aiModelVersion: 'unknown' }));
+    await assertFails(donor.doc(`donations/${recordId}`).set({ ...withAi, donorConfirmedCategory: 'clothing' }));
+    await assertFails(donor.doc(`donations/${recordId}`).set({ ...donation, aiPredictedCategory: 'books' }));
+    await assertSucceeds(donor.doc(`donations/${recordId}`).set(withAi));
     await assertFails(donor.doc(`donations/${recordId}`).set(donation));
+
+    // Older app builds remain able to submit without the newly introduced quantity fields.
+    const legacyId = '6d4a2909-bb7f-459d-bbcd-2117d96ff7e2';
+    const legacyIds = [1, 2, 3].map(number => `donations/${legacyId}/00000000-0000-4000-8000-00000000000${number}`);
+    await env.withSecurityRulesDisabled(async context => {
+      await context.firestore().doc(`image_upload_batches/donation_${legacyId}`).set({
+        ownerUid: 'donor', assets: { first: legacyIds[0], second: legacyIds[1], third: legacyIds[2] },
+      });
+    });
+    const { quantity: _quantity, unitId: _unitId, ...legacyDonation } = donation;
+    await assertSucceeds(donor.doc(`donations/${legacyId}`).set({
+      ...legacyDonation, id: legacyId, imagePublicIds: legacyIds,
+    }));
 
     const catalogId = `cat_${recordId}`;
     const catalogIds = [1, 2, 3].map(number => `catalog_items/${catalogId}/10000000-0000-4000-8000-00000000000${number}`);
@@ -154,6 +184,7 @@ test('donor owns pending donation; warehouse admin is blocked until warehouse sc
     const donation = {
       id: recordId, donorId: 'donor', title: 'Áo ấm', description: 'Đơn thử nghiệm',
       category: 'clothing', condition: 'good', status: 'pending', createdAt: new Date(),
+      quantity: 1, unitId: 'piece',
       imageProvider: 'cloudinary', imagePublicIds: ids,
     };
 

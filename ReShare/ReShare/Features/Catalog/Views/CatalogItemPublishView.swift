@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 /// Màn hình Đăng đồ 0đ cộng đồng (P2P Trao tặng trực tiếp giữa người dân Đà Nẵng)
 struct CatalogItemPublishView: View {
@@ -18,11 +19,17 @@ struct CatalogItemPublishView: View {
     @State private var pickupAddress: String = ""
     @State private var donorNote: String = ""
     @State private var selectedIcon: String = "tshirt.fill"
+    @State private var hasRequestedAISuggestion = false
+    @State private var didChooseCategory = false
+    @State private var aiCategoryMessage: String? = nil
 
     @State private var isPublishing: Bool = false
+    @State private var publishStatus: String = ""
     @State private var errorMessage: String? = nil
     @State private var itemDocumentId: String = "cat_\(UUID().uuidString.lowercased())"
     @State private var uploadedImageAssets: [CloudinaryUploadedImage] = []
+    @FocusState private var isInputFocused: Bool
+    private let publishLogger = Logger(subsystem: "ReShare", category: "CatalogPublish")
 
     // Màu sắc ReShare
     private let primaryGreen = Color(red: 0.11, green: 0.35, blue: 0.20)
@@ -62,6 +69,11 @@ struct CatalogItemPublishView: View {
 
                 // 2. Icon đại diện món đồ (nếu chưa có ảnh hoặc muốn chọn biểu tượng nhận diện)
                 iconSelectorSection
+                if let aiCategoryMessage {
+                    Text(aiCategoryMessage)
+                        .font(.system(size: 12))
+                        .foregroundColor(textMuted)
+                }
 
                 // 3. Tên món đồ & Danh mục
                 basicInfoSection
@@ -110,6 +122,32 @@ struct CatalogItemPublishView: View {
                 }
             }
         }
+        .onAppear {
+            guard !hasRequestedAISuggestion,
+                  let firstImage = capturedImages.first else { return }
+
+            hasRequestedAISuggestion = true
+            aiCategoryMessage = "AI đang gợi ý danh mục..."
+
+            CatalogCategoryClassifier.predict(from: firstImage) { prediction in
+                guard !didChooseCategory else { return }
+
+                guard let prediction else {
+                    aiCategoryMessage = "AI chưa phân loại được; hãy chọn danh mục trước khi đăng."
+                    return
+                }
+
+                guard prediction.confidence >= 0.6,
+                      let match = categories.first(where: { $0.0 == prediction.category.title }) else {
+                    aiCategoryMessage = "AI chưa đủ tin cậy (\(Int((prediction.confidence * 100).rounded()))%); hãy chọn danh mục thủ công."
+                    return
+                }
+
+                selectedCategory = match.0
+                selectedIcon = match.1
+                aiCategoryMessage = "AI gợi ý: \(match.0) (\(Int((prediction.confidence * 100).rounded()))%). Bạn có thể chọn lại."
+            }
+        }
     }
 
     // MARK: - Dải ảnh thực tế từ Camera
@@ -156,6 +194,8 @@ struct CatalogItemPublishView: View {
             HStack(spacing: 14) {
                 ForEach(categories, id: \.0) { cat in
                     Button(action: {
+                        didChooseCategory = true
+                        aiCategoryMessage = "Bạn đã chọn: \(cat.0)"
                         selectedCategory = cat.0
                         selectedIcon = cat.1
                     }) {
@@ -199,6 +239,7 @@ struct CatalogItemPublishView: View {
                         .foregroundColor(textDark)
 
                     TextField("vd: Áo khoác phao ấm, Bộ sách...", text: $itemTitle)
+                        .focused($isInputFocused)
                         .foregroundColor(textDark)
                         .padding(.horizontal, 14)
                         .frame(height: 48)
@@ -279,6 +320,7 @@ struct CatalogItemPublishView: View {
                         .foregroundColor(textDark)
 
                     TextField("vd: Gần Chợ Mới, Đường Lê Duẩn...", text: $pickupAddress)
+                        .focused($isInputFocused)
                         .foregroundColor(textDark)
                         .padding(.horizontal, 14)
                         .frame(height: 48)
@@ -301,6 +343,7 @@ struct CatalogItemPublishView: View {
                 .foregroundColor(sectionHeaderColor)
 
             TextEditor(text: $donorNote)
+                .focused($isInputFocused)
                 .foregroundColor(textDark)
                 .frame(height: 90)
                 .padding(8)
@@ -319,6 +362,8 @@ struct CatalogItemPublishView: View {
             HStack(spacing: 8) {
                 if isPublishing {
                     ProgressView().tint(.white)
+                    Text(publishStatus)
+                        .font(.system(size: 14, weight: .semibold))
                 } else {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.system(size: 16, weight: .bold))
@@ -351,9 +396,12 @@ struct CatalogItemPublishView: View {
         }
 
         isPublishing = true
+        isInputFocused = false
+        publishStatus = "Đang chuẩn bị ảnh..."
         errorMessage = nil
 
         let donorName = appState.currentUserProfile?.displayName ?? "Người dân Đà Nẵng"
+        let startedAt = Date()
 
         Task {
             do {
@@ -365,10 +413,16 @@ struct CatalogItemPublishView: View {
                     uploadedAssets = try await CloudinaryImageService.shared.uploadImages(
                         capturedImages,
                         purpose: .catalogItem,
-                        recordId: itemDocumentId
+                        recordId: itemDocumentId,
+                        maxPixelDimension: 2048,
+                        onProgress: { completed, total in
+                            publishStatus = "Đang tải ảnh (\(completed)/\(total))..."
+                        }
                     )
                     await MainActor.run { uploadedImageAssets = uploadedAssets }
                 }
+                publishLogger.info("Ảnh sẵn sàng: \(Date().timeIntervalSince(startedAt), privacy: .public)s")
+                await MainActor.run { publishStatus = "Đang lưu món đồ..." }
                 let imageUrls = uploadedAssets.compactMap(\.secureURL)
                 guard imageUrls.count == capturedImages.count else {
                     throw CloudinaryImageError.invalidServerResponse
@@ -395,9 +449,11 @@ struct CatalogItemPublishView: View {
                 )
 
                 try await FirestoreService.shared.publishCatalogItem(newItem)
+                publishLogger.info("Đăng món hoàn tất: \(Date().timeIntervalSince(startedAt), privacy: .public)s")
 
                 await MainActor.run {
                     isPublishing = false
+                    publishStatus = ""
                     onPublished?(newItem)
                     if let onBackToCatalog = onBackToCatalog {
                         onBackToCatalog()
@@ -408,6 +464,7 @@ struct CatalogItemPublishView: View {
             } catch {
                 await MainActor.run {
                     isPublishing = false
+                    publishStatus = ""
                     errorMessage = "Không thể đăng đồ: \(error.localizedDescription). Bạn có thể thử lại; ảnh tải lên thành công sẽ được dùng lại."
                 }
             }
