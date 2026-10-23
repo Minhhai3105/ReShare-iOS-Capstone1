@@ -36,6 +36,54 @@ function createDonationReviewApi({ db, verifyToken, serverTimestamp }) {
     };
   }
 
+  async function assignWarehouse(donationId, headers, body) {
+    const staff = await authenticateStaff(headers);
+    if (staff.role !== 'system_admin') throw new ApiError(403, 'System Admin access required');
+    const warehouseId = body?.warehouseId;
+    const expectedVersion = body?.expectedVersion;
+    if (typeof warehouseId !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(warehouseId) ||
+        !Number.isInteger(expectedVersion) || expectedVersion < 1) {
+      throw new ApiError(400, 'Valid warehouse and donation version are required');
+    }
+
+    const donationRef = db.collection('donations').doc(donationId);
+    const warehouseRef = db.collection('warehouses').doc(warehouseId);
+    const reviewRef = db.collection('donation_reviews').doc(donationId);
+    await db.runTransaction(async transaction => {
+      const [donationDoc, warehouseDoc, reviewDoc] = await Promise.all([
+        transaction.get(donationRef), transaction.get(warehouseRef), transaction.get(reviewRef),
+      ]);
+      if (!donationDoc.exists) throw new ApiError(404, 'Donation not found');
+      const donation = donationDoc.data();
+      if (!warehouseDoc.exists) throw new ApiError(404, 'Warehouse not found');
+      if (warehouseDoc.data().status !== 'active') {
+        throw new ApiError(400, 'Warehouse is not active');
+      }
+      if (donation.warehouseId) {
+        throw new ApiError(409, 'Donation is already assigned to a warehouse');
+      }
+      if (donation.status !== 'pending') {
+        throw new ApiError(409, `Donation must be pending to assign warehouse (current status: ${donation.status})`);
+      }
+      if (donation.reviewState === 'needs_information') {
+        throw new ApiError(409, 'Donation is awaiting information from donor');
+      }
+      if ((donation.version || 1) !== expectedVersion) {
+        throw new ApiError(409, 'Donation version has changed. Please reload before assigning.');
+      }
+      const assignedAt = serverTimestamp ? serverTimestamp() : new Date();
+      transaction.update(donationRef, { warehouseId, version: expectedVersion + 1 });
+      transaction.set(reviewRef, {
+        ...(reviewDoc.exists ? reviewDoc.data() : {}),
+        donationId,
+        warehouseId,
+        warehouseAssignedBy: staff.uid,
+        warehouseAssignedAt: assignedAt,
+      });
+    });
+    return { status: 200, body: { donation: (await get(donationId, headers)).body.donation } };
+  }
+
   async function decide(donationId, headers, body) {
     const staff = await authenticateStaff(headers);
     const { action, publicMessage, internalNote, expectedVersion } = body || {};
@@ -128,6 +176,7 @@ function createDonationReviewApi({ db, verifyToken, serverTimestamp }) {
 
       transaction.update(donationRef, updateData);
       transaction.set(reviewRef, {
+        ...(reviewDoc.exists ? reviewDoc.data() : {}),
         donationId,
         internalNote: cleanInternalNote || null,
         reviewedBy: staff.uid,
@@ -148,6 +197,80 @@ function createDonationReviewApi({ db, verifyToken, serverTimestamp }) {
         donation: (await get(result.id, headers)).body.donation,
       },
     };
+  }
+
+  async function confirmCategory(donationId, headers, body) {
+    const staff = await authenticateStaff(headers);
+    const category = body?.category;
+    const expectedVersion = body?.expectedVersion;
+    if (!['clothing', 'books', 'household'].includes(category) ||
+        !Number.isInteger(expectedVersion) || expectedVersion < 0) {
+      throw new ApiError(400, 'Valid category and confirmation version are required');
+    }
+
+    const donationRef = db.collection('donations').doc(donationId);
+    const reviewRef = db.collection('donation_reviews').doc(donationId);
+    await db.runTransaction(async transaction => {
+      const donationDoc = await transaction.get(donationRef);
+      if (!donationDoc.exists) throw new ApiError(404, 'Donation not found');
+      const donation = donationDoc.data();
+      if (staff.role === 'warehouse_admin' &&
+          (!donation.warehouseId || !staff.warehouseIds.includes(donation.warehouseId))) {
+        throw new ApiError(403, 'Forbidden: not your assigned warehouse');
+      }
+      const reviewDoc = await transaction.get(reviewRef);
+      const review = reviewDoc.exists ? reviewDoc.data() : {};
+      const currentVersion = review.staffConfirmationVersion || 0;
+      if (currentVersion !== expectedVersion) {
+        throw new ApiError(409, 'Category confirmation changed. Reload before saving.');
+      }
+      const confirmedAt = new Date();
+      transaction.set(reviewRef, {
+        ...review,
+        donationId,
+        warehouseId: donation.warehouseId || null,
+        aiPredictedCategory: donation.aiPredictedCategory || null,
+        aiModelVersion: donation.aiModelVersion || null,
+        staffConfirmedCategory: category,
+        staffConfirmedBy: staff.uid,
+        staffConfirmedAt: confirmedAt,
+        staffConfirmationVersion: currentVersion + 1,
+        categoryConfirmationHistory: [
+          ...(Array.isArray(review.categoryConfirmationHistory) ? review.categoryConfirmationHistory : []),
+          { category, actorUid: staff.uid, at: confirmedAt.toISOString(), version: currentVersion + 1 },
+        ],
+      });
+    });
+    return { status: 200, body: { donation: (await get(donationId, headers)).body.donation } };
+  }
+
+  async function aiSummary(headers) {
+    const staff = await authenticateStaff(headers);
+    const now = new Date();
+    const from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const snapshot = await db.collection('donation_reviews')
+      .orderBy('staffConfirmedAt', 'desc').limit(500).get();
+    let confirmedCount = 0;
+    let sampleCount = 0;
+    let matchingCount = 0;
+    for (const doc of snapshot.docs) {
+      const review = doc.data();
+      const confirmedAt = review.staffConfirmedAt?.toDate?.() || new Date(review.staffConfirmedAt);
+      if (!Number.isFinite(confirmedAt.getTime()) || confirmedAt < from || confirmedAt > now) continue;
+      if (staff.role === 'warehouse_admin' && !staff.warehouseIds.includes(review.warehouseId)) continue;
+      if (!['clothing', 'books', 'household'].includes(review.staffConfirmedCategory)) continue;
+      confirmedCount += 1;
+      if (!['clothing', 'books', 'household'].includes(review.aiPredictedCategory)) continue;
+      sampleCount += 1;
+      if (review.aiPredictedCategory === review.staffConfirmedCategory) matchingCount += 1;
+    }
+    return { status: 200, body: {
+      from: from.toISOString(), to: now.toISOString(), confirmedCount,
+      sampleCount, matchingCount,
+      agreementRate: sampleCount ? matchingCount / sampleCount : null,
+      sampleLimit: 500,
+      truncated: snapshot.docs.length === 500,
+    } };
   }
 
   async function get(donationId, headers) {
@@ -175,12 +298,32 @@ function createDonationReviewApi({ db, verifyToken, serverTimestamp }) {
         },
         internalNote: review.internalNote || null,
         reviewedBy: review.reviewedBy || null,
+        staffConfirmedCategory: review.staffConfirmedCategory || null,
+        staffConfirmedBy: review.staffConfirmedBy || null,
+        staffConfirmedAt: review.staffConfirmedAt?.toDate?.().toISOString() ||
+          (review.staffConfirmedAt instanceof Date ? review.staffConfirmedAt.toISOString() : (review.staffConfirmedAt || null)),
+        staffConfirmationVersion: review.staffConfirmationVersion || 0,
+        warehouseAssignedBy: review.warehouseAssignedBy || null,
+        warehouseAssignedAt: review.warehouseAssignedAt?.toDate?.().toISOString() ||
+          (review.warehouseAssignedAt instanceof Date ? review.warehouseAssignedAt.toISOString() : (review.warehouseAssignedAt || null)),
+        categoryConfirmationHistory: review.categoryConfirmationHistory || [],
         history: review.history || data.history || [],
       } },
     };
   }
 
   async function handle(method, path, headers, body) {
+    if (path === '/v1/admin/donations/ai-summary' && method === 'GET') {
+      return aiSummary(headers);
+    }
+    const confirmMatch = /^\/v1\/admin\/donations\/([^/]+)\/confirm-category$/.exec(path);
+    if (confirmMatch && method === 'POST') {
+      return confirmCategory(confirmMatch[1], headers, body);
+    }
+    const assignMatch = /^\/v1\/admin\/donations\/([^/]+)\/assign-warehouse$/.exec(path);
+    if (assignMatch && method === 'POST') {
+      return assignWarehouse(assignMatch[1], headers, body);
+    }
     const decideMatch = /^\/v1\/admin\/donations\/([^/]+)\/decide$/.exec(path);
     if (decideMatch && method === 'POST') {
       return decide(decideMatch[1], headers, body);

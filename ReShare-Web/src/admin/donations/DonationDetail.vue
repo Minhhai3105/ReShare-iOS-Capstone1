@@ -2,8 +2,9 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import AuthShell from '../auth/components/AuthShell.vue'
 import { decideDemoDonation, loadDemoDonation, statusLabels, steps } from './donation.demo'
-import { decideDonation, getDonationForReview, getDonationImageUrl } from './donation.service'
+import { assignDonationWarehouse, confirmDonationCategory, decideDonation, fetchQueueWarehouses, getAiAgreementSummary, getDonationForReview, getDonationImageUrl, resolveQueueAccess } from './donation.service'
 import { staffAssignment } from '../auth/auth.store'
+import { listWarehouses } from '../staff/staff.service'
 
 // Auth belongs to the routed adapter; the shared view has no Firebase dependency.
 const props = defineProps({
@@ -28,7 +29,18 @@ const imageError = ref(false)
 const action = ref('approve')
 const publicMessage = ref('')
 const internalNote = ref('')
+const staffCategory = ref('')
+const aiSubmitting = ref(false)
+const aiError = ref('')
+const aiSuccess = ref('')
+const aiSummary = ref(null)
+const warehouses = ref([])
+const selectedWarehouseId = ref('')
+const assigningWarehouse = ref(false)
+const assignmentError = ref('')
+const assignmentSuccess = ref('')
 let generation = 0
+const isSystemAdmin = computed(() => staffAssignment.value?.role === 'system_admin')
 const allowed = computed(() => {
   if (!donation.value) return false
   if (props.localPreview) return props.authorizeWarehouse(donation.value.hubId) && donation.value.hubId === props.warehouseId
@@ -37,8 +49,17 @@ const allowed = computed(() => {
 })
 const canDecide = computed(() => allowed.value && donation.value.status === 'pending'
   && donation.value.reviewState !== 'needs_information' && !conflict.value)
+const canAssignWarehouse = computed(() => !props.localPreview && isSystemAdmin.value && donation.value?.status === 'pending'
+  && donation.value.reviewState !== 'needs_information' && !donation.value.warehouseId)
 const activeImage = computed(() => donation.value?.images?.[selectedImage.value])
 const actionLabels = { approve: 'Duyệt donation', reject: 'Từ chối donation', information: 'Yêu cầu bổ sung' }
+const unitLabels = { piece: 'chiếc', kg: 'kg', bag: 'túi', box: 'thùng/hộp', set: 'bộ' }
+const categoryLabels = { clothing: 'Quần áo', books: 'Sách vở', household: 'Gia dụng' }
+const categoryName = value => categoryLabels[value] || value || 'Chưa có dữ liệu'
+const conditionLabels = { new: 'Mới 100%', like_new: 'Như mới (95%)', good: 'Còn tốt', fair: 'Dùng được' }
+const deliveryMethodLabels = { drop_off: 'Mô phỏng gửi tại điểm', pickup: 'Mô phỏng nhận tận nơi' }
+const conditionName = value => conditionLabels[value] || value || 'Chưa có dữ liệu'
+const deliveryMethodName = value => deliveryMethodLabels[value] || value || 'Chưa có dữ liệu'
 const messages = {
   NETWORK: 'Không thể kết nối. Dữ liệu và quyết định chưa được lưu; hãy thử lại.',
   NOT_FOUND: 'Không tìm thấy donation. Kiểm tra mã đơn hoặc quay về quản trị.',
@@ -50,13 +71,18 @@ function formatDate(value) {
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? 'Chưa có' : new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Ho_Chi_Minh' }).format(date)
 }
+function warehouseName(id) {
+  if (!id) return 'Chưa phân công'
+  const found = warehouses.value.find(w => w.id === id)
+  return found?.name || id
+}
 function normalizeReviewDonation(record) {
   return {
     ...record,
     warehouseId: record.warehouseId || '',
     donor: record.donor || { name: record.donorName || record.donorId || 'Người gửi', email: null },
     version: record.version || 1,
-    quantity: record.quantity ?? 'Chưa có dữ liệu',
+    quantity: record.quantity == null ? 'Chưa có dữ liệu' : `${record.quantity} ${unitLabels[record.unitId] || record.unitId || ''}`.trim(),
     deliveryMethod: record.deliveryMethod || 'Chưa có dữ liệu',
     images: (record.imagePublicIds?.length ? [] : (record.images || (record.imageUrl ? [record.imageUrl] : [])))
       .filter((url) => typeof url === 'string' && /^(https:\/\/|data:image\/)/.test(url))
@@ -92,6 +118,13 @@ async function load(resetForm = false) {
   selectedImage.value = 0
   imageLoading.value = false
   imageError.value = false
+  aiError.value = ''
+  aiSuccess.value = ''
+  aiSummary.value = null
+  assignmentError.value = ''
+  assignmentSuccess.value = ''
+  selectedWarehouseId.value = ''
+  warehouses.value = []
   if (resetForm) {
     action.value = 'approve'
     publicMessage.value = ''
@@ -103,11 +136,97 @@ async function load(resetForm = false) {
       : await getDonationForReview(props.donationId)
     if (ticket !== generation) return
     donation.value = props.localPreview ? result : normalizeReviewDonation(result)
+    staffCategory.value = result.staffConfirmedCategory || result.donorConfirmedCategory || result.category || ''
     if (!props.localPreview) loadImages(result, ticket)
+    if (!props.localPreview) loadAiSummary(ticket)
+    if (!props.localPreview) loadWarehouses(ticket)
   } catch (cause) {
     if (ticket === generation) error.value = messages[cause.code] || 'Không tải được donation.'
   } finally {
     if (ticket === generation) loading.value = false
+  }
+}
+async function loadWarehouses(ticket) {
+  try {
+    if (isSystemAdmin.value) {
+      const result = await listWarehouses()
+      if (ticket === generation) warehouses.value = result.warehouses || []
+    } else {
+      const access = resolveQueueAccess(staffAssignment.value)
+      if (access) {
+        const list = await fetchQueueWarehouses(access)
+        if (ticket === generation) warehouses.value = list || []
+      }
+    }
+  } catch {
+    if (ticket === generation && isSystemAdmin.value) {
+      assignmentError.value = 'Không tải được danh sách kho đang hoạt động. Hãy tải lại trang.'
+    }
+  }
+}
+async function assignWarehouse() {
+  if (!canAssignWarehouse.value || assigningWarehouse.value || !selectedWarehouseId.value ||
+      !warehouses.value.some(warehouse => warehouse.id === selectedWarehouseId.value)) return
+  const ticket = generation
+  assigningWarehouse.value = true
+  assignmentError.value = ''
+  assignmentSuccess.value = ''
+  try {
+    const result = await assignDonationWarehouse({
+      donationId: donation.value.id,
+      warehouseId: selectedWarehouseId.value,
+      expectedVersion: donation.value.version,
+    })
+    if (ticket !== generation) return
+    donation.value = normalizeReviewDonation(result)
+    loadImages(result, ticket)
+    assignmentSuccess.value = 'Đã gán kho xử lý. Nhân sự của kho này có thể xem đơn.'
+  } catch (cause) {
+    if (ticket !== generation) return
+    const errorMap = {
+      'Donation is already assigned to a warehouse': 'Đơn quyên góp này đã được gán kho trước đó.',
+      'Warehouse is not active': 'Kho được chọn hiện không ở trạng thái hoạt động.',
+      'Warehouse not found': 'Không tìm thấy kho được chọn.',
+      'Donation is awaiting information from donor': 'Đơn đang chờ donor bổ sung thông tin, chưa thể gán kho.',
+      'Donation version has changed. Please reload before assigning.': 'Phiên bản đơn đã thay đổi kể từ lúc tải trang. Hãy tải lại dữ liệu.',
+    }
+    assignmentError.value = errorMap[cause.serverMessage] || cause.serverMessage || (cause.code === 'CONFLICT'
+      ? 'Trạng thái đơn hoặc kho đã thay đổi. Hãy tải lại trang trước khi gán tiếp.'
+      : messages[cause.code] || 'Không gán được kho. Hãy thử lại.')
+  } finally {
+    assigningWarehouse.value = false
+  }
+}
+async function loadAiSummary(ticket) {
+  try {
+    const result = await getAiAgreementSummary()
+    if (ticket === generation) aiSummary.value = result
+  } catch {
+    if (ticket === generation) aiSummary.value = null
+  }
+}
+async function confirmCategory() {
+  if (props.localPreview || !allowed.value || !donation.value || aiSubmitting.value || !staffCategory.value) return
+  const ticket = generation
+  aiSubmitting.value = true
+  aiError.value = ''
+  aiSuccess.value = ''
+  try {
+    const result = await confirmDonationCategory({
+      donationId: donation.value.id,
+      category: staffCategory.value,
+      expectedVersion: donation.value.staffConfirmationVersion || 0,
+    })
+    if (ticket !== generation) return
+    donation.value = normalizeReviewDonation(result)
+    loadImages(result, ticket)
+    aiSuccess.value = 'Đã lưu danh mục nhân sự xác nhận; gợi ý AI và lựa chọn của người gửi được giữ nguyên.'
+    loadAiSummary(ticket)
+  } catch (cause) {
+    if (ticket !== generation) return
+    aiError.value = messages[cause.code] || 'Không lưu được danh mục. Hãy thử lại.'
+  } finally {
+    aiSubmitting.value = false
   }
 }
 async function submit() {
@@ -204,6 +323,27 @@ watch(enlarged, async (value) => {
           <RouterLink v-if="!localPreview && donation.status === 'approved' && donation.warehouseId" :to="{ name: 'admin-donation-receipt', params: { donationId: donation.id } }">Ghi nhận hàng thực nhận →</RouterLink>
           <p v-if="donation.statusNote"><strong>Nội dung công khai cho donor:</strong> {{ donation.statusNote }}</p>
         </section>
+        <section v-if="!localPreview && (isSystemAdmin || donation.warehouseId)" class="card" aria-labelledby="warehouse-assignment-title">
+          <h2 id="warehouse-assignment-title">{{ donation.warehouseId ? 'Kho phụ trách' : 'Phân kho xử lý' }}</h2>
+          <p v-if="donation.warehouseId">Kho phụ trách: <strong>{{ warehouseName(donation.warehouseId) }}</strong></p>
+          <p v-if="donation.warehouseAssignedAt">
+            Phân công lúc {{ formatDate(donation.warehouseAssignedAt) }}
+            <span v-if="donation.warehouseAssignedBy">bởi {{ donation.warehouseAssignedBy }}</span>
+          </p>
+          <template v-if="isSystemAdmin">
+            <form v-if="canAssignWarehouse" @submit.prevent="assignWarehouse">
+              <label for="assign-warehouse">Kho đang hoạt động</label>
+              <select id="assign-warehouse" v-model="selectedWarehouseId" required :disabled="assigningWarehouse || !warehouses.length">
+                <option value="" disabled>Chọn kho xử lý</option>
+                <option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">{{ warehouse.name }}</option>
+              </select>
+              <button type="submit" :disabled="assigningWarehouse || !selectedWarehouseId">{{ assigningWarehouse ? 'Đang gán…' : 'Gán kho cho đơn' }}</button>
+            </form>
+            <p v-else-if="!donation.warehouseId" class="notice">Chỉ gán được đơn chưa phân kho và đang chờ thẩm định.</p>
+            <p v-if="assignmentError" role="alert" class="notice error">{{ assignmentError }}</p>
+            <p v-if="assignmentSuccess" role="status" class="notice success">{{ assignmentSuccess }}</p>
+          </template>
+        </section>
         <div class="detail-grid">
           <div class="details">
             <section class="card" aria-labelledby="item-title">
@@ -216,11 +356,30 @@ watch(enlarged, async (value) => {
               <p v-if="imageLoading" role="status" class="notice">Đang tải ảnh…</p>
               <p v-if="imageError" role="alert" class="notice error">Một số ảnh chưa tải được. Bạn có thể tải lại trang.</p>
               <p v-else-if="!activeImage && !imageLoading" class="notice">Người gửi chưa cung cấp ảnh.</p>
-              <dl class="facts"><div><dt>Danh mục</dt><dd>{{ donation.category }}</dd></div><div><dt>Tình trạng khai báo</dt><dd>{{ donation.condition }}</dd></div><div><dt>Số lượng khai báo</dt><dd>{{ donation.quantity }}</dd></div><div><dt>Hình thức giao</dt><dd>{{ donation.deliveryMethod }}</dd></div></dl>
+              <dl class="facts"><div><dt>Danh mục</dt><dd>{{ categoryName(donation.category) }}</dd></div><div><dt>Tình trạng khai báo</dt><dd>{{ conditionName(donation.condition) }}</dd></div><div><dt>Số lượng khai báo</dt><dd>{{ donation.quantity }}</dd></div><div><dt>Hình thức giao</dt><dd>{{ deliveryMethodName(donation.deliveryMethod) }}</dd></div></dl>
               <p class="description">{{ donation.description }}</p>
             </section>
-            <section class="card"><h2>Người tặng & xác nhận</h2><dl class="facts"><div><dt>Donor</dt><dd>{{ donation.donor.name }}</dd></div><div><dt>Email</dt><dd>{{ donation.donor.email }}</dd></div><div><dt>Ngày gửi</dt><dd>{{ formatDate(donation.createdAt) }}</dd></div><div><dt>Donor confirmation</dt><dd>{{ donation.donorConfirmation || 'Chưa có dữ liệu xác nhận từ donor.' }}</dd></div></dl></section>
-            <section class="card"><h2>AI prediction</h2><template v-if="donation.aiPrediction"><p>{{ donation.aiPrediction.label }} · Độ tin cậy {{ donation.aiPrediction.confidence }}%</p><p>Thông tin tham khảo, nhân sự chịu trách nhiệm thẩm định.</p></template><p v-else>Chưa có kết quả AI cho donation này.</p></section>
+            <section class="card"><h2>Người tặng & xác nhận</h2><dl class="facts"><div><dt>Donor</dt><dd>{{ donation.donor.name }}</dd></div><div><dt>Email</dt><dd>{{ donation.donor.email }}</dd></div><div><dt>Ngày gửi</dt><dd>{{ formatDate(donation.createdAt) }}</dd></div><div><dt>Danh mục người gửi xác nhận</dt><dd>{{ donation.donorConfirmedCategory ? categoryName(donation.donorConfirmedCategory) : 'Chưa có xác nhận riêng' }}</dd></div></dl></section>
+            <section class="card">
+              <h2>Đối chiếu danh mục AI</h2>
+              <dl class="facts">
+                <div><dt>AI gợi ý</dt><dd>{{ donation.aiPredictedCategory ? categoryName(donation.aiPredictedCategory) : 'Không có gợi ý AI' }}</dd></div>
+                <div><dt>Độ tin cậy</dt><dd>{{ typeof donation.aiConfidence === 'number' ? `${Math.round(donation.aiConfidence * 100)}%` : 'Không có' }}</dd></div>
+                <div><dt>Model</dt><dd>{{ donation.aiModelVersion || 'Không có' }}</dd></div>
+                <div><dt>Nhân sự xác nhận</dt><dd>{{ donation.staffConfirmedCategory ? categoryName(donation.staffConfirmedCategory) : 'Chưa xác nhận' }}</dd></div>
+              </dl>
+              <p v-if="donation.staffConfirmedAt">Xác nhận lúc {{ formatDate(donation.staffConfirmedAt) }} bởi {{ donation.staffConfirmedBy }}</p>
+              <form v-if="!localPreview" @submit.prevent="confirmCategory">
+                <label for="staff-category">Danh mục thực tế theo nhân sự</label>
+                <select id="staff-category" v-model="staffCategory" :disabled="aiSubmitting || !allowed">
+                  <option value="clothing">Quần áo</option><option value="books">Sách vở</option><option value="household">Gia dụng</option>
+                </select>
+                <button type="submit" :disabled="aiSubmitting || !allowed || !staffCategory">{{ aiSubmitting ? 'Đang lưu…' : 'Lưu xác nhận danh mục' }}</button>
+                <p v-if="aiError" role="alert" class="notice error">{{ aiError }}</p>
+                <p v-if="aiSuccess" role="status" class="notice success">{{ aiSuccess }}</p>
+              </form>
+              <p v-if="aiSummary">30 ngày gần đây: AI trùng với nhân sự {{ aiSummary.matchingCount }}/{{ aiSummary.sampleCount }} đơn có đủ hai nhãn{{ aiSummary.sampleCount ? ` (${Math.round(aiSummary.agreementRate * 100)}%)` : '' }}. Tổng đơn nhân sự đã xác nhận: {{ aiSummary.confirmedCount }}. Mẫu tối đa {{ aiSummary.sampleLimit }} đơn{{ aiSummary.truncated ? ' (đã chạm giới hạn mẫu)' : '' }}.</p>
+            </section>
             <section class="card">
               <h2>Lịch sử trạng thái</h2>
               <ol class="history">
