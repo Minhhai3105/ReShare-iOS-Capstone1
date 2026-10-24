@@ -4629,3 +4629,112 @@ body:has(.landing-page) {
     padding: 19px;
   }
 }
+
+/* Header navigation: show a short primary row and keep every section in the compact menu. */
+.landing-page .landing-nav--desktop {
+  gap: clamp(16px, 1.8vw, 24px);
+}
+
+.landing-page .landing-nav--desktop > a,
+.landing-page .landing-more > summary,
+.landing-page .header-cta {
+  white-space: nowrap;
+}
+
+.landing-page .landing-nav--mobile {
+  display: none;
+}
+
+.landing-page .landing-more {
+  position: relative;
+}
+
+.landing-page .landing-more > summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #4e5c55;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+
+.landing-page .landing-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.landing-page .landing-more > summary::after {
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  content: '';
+  transform: translateY(-2px) rotate(45deg);
+}
+
+.landing-page .landing-more[open] > summary::after {
+  transform: translateY(2px) rotate(225deg);
+}
+
+.landing-page .landing-more > summary:hover,
+.landing-page .landing-more > summary:focus-visible {
+  color: var(--green);
+}
+
+.landing-page .landing-more > summary:focus-visible {
+  outline: 3px solid #77b79a;
+  outline-offset: 4px;
+}
+
+.landing-page .landing-more__list {
+  position: absolute;
+  z-index: 2;
+  top: calc(100% + 20px);
+  right: 0;
+  display: grid;
+  min-width: 190px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 14px 30px rgba(29, 56, 39, 0.12);
+}
+
+.landing-page .landing-more__list a {
+  padding: 9px 12px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.landing-page .landing-more__list a:hover,
+.landing-page .landing-more__list a:focus-visible {
+  background: var(--mint);
+}
+
+@media (max-width: 1050px) {
+  .landing-page .landing-nav--desktop {
+    display: none;
+  }
+
+  .landing-page .landing-nav--mobile {
+    right: 0;
+    left: 0;
+    max-height: calc(100dvh - 82px);
+    overflow-y: auto;
+  }
+
+  .landing-page .landing-nav--mobile.landing-nav--open {
+    display: flex;
+  }
+}
+
+@media (max-width: 760px) {
+  .landing-page .header-cta {
+    display: none;
+  }
+
+  .landing-page .landing-nav--mobile {
+    max-height: calc(100dvh - 70px);
+  }
+}
