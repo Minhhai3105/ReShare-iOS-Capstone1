@@ -13,7 +13,7 @@ const menu = [
 <template>
   <div class="admin-chrome">
     <aside class="ac-sidebar">
-      <div class="ac-brand"><img :src="brandLogo" alt="" width="28" height="28" /><strong>ReShare</strong><small>PORTAL</small></div>
+      <div class="ac-brand"><img :src="brandLogo" alt="" width="34" height="34" style="filter: drop-shadow(0 2px 4px rgba(20, 67, 45, 0.12));" /><strong>ReShare</strong><small>PORTAL</small></div>
       <nav aria-label="Điều hướng quản trị">
         <div class="ac-group-label">VẬN HÀNH KHO &amp; XỬ LÝ</div>
         <button v-for="entry in menu" :key="entry.label" :disabled="!entry.screen" :class="['ac-nav-item', { active: entry.screen === (screen === 'Q' ? 'Q' : 'E') }]" :aria-current="entry.screen === (screen === 'Q' ? 'Q' : 'E') ? 'page' : undefined" @click="entry.screen && emit('navigate', entry.screen)"><AdminIcon :name="entry.icon" :size="19" />{{ entry.label }}</button>
