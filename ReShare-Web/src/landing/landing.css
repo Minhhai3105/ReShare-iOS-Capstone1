@@ -97,9 +97,10 @@ body:has(.landing-page) {
 
 .landing-page .brand img {
   display: block;
-  width: 36px;
-  height: 36px;
+  width: 50px;
+  height: 50px;
   object-fit: contain;
+  filter: drop-shadow(0 3px 6px rgb(20 67 45 / 0.14));
 }
 
 .landing-page .landing-nav {
@@ -1697,8 +1698,8 @@ body:has(.landing-page) {
   }
 
   .landing-page .brand img {
-    width: 32px;
-    height: 32px;
+    width: 42px;
+    height: 42px;
   }
 
   .landing-page .menu-toggle {
@@ -1966,8 +1967,8 @@ body:has(.landing-page) {
   }
 
   .landing-page .brand img {
-    width: 29px;
-    height: 29px;
+    width: 38px;
+    height: 38px;
   }
 
   .landing-page .header-cta {
@@ -4052,8 +4053,9 @@ body:has(.landing-page) {
 }
 
 .landing-page .brand--footer img {
-  width: 33px;
-  height: 33px;
+  width: 44px;
+  height: 44px;
+  filter: drop-shadow(0 2px 5px rgb(20 67 45 / 0.12));
 }
 
 .landing-page .brand--footer {
