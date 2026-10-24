@@ -118,6 +118,10 @@ body:has(.landing-page) {
   transition: color 160ms ease;
 }
 
+.landing-page .landing-nav a {
+  white-space: nowrap;
+}
+
 .landing-page .landing-nav a:hover,
 .landing-page .landing-nav a:focus-visible,
 .landing-page .footer-column a:hover {
@@ -151,8 +155,13 @@ body:has(.landing-page) {
 .landing-page .button:focus-visible,
 .landing-page a:focus-visible,
 .landing-page button:focus-visible {
-  outline: 3px solid #77b79a;
+  outline: 3px solid #176b55;
   outline-offset: 3px;
+}
+
+.landing-page .landing-footer a:focus-visible,
+.landing-page .landing-footer button:focus-visible {
+  outline-color: #a7d8bc;
 }
 
 .landing-page .button svg {
@@ -4570,10 +4579,11 @@ body:has(.landing-page) {
   resize: vertical;
 }
 
-.landing-page .contact-field input:focus,
-.landing-page .contact-field textarea:focus {
+.landing-page .contact-field input:focus-visible,
+.landing-page .contact-field textarea:focus-visible {
   border-color: #57966b;
-  outline: 2px solid rgba(87, 150, 107, 0.2);
+  outline: 3px solid #176b55;
+  outline-offset: 2px;
 }
 
 .landing-page .contact-field input[aria-invalid="true"],
