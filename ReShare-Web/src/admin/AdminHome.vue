@@ -46,6 +46,10 @@ async function onSignOutClick() {
         <AuthIcon name="inbox" />Hàng đợi yêu cầu quyên góp
       </RouterLink>
 
+      <RouterLink :to="{ name: ADMIN_ROUTE.beneficiaryList }" class="auth-btn auth-btn--primary admin-home__staff-link">
+        <AuthIcon name="users" />Người thụ hưởng
+      </RouterLink>
+
       <RouterLink v-if="isDemoBuild && demoWarehouse" class="auth-btn auth-btn--primary"
         :to="{ name: 'admin-donation-detail', params: { warehouseId: demoWarehouse, donationId: 'demo-001' } }">
         Xem Donation Detail — demo RC1D-67

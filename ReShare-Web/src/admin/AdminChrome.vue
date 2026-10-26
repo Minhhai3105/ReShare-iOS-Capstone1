@@ -1,13 +1,27 @@
 <script setup lang="ts">
 import AdminIcon from './AdminIcon.vue';
 import brandLogo from './auth/assets/reshare-logo.png';
-defineProps<{ screen: 'E' | 'F' | 'Q'; role: 'system_admin' | 'warehouse_admin' | 'viewer' }>();
-const emit = defineEmits<{ navigate: [screen: 'E' | 'F' | 'Q']; role: [role: 'system_admin' | 'warehouse_admin' | 'viewer'] }>();
+type AdminScreen = 'E' | 'F' | 'Q' | 'B';
+const props = withDefaults(defineProps<{
+  screen: AdminScreen;
+  role: 'system_admin' | 'warehouse_admin' | 'viewer';
+  enabledScreens?: AdminScreen[];
+  showPreview?: boolean;
+  warehouseLabel?: string;
+  accountName?: string;
+}>(), {
+  enabledScreens: () => ['E', 'F', 'Q'],
+  showPreview: true,
+  warehouseLabel: 'Kho demo Hải Châu',
+  accountName: 'Nguyễn Văn An',
+});
+const emit = defineEmits<{ navigate: [screen: AdminScreen]; role: [role: 'system_admin' | 'warehouse_admin' | 'viewer'] }>();
 const menu = [
   { label: 'Tổng quan', icon: 'grid' }, { label: 'Yêu cầu quyên góp', icon: 'donation', screen: 'E' as const },
-  { label: 'Kho hàng', icon: 'box' }, { label: 'Người thụ hưởng', icon: 'users' },
+  { label: 'Kho hàng', icon: 'box' }, { label: 'Người thụ hưởng', icon: 'users', screen: 'B' as const },
   { label: 'Báo cáo', icon: 'chart', screen: 'Q' as const }, { label: 'Nhật ký', icon: 'log' }
 ];
+const activeScreen = props.screen === 'Q' || props.screen === 'B' ? props.screen : 'E'
 </script>
 
 <template>
@@ -16,21 +30,21 @@ const menu = [
       <div class="ac-brand"><img :src="brandLogo" alt="" width="28" height="28" /><strong>ReShare</strong><small>PORTAL</small></div>
       <nav aria-label="Điều hướng quản trị">
         <div class="ac-group-label">VẬN HÀNH KHO &amp; XỬ LÝ</div>
-        <button v-for="entry in menu" :key="entry.label" :disabled="!entry.screen" :class="['ac-nav-item', { active: entry.screen === (screen === 'Q' ? 'Q' : 'E') }]" :aria-current="entry.screen === (screen === 'Q' ? 'Q' : 'E') ? 'page' : undefined" @click="entry.screen && emit('navigate', entry.screen)"><AdminIcon :name="entry.icon" :size="19" />{{ entry.label }}</button>
+        <button v-for="entry in menu" :key="entry.label" :disabled="!entry.screen || !props.enabledScreens.includes(entry.screen)" :class="['ac-nav-item', { active: entry.screen === activeScreen }]" :aria-current="entry.screen === activeScreen ? 'page' : undefined" @click="entry.screen && emit('navigate', entry.screen)"><AdminIcon :name="entry.icon" :size="19" />{{ entry.label }}</button>
         <div class="ac-group-label second">QUẢN TRỊ HỆ THỐNG</div>
         <button class="ac-nav-item" disabled><AdminIcon name="shield" :size="19" />Nhân sự &amp; Phân quyền</button>
         <button class="ac-nav-item" disabled><AdminIcon name="settings" :size="19" />Cấu hình chung</button>
       </nav>
-      <div class="ac-station"><div>Bản xem thử RC1D-59</div><small>Không kết nối dữ liệu vận hành</small></div>
+      <div class="ac-station"><div>{{ props.screen === 'B' ? 'Bản xem thử US15' : 'Bản xem thử RC1D-59' }}</div><small>Không kết nối dữ liệu vận hành</small></div>
     </aside>
     <div class="ac-main">
       <header class="ac-topbar">
-        <div class="ac-topbrand"><b>ReShare {{ screen === 'Q' ? 'Ops' : 'Portal' }}</b><small>{{ screen === 'Q' ? 'Cổng vận hành nội bộ' : 'Hệ thống điều phối vận hành' }}</small></div>
-        <div class="ac-warehouse"><b>Kho demo Hải Châu <em>DEMO</em></b><small>Phạm vi mô phỏng</small></div>
+        <div class="ac-topbrand"><b>ReShare {{ props.screen === 'Q' ? 'Ops' : 'Portal' }}</b><small>{{ props.screen === 'Q' ? 'Cổng vận hành nội bộ' : 'Hệ thống điều phối vận hành' }}</small></div>
+        <div class="ac-warehouse"><b>{{ props.warehouseLabel }} <em>DEMO</em></b><small>Phạm vi mô phỏng</small></div>
         <div class="ac-search">Dữ liệu mẫu trong trình duyệt</div>
-        <div class="ac-user"><span>Nguyễn Văn An<small>{{ role === 'warehouse_admin' ? 'Warehouse Admin' : role === 'viewer' ? 'Người xem' : 'System Admin' }}</small></span><span class="ac-avatar"><AdminIcon name="user" :size="17" /></span></div>
+        <div class="ac-user"><span>{{ props.accountName }}<small>{{ props.role === 'warehouse_admin' ? 'Warehouse Admin' : props.role === 'viewer' ? 'Người xem' : 'System Admin' }}</small></span><span class="ac-avatar"><AdminIcon name="user" :size="17" /></span></div>
       </header>
-      <main class="ac-content"><slot /><div class="ac-preview"><span>RC1D-59 · Preview dữ liệu mock</span><button @click="emit('navigate', 'E')">E · Chờ duyệt</button><button @click="emit('navigate', 'F')">F · Đã duyệt</button><button @click="emit('navigate', 'Q')">Q · Báo cáo</button><label>Vai trò: <select :value="role" @change="emit('role', ($event.target as HTMLSelectElement).value as 'system_admin' | 'warehouse_admin' | 'viewer')"><option value="system_admin">System Admin</option><option value="warehouse_admin">Warehouse Admin · Hải Châu</option><option value="viewer">Người xem</option></select></label></div></main>
+      <main class="ac-content"><slot /><div v-if="props.showPreview" class="ac-preview"><span>RC1D-59 · Preview dữ liệu mock</span><button @click="emit('navigate', 'E')">E · Chờ duyệt</button><button @click="emit('navigate', 'F')">F · Đã duyệt</button><button @click="emit('navigate', 'Q')">Q · Báo cáo</button><label>Vai trò: <select :value="props.role" @change="emit('role', ($event.target as HTMLSelectElement).value as 'system_admin' | 'warehouse_admin' | 'viewer')"><option value="system_admin">System Admin</option><option value="warehouse_admin">Warehouse Admin · Hải Châu</option><option value="viewer">Người xem</option></select></label></div></main>
     </div>
   </div>
 </template>
