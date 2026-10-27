@@ -1,10 +1,10 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import AuthIcon from '../../auth/components/AuthIcon.vue'
 import { currentUser, staffAssignment, canAccessWarehouse } from '../../auth/auth.store'
 import { ADMIN_ROUTE } from '../../auth/auth.constants'
-import { demoReceiptRepository, receiptRepository } from '../receipt.repository'
+import { demoReceiptRepository, RECEIPT_ERROR, receiptRepository } from '../receipt.repository'
 import brandLogo from '../../auth/assets/reshare-logo.png'
 
 const route = useRoute()
@@ -20,6 +20,14 @@ const donation = ref(null)
 const options = ref(null)
 const form = reactive({ warehouseId: '', quantity: '', unitId: '', conditionId: '', note: '' })
 const backRoute = { name: ADMIN_ROUTE.home }
+// Lỗi khi gửi phiếu: { kind, message, status }. retryPayload giữ nguyên dữ liệu đã gửi để thử lại.
+const submitFailure = ref(null)
+const retryPayload = ref(null)
+const failureNotice = ref(null)
+const failureKind = computed(() => submitFailure.value?.kind ?? null)
+// 403 và 409 khóa nút gửi cho đến khi tải lại trạng thái; lỗi tạm thời chỉ cho thử lại bằng payload cũ.
+const submitLocked = computed(() => failureKind.value === RECEIPT_ERROR.forbidden ||
+  failureKind.value === RECEIPT_ERROR.conflict || Boolean(retryPayload.value))
 
 const allowedWarehouses = computed(() => (options.value?.warehouses ?? []).filter((warehouse) =>
   isDemoPreview || (warehouse.id === donation.value?.expectedWarehouseId && canAccessWarehouse(warehouse.id)),
@@ -32,6 +40,8 @@ const validForm = computed(() => !loadError.value && isApproved.value && selecte
 async function load() {
   loading.value = true
   loadError.value = ''
+  submitFailure.value = null
+  retryPayload.value = null
   donation.value = null
   options.value = null
   try {
@@ -61,6 +71,7 @@ async function load() {
 
 function askToConfirm() {
   submitError.value = ''
+  if (submitLocked.value) return
   if (!validForm.value) {
     submitError.value = 'Vui lòng nhập số lượng hợp lệ và chọn kho, đơn vị, tình trạng.'
     return
@@ -68,28 +79,53 @@ function askToConfirm() {
   showConfirm.value = true
 }
 
-async function submitReceipt() {
+async function sendReceipt(payload) {
+  if (saving.value || createdReceipt.value) return
   saving.value = true
   submitError.value = ''
+  submitFailure.value = null
+  retryPayload.value = null
   try {
-    const result = await repository.createReceipt({
-      donationId: donation.value.id,
-      warehouseId: form.warehouseId,
-      quantity: Number(form.quantity),
-      unitId: form.unitId,
-      conditionId: form.conditionId,
-      note: form.note.trim(),
-      actorId: isDemoPreview ? 'preview-staff' : currentUser.value.id,
-    })
+    const result = await repository.createReceipt(payload)
     createdReceipt.value = result ?? {}
-    showConfirm.value = false
   } catch (error) {
-    showConfirm.value = false
-    submitError.value = error?.message || 'Không thể lưu phiếu thực nhận. Vui lòng thử lại.'
+    const kind = error?.kind ?? RECEIPT_ERROR.other
+    submitFailure.value = {
+      kind,
+      status: error?.status ?? 0,
+      message: error?.message || 'Không thể lưu phiếu thực nhận.',
+    }
+    if (kind === RECEIPT_ERROR.retryable) retryPayload.value = payload
+    await nextTick()
+    failureNotice.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   } finally {
+    showConfirm.value = false
     saving.value = false
   }
 }
+
+function submitReceipt() {
+  return sendReceipt(Object.freeze({
+    donationId: donation.value.id,
+    warehouseId: form.warehouseId,
+    quantity: Number(form.quantity),
+    unitId: form.unitId,
+    conditionId: form.conditionId,
+    note: form.note.trim(),
+    actorId: isDemoPreview ? 'preview-staff' : currentUser.value.id,
+  }))
+}
+
+function retrySubmit() {
+  if (retryPayload.value) sendReceipt(retryPayload.value)
+}
+
+// Người dùng sửa biểu mẫu thì payload cũ không còn khớp: bỏ lựa chọn thử lại.
+watch(() => ({ ...form }), () => {
+  if (!retryPayload.value) return
+  retryPayload.value = null
+  submitFailure.value = null
+})
 
 onMounted(load)
 </script>
@@ -143,6 +179,41 @@ onMounted(load)
         <AuthIcon name="alert-circle" />
         <div><strong>Chưa thể ghi nhận</strong><p>{{ loadError }}</p>
           <button class="receipt-link-button" type="button" @click="load">Thử tải lại</button>
+        </div>
+      </div>
+
+      <div v-if="submitFailure && !createdReceipt" ref="failureNotice" class="receipt-notice receipt-notice--error" role="alert">
+        <AuthIcon name="alert-circle" />
+        <div v-if="failureKind === RECEIPT_ERROR.forbidden">
+          <strong>Không có quyền ghi nhận thực nhận (403)</strong>
+          <p>{{ submitFailure.message }}</p>
+          <p>Phiếu chưa được lưu và nút xác nhận đã bị khóa để tránh gửi trùng. Hãy liên hệ quản trị hệ thống để kiểm tra vai trò và phân công kho của bạn, sau đó tải lại trạng thái.</p>
+          <button class="receipt-link-button" type="button" @click="load">Tải lại trạng thái quyền</button>
+        </div>
+        <div v-else-if="failureKind === RECEIPT_ERROR.conflict">
+          <strong>Yêu cầu đã thay đổi hoặc đã được xử lý (409)</strong>
+          <p>{{ submitFailure.message }}</p>
+          <p>Dữ liệu trên màn hình có thể đã cũ, hoặc yêu cầu đã được ghi nhận ở nơi khác. Hãy tải trạng thái mới nhất và kiểm tra lại trước khi gửi tiếp.</p>
+          <button class="receipt-link-button" type="button" @click="load">Tải lại trạng thái mới nhất</button>
+        </div>
+        <div v-else-if="failureKind === RECEIPT_ERROR.retryable">
+          <strong>Chưa lưu được phiếu{{ submitFailure.status ? ` (${submitFailure.status})` : '' }}</strong>
+          <p>{{ submitFailure.message }}</p>
+          <p v-if="retryPayload">Bạn có thể thử lại với đúng dữ liệu vừa gửi. Nếu sửa biểu mẫu, lựa chọn thử lại sẽ bị hủy và bạn cần xác nhận lại.</p>
+          <button v-if="retryPayload" class="button button--primary failure-retry" type="button" :disabled="saving" @click="retrySubmit">
+            {{ saving ? 'Đang gửi lại…' : 'Thử lại' }}
+          </button>
+        </div>
+        <div v-else-if="failureKind === RECEIPT_ERROR.auth">
+          <strong>Phiên đăng nhập không còn hiệu lực</strong>
+          <p>{{ submitFailure.message }}</p>
+          <RouterLink class="receipt-link-button" :to="{ name: ADMIN_ROUTE.login, query: { redirect: route.fullPath } }">Đăng nhập lại</RouterLink>
+        </div>
+        <div v-else>
+          <strong>Không thể lưu phiếu thực nhận{{ submitFailure.status ? ` (${submitFailure.status})` : '' }}</strong>
+          <p>{{ submitFailure.message }}</p>
+          <p>Kiểm tra lại thông tin đã nhập hoặc tải lại trạng thái trước khi gửi lại.</p>
+          <button class="receipt-link-button" type="button" @click="load">Tải lại trạng thái</button>
         </div>
       </div>
 
@@ -226,7 +297,7 @@ onMounted(load)
       <div v-if="donation && options" class="sticky-actions">
         <span class="sticky-actions__hint"><AuthIcon name="terminal" />{{ isDemoPreview ? 'Chế độ xem thử, không lưu dữ liệu' : 'Ghi nhận sau khi kiểm đếm thực tế' }}</span>
         <div><RouterLink :to="backRoute" class="button button--soft">Hủy bỏ</RouterLink>
-          <button type="submit" form="actual-receipt-form" class="button button--primary" :disabled="saving || !isApproved || Boolean(createdReceipt)"><AuthIcon name="check" />Xác nhận thực nhận</button></div>
+          <button type="submit" form="actual-receipt-form" class="button button--primary" :disabled="saving || submitLocked || !isApproved || Boolean(createdReceipt)"><AuthIcon name="check" />Xác nhận thực nhận</button></div>
       </div>
 
       <div v-if="showConfirm" class="dialog-backdrop" role="presentation" @click.self="showConfirm = false">
@@ -245,6 +316,7 @@ onMounted(load)
 
 <style scoped>
 .receipt-page{width:min(1120px,100%);margin:0 auto;display:grid;gap:18px;color:#182235}.receipt-page :where(h1,h2,p,dl){margin:0}.receipt-back{display:inline-flex;align-items:center;gap:8px;color:#435064;text-decoration:none;font-weight:600}.receipt-card{background:#fff;border:1px solid #e8ebf2;border-radius:14px;box-shadow:0 3px 14px #1c23310a}.receipt-heading{display:flex;align-items:center;gap:14px;padding:22px 26px}.receipt-heading__icon{display:grid;place-items:center;width:48px;height:48px;border-radius:10px;background:#e9f5eb;color:#176b2b;flex:none}.receipt-heading h1{font-size:24px;line-height:1.3}.receipt-heading p{margin-top:4px;color:#596476}.receipt-status{margin-left:auto;padding:6px 12px;border-radius:99px;background:#edf0f4;color:#586171;font-size:13px;font-weight:700;white-space:nowrap}.receipt-status--approved{background:#dcf6dd;color:#18712c}.receipt-notice{display:flex;gap:12px;align-items:flex-start;padding:20px;background:#eef2ff;border:1px solid #dce4ff;border-radius:12px}.receipt-notice--error{background:#fff2f0;border-color:#ffd9d5;color:#8e2723}.receipt-notice p{margin-top:4px}.receipt-link-button{margin-top:10px;padding:0;border:0;background:none;color:#176b2b;text-decoration:underline;font:inherit;font-weight:600;cursor:pointer}.section-title{display:flex;align-items:center;gap:10px;color:#176b2b}.section-title h2{color:#192337;font-size:16px}.section-title span{margin-left:auto;padding:4px 9px;border-radius:6px;background:#eff2fb;color:#515d72;font-size:12px}.donor-card{padding:20px 24px}.donor-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px 26px;margin-top:20px!important}.donor-grid dt{color:#667080;font-size:13px;font-weight:600}.donor-grid dd{margin-top:4px;font-weight:600;overflow-wrap:anywhere}.receipt-columns{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(260px,.9fr);gap:18px;align-items:start}.form-card{padding:22px 24px;display:grid;gap:20px}.form-title{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid #e9edf3;padding-bottom:16px}.form-title h2{font-size:18px}.form-title p{margin-top:5px;color:#606a78;font-size:14px}.form-title small,.field b{color:#c42e28}.field{display:grid;gap:7px;font-weight:600}.field>span{font-size:15px}.field em{margin-left:auto;color:#657080;font-size:12px;font-style:normal;font-weight:500}.field input,.field select,.field textarea{box-sizing:border-box;width:100%;min-height:44px;padding:10px 12px;border:1px solid #dce1e8;border-radius:9px;background:#fff;color:#182235;font:inherit;font-weight:400}.field textarea{resize:vertical}.field :focus{outline:3px solid #1f6b2c2e;border-color:#1f6b2c}.field small{color:#626c7a;font-size:13px;font-weight:400}.field-pair{display:grid;grid-template-columns:1fr 1fr;gap:16px}.receipt-meta{display:grid;grid-template-columns:1fr 1fr;gap:12px}.receipt-meta>div{display:flex;gap:11px;padding:14px;border-radius:10px;background:#eff2ff;color:#176b2b}.receipt-meta span{display:grid;gap:2px}.receipt-meta small{color:#586274;font-size:12px}.receipt-meta strong{color:#172238;font-size:14px}.side-stack{display:grid;gap:18px}.guidance-card,.progress-card{padding:20px}.guidance-card ul{margin:16px 0;padding-left:20px;color:#475264}.guidance-card li+li{margin-top:10px}.guidance-card>p{margin-top:14px;padding:12px;border-radius:8px;background:#f4f6ff;color:#4d586a;font-size:13px}.progress-card h2{margin-bottom:18px;font-size:15px}.progress-step{display:flex;gap:12px;position:relative;padding:0 0 20px}.progress-step:not(:last-child):after{content:"";position:absolute;left:12px;top:27px;bottom:3px;border-left:2px solid #e3e7ed}.progress-step i{z-index:1;display:grid;place-items:center;width:25px;height:25px;border-radius:50%;background:#eef1f7;color:#637084;font-style:normal;font-size:12px}.progress-step.is-done i,.progress-step.is-current i{background:#19712c;color:white}.progress-step span{display:grid;gap:3px}.progress-step strong{font-size:13px}.progress-step small{color:#647084;font-size:12px}.progress-step.is-done small{color:#19712c}.inline-error{display:flex;gap:8px;align-items:center;color:#b42318;font-size:14px}.form-actions{display:flex;justify-content:flex-end;gap:10px;padding-top:4px}.button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 16px;border:0;border-radius:9px;font:inherit;font-weight:650;text-decoration:none;cursor:pointer}.button:disabled{opacity:.55;cursor:not-allowed}.button--soft{background:#edf0fa;color:#273347}.button--primary{background:#176b2b;color:#fff}.dialog-backdrop{position:fixed;inset:0;z-index:10;display:grid;place-items:center;padding:20px;background:#10182880}.confirm-dialog{width:min(480px,100%);padding:24px;border-radius:14px;background:#fff;box-shadow:0 20px 60px #0003}.confirm-dialog h2{font-size:20px}.confirm-dialog p{margin:12px 0 22px;color:#4e5a6c}@media(max-width:780px){.receipt-columns{grid-template-columns:1fr}.side-stack{grid-template-columns:1fr 1fr}.receipt-heading{align-items:flex-start;flex-wrap:wrap}.receipt-status{margin-left:62px}}@media(max-width:560px){.donor-grid{grid-template-columns:1fr 1fr}.field-pair,.receipt-meta,.side-stack{grid-template-columns:1fr}.receipt-heading{padding:18px}.receipt-heading h1{font-size:20px}.receipt-heading p{font-size:14px}.donor-card,.form-card{padding:18px}}
+.receipt-notice--error p+p{color:#6b3330}.receipt-notice--error a.receipt-link-button{display:inline-block}.failure-retry{margin-top:12px;min-height:38px}
 .receipt-notice--success{background:#eaf7ec;border-color:#c9e8cd;color:#175f27}
 .receipt-notice--demo{background:#fff8e6;border-color:#f2dea4;color:#775513}
 .admin-shell{--ink:#182235;--muted:#596476;--green:#176b2b;min-height:100vh;background:#f8f8ff;color:var(--ink);font:14px/1.45 'Be Vietnam Pro',system-ui,-apple-system,'Segoe UI',sans-serif;padding-top:72px;padding-bottom:58px}
