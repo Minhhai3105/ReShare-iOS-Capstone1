@@ -168,6 +168,8 @@ onMounted(load)
         <AuthIcon name="badge-check" /><div><strong>Đã tạo phiếu nhập kho.</strong>
           <p v-if="createdEntry.id">Mã phiếu nhập: {{ createdEntry.id }}</p>
           <p>{{ createdEntry.simulated ? 'Đây là kết quả mô phỏng; không có dữ liệu nào được lưu.' : 'Phiếu nhập đã được dịch vụ lưu.' }}</p>
+          <RouterLink v-if="createdEntry.id" class="stock-link-button"
+            :to="isDemoPreview ? { name: 'admin-stock-entry-preview' } : { name: 'admin-stock-entry-detail', params: { entryId: createdEntry.id } }">Xem chi tiết phiếu nhập</RouterLink>
         </div>
       </div>
       <div v-else-if="loadError" class="stock-notice stock-notice--error" role="alert">

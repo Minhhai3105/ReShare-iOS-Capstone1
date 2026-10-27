@@ -113,6 +113,34 @@ export const liveStockInAdapter = {
     })
     return res.stockEntry || res
   },
+
+  // Hợp đồng đề xuất cho màn hình chi tiết phiếu nhập, Backend chưa có endpoint này.
+  async getStockEntry(entryId) {
+    const res = await request(`stock-entries/${encodeURIComponent(entryId)}`, null, 'GET')
+    const data = res.stockEntry
+    if (!data) throw new StockInRequestError(STOCK_IN_ERROR.notFound, 'Không tìm thấy phiếu nhập kho.', 404)
+    return {
+      id: data.id,
+      status: data.status || '',
+      warehouseId: data.warehouseId || '',
+      warehouseName: data.warehouseName || data.warehouseId || '',
+      donationId: data.donationId || '',
+      receiptId: data.receiptId || '',
+      note: data.note || '',
+      createdBy: data.createdByEmail || data.createdByUid || '',
+      createdAt: toDateString(data.createdAt),
+      confirmedBy: data.confirmedByEmail || data.confirmedByUid || '',
+      confirmedAt: toDateString(data.confirmedAt),
+      items: (Array.isArray(data.items) ? data.items : []).map((item, index) => ({
+        id: item.id || `${data.id}-${index}`,
+        name: item.itemName || item.name || '',
+        quantity: item.quantity,
+        unitName: UNIT_LABEL[item.unitId] || item.unitId || '',
+        conditionName: CONDITION_LABEL[item.conditionId] || item.conditionId || '',
+        location: item.location || '',
+      })),
+    }
+  },
 }
 
 let adapter = liveStockInAdapter
@@ -125,6 +153,7 @@ export const stockInRepository = Object.freeze({
   getDonation: (...args) => adapter.getDonation(...args),
   getReceipt: (...args) => adapter.getReceipt(...args),
   createStockIn: (...args) => adapter.createStockIn(...args),
+  getStockEntry: (...args) => adapter.getStockEntry(...args),
 })
 
 // Explicitly selected by the development preview route; never selected implicitly.
@@ -132,4 +161,5 @@ export const demoStockInRepository = Object.freeze({
   getDonation: (...args) => demoStockInAdapter.getDonation(...args),
   getReceipt: (...args) => demoStockInAdapter.getReceipt(...args),
   createStockIn: (...args) => demoStockInAdapter.createStockIn(...args),
+  getStockEntry: (...args) => demoStockInAdapter.getStockEntry(...args),
 })
