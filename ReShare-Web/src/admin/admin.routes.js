@@ -65,6 +65,18 @@ export const adminRoutes = [
     meta: { requiresAuth: true, roles: ADMIN_ROLES },
   },
   ...(import.meta.env.DEV ? [{
+    path: '/admin/stock-in-preview',
+    name: 'admin-donation-stock-in-preview',
+    component: () => import('./stockin/views/StockIn.vue'),
+    meta: { requiresAuth: true, roles: ADMIN_ROLES, devPreview: true },
+  }] : []),
+  {
+    path: '/admin/donations/:donationId/stock-in',
+    name: 'admin-donation-stock-in',
+    component: () => import('./stockin/views/StockIn.vue'),
+    meta: { requiresAuth: true, roles: ADMIN_ROLES },
+  },
+  ...(import.meta.env.DEV ? [{
     path: '/admin/ai-review-preview',
     name: 'admin-ai-review-preview',
     component: () => import('./DonationAiReviewDemo.vue'),
