@@ -3,9 +3,41 @@ import { demoReceiptAdapter } from './receipt.demo'
 
 const apiBase = (import.meta.env?.VITE_ADMIN_API_BASE_URL || 'https://reshare-ios-capstone1-1.onrender.com').replace(/\/$/, '')
 
+export const RECEIPT_ERROR = Object.freeze({
+  forbidden: 'forbidden',
+  conflict: 'conflict',
+  retryable: 'retryable',
+  auth: 'auth',
+  notFound: 'not-found',
+  other: 'other',
+})
+
+const RETRYABLE_STATUSES = new Set([408, 429])
+
+// Lỗi đã phân loại để màn hình chọn hướng xử lý; status 0 là lỗi mạng.
+export class ReceiptRequestError extends Error {
+  constructor(kind, message, status = 0) {
+    super(message)
+    this.name = 'ReceiptRequestError'
+    this.kind = kind
+    this.status = status
+  }
+}
+
+function errorFromResponse(status, message) {
+  if (status === 401) return new ReceiptRequestError(RECEIPT_ERROR.auth, 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.', status)
+  if (status === 403) return new ReceiptRequestError(RECEIPT_ERROR.forbidden, message || 'Bạn không có quyền thao tác tại kho này.', status)
+  if (status === 404) return new ReceiptRequestError(RECEIPT_ERROR.notFound, message || 'Không tìm thấy đơn quyên góp.', status)
+  if (status === 409) return new ReceiptRequestError(RECEIPT_ERROR.conflict, message || 'Đơn quyên góp không còn ở trạng thái hợp lệ.', status)
+  if (RETRYABLE_STATUSES.has(status) || status >= 500) {
+    return new ReceiptRequestError(RECEIPT_ERROR.retryable, message || 'Máy chủ tạm thời chưa xử lý được yêu cầu.', status)
+  }
+  return new ReceiptRequestError(RECEIPT_ERROR.other, message || 'Không thể xử lý yêu cầu. Vui lòng thử lại.', status)
+}
+
 async function request(path, body, method = 'POST') {
   const user = auth?.currentUser
-  if (!user) throw new Error('Vui lòng đăng nhập lại để tiếp tục.')
+  if (!user) throw new ReceiptRequestError(RECEIPT_ERROR.auth, 'Vui lòng đăng nhập lại để tiếp tục.')
   const token = await user.getIdToken()
   let response
   try {
@@ -19,16 +51,10 @@ async function request(path, body, method = 'POST') {
       signal: AbortSignal.timeout(90000),
     })
   } catch {
-    throw new Error('Không thể kết nối máy chủ quản trị. Vui lòng kiểm tra mạng và thử lại.')
+    throw new ReceiptRequestError(RECEIPT_ERROR.retryable, 'Không thể kết nối máy chủ quản trị. Vui lòng kiểm tra mạng.')
   }
   const result = await response.json().catch(() => ({}))
-  if (!response.ok) {
-    if (response.status === 401) throw new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.')
-    if (response.status === 403) throw new Error(result.message || 'Bạn không có quyền thao tác tại kho này.')
-    if (response.status === 404) throw new Error(result.message || 'Không tìm thấy đơn quyên góp.')
-    if (response.status === 409) throw new Error(result.message || 'Đơn quyên góp không ở trạng thái hợp lệ.')
-    throw new Error(result.message || 'Không thể xử lý yêu cầu. Vui lòng thử lại.')
-  }
+  if (!response.ok) throw errorFromResponse(response.status, result.message)
   return result
 }
 
