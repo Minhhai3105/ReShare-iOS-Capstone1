@@ -24,6 +24,10 @@ const statusLabel = computed(() => ENTRY_STATUS_LABEL[entry.value?.status] || en
 const donationRoute = computed(() => (!isDemoPreview && entry.value?.donationId
   ? { name: 'admin-donation-detail', params: { donationId: entry.value.donationId } }
   : null))
+// Màn hình nhập kho của yêu cầu nguồn hiển thị biên bản thực nhận (chỉ đọc) đã dùng cho phiếu này.
+const receiptRoute = computed(() => (!isDemoPreview && entry.value?.donationId && entry.value?.receiptId
+  ? { name: 'admin-donation-stock-in', params: { donationId: entry.value.donationId } }
+  : null))
 const dateFormatter = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
 const formatDate = (value) => (value ? dateFormatter.format(new Date(value)) : '—')
 
@@ -168,13 +172,29 @@ onMounted(load)
                 <strong>Chưa có dòng vật phẩm để hiển thị</strong><p>Phiếu nhập này chưa có dòng vật phẩm nào.</p></div>
             </div>
           </section>
+
+          <section class="entry-card" aria-labelledby="entry-movement-title">
+            <div class="card-title"><span class="card-title__icon"><AuthIcon name="refresh" /></span>
+              <div><h2 id="entry-movement-title">Biến động tồn kho</h2><p>Bản ghi movement do phiếu nhập này tạo ra.</p></div></div>
+            <dl v-if="entry.movement" class="info-grid">
+              <div><dt>Loại biến động</dt><dd>{{ entry.movement.typeName || '—' }}</dd></div>
+              <div><dt>Số lượng</dt><dd>{{ entry.movement.quantity != null ? `+${entry.movement.quantity} ${entry.movement.unitName}`.trim() : '—' }}</dd></div>
+              <div><dt>Kho</dt><dd>{{ entry.movement.warehouseName || '—' }}</dd></div>
+              <div><dt>Chứng từ tham chiếu</dt><dd>{{ entry.movement.receiptId || '—' }}</dd></div>
+              <div><dt>Người thực hiện</dt><dd>{{ entry.movement.actor || '—' }}</dd></div>
+              <div><dt>Thời gian</dt><dd>{{ formatDate(entry.movement.createdAt) }}</dd></div>
+            </dl>
+            <div v-else class="empty-state"><span><AuthIcon name="refresh" :size="26" /></span>
+              <strong>Chưa có dữ liệu biến động</strong><p>Dịch vụ chưa trả bản ghi movement cho phiếu nhập này.</p></div>
+          </section>
         </div>
 
         <aside class="side-stack">
           <section class="entry-card side-card"><h2><AuthIcon name="network" :size="16" />Nguồn gốc nhập kho</h2>
             <div class="chain-step"><i>1</i><span><strong>Yêu cầu quyên góp</strong>
               <RouterLink v-if="donationRoute" :to="donationRoute">{{ entry.donationId }}</RouterLink><small v-else>{{ entry.donationId || '—' }}</small></span></div>
-            <div class="chain-step"><i>2</i><span><strong>Biên bản thực nhận</strong><small>{{ entry.receiptId || '—' }}</small></span></div>
+            <div class="chain-step"><i>2</i><span><strong>Biên bản thực nhận</strong>
+              <RouterLink v-if="receiptRoute" :to="receiptRoute">{{ entry.receiptId }}</RouterLink><small v-else>{{ entry.receiptId || '—' }}</small></span></div>
             <div class="chain-step is-current"><i><AuthIcon name="check" :size="13" /></i><span><strong>Phiếu nhập kho</strong><small>{{ entry.id }} (hiện tại)</small></span></div>
           </section>
           <section class="entry-card side-card"><h2><AuthIcon name="shield-check" :size="16" />Dấu vết xác nhận</h2>

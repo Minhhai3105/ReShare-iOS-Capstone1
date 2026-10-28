@@ -173,6 +173,7 @@ onMounted(load)
         <AuthIcon name="badge-check" /><div><strong>Đã ghi nhận hàng thực nhận.</strong>
           <p v-if="createdReceipt.id">Mã phiếu: {{ createdReceipt.id }}</p>
           <p>{{ createdReceipt.simulated ? 'Đây là kết quả mô phỏng; không có dữ liệu nào được lưu.' : 'Thông tin phiếu đã được dịch vụ lưu.' }} Bước này không tự động nhập kho.</p>
+          <RouterLink v-if="!createdReceipt.simulated && donation?.id" class="receipt-link-button" :to="{ name: 'admin-donation-stock-in', params: { donationId: donation.id } }">Tiếp tục nhập kho</RouterLink>
         </div>
       </div>
       <div v-else-if="loadError" class="receipt-notice receipt-notice--error" role="alert">

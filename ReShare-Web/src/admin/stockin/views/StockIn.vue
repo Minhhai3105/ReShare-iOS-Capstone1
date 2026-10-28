@@ -18,6 +18,8 @@ const showConfirm = ref(false)
 const createdEntry = ref(null)
 const donation = ref(null)
 const receipt = ref(null)
+// Receipt đã có phiếu nhập: { id, processedBy, processedAt }; id có thể rỗng nếu Backend chưa trả mã phiếu.
+const processedEntry = ref(null)
 const form = reactive({ location: '', note: '' })
 const backRoute = computed(() => (isDemoPreview || !route.params.donationId
   ? { name: ADMIN_ROUTE.home }
@@ -38,7 +40,19 @@ const receivedAtText = computed(() => {
   if (!receipt.value?.receivedAt) return ''
   return new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(receipt.value.receivedAt))
 })
-const validForm = computed(() => !loadError.value && isReceived.value && receipt.value && form.location.trim())
+const validForm = computed(() => !loadError.value && !processedEntry.value && isReceived.value && receipt.value && form.location.trim())
+// Tồn kho tăng theo số lượng thực nhận; chỉ nhắc khi khác số người gửi khai báo.
+const quantityDiffers = computed(() => donation.value?.declaredQuantity != null && receipt.value &&
+  Number(donation.value.declaredQuantity) !== Number(receipt.value.quantity))
+const declaredQuantityText = computed(() => (donation.value?.declaredQuantity == null
+  ? '—'
+  : `${donation.value.declaredQuantity} ${donation.value.declaredUnitName || ''}`.trim()))
+const entryRoute = (entryId) => (isDemoPreview
+  ? { name: 'admin-stock-entry-preview' }
+  : { name: 'admin-stock-entry-detail', params: { entryId } })
+const formatDateTime = (value) => (value
+  ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value))
+  : '')
 
 async function load() {
   loading.value = true
@@ -47,6 +61,7 @@ async function load() {
   retryPayload.value = null
   donation.value = null
   receipt.value = null
+  processedEntry.value = null
   try {
     const donationId = route.params.donationId || 'DEMO-REQ-2026-001'
     const [record, receiptRecord] = await Promise.all([
@@ -56,7 +71,8 @@ async function load() {
     donation.value = record
     receipt.value = receiptRecord
     if (isDemoPreview && !form.location) form.location = 'Kệ A1-02 (demo)'
-    if (record.status === 'in_stock') loadError.value = 'Yêu cầu này đã được nhập kho trước đó.'
+    const existingEntryId = receiptRecord.stockEntryId || record.stockEntryId
+    if (record.status === 'in_stock' || existingEntryId) processedEntry.value = { id: existingEntryId || '', processedBy: '', processedAt: '' }
     else if (record.status !== 'received') loadError.value = `Chỉ nhập kho cho yêu cầu đã thực nhận (received). Trạng thái hiện tại: ${record.status || 'không xác định'}.`
     else if (!isDemoPreview && !canAccessWarehouse(receiptRecord.warehouseId)) loadError.value = 'Bạn chưa được phân công vào kho đã thực nhận yêu cầu này.'
   } catch (error) {
@@ -93,6 +109,8 @@ async function sendStockIn(payload) {
       message: error?.message || 'Không thể lưu phiếu nhập kho.',
     }
     if (kind === STOCK_IN_ERROR.retryable) retryPayload.value = payload
+    // 409 kèm phiếu nhập hiện có: request khác đã nhập kho receipt này, chuyển sang trạng thái đã xử lý.
+    if (kind === STOCK_IN_ERROR.conflict && error?.existingEntry) processedEntry.value = error.existingEntry
     await nextTick()
     failureNotice.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   } finally {
@@ -165,11 +183,20 @@ onMounted(load)
 
       <div v-if="loading" class="stock-notice" role="status">Đang tải thông tin nhập kho…</div>
       <div v-if="createdEntry" class="stock-notice stock-notice--success" role="status">
-        <AuthIcon name="badge-check" /><div><strong>Đã tạo phiếu nhập kho.</strong>
+        <AuthIcon name="badge-check" /><div><strong>{{ createdEntry.replayed ? 'Phiếu nhập đã tồn tại.' : 'Đã tạo phiếu nhập kho.' }}</strong>
           <p v-if="createdEntry.id">Mã phiếu nhập: {{ createdEntry.id }}</p>
-          <p>{{ createdEntry.simulated ? 'Đây là kết quả mô phỏng; không có dữ liệu nào được lưu.' : 'Phiếu nhập đã được dịch vụ lưu.' }}</p>
-          <RouterLink v-if="createdEntry.id" class="stock-link-button"
-            :to="isDemoPreview ? { name: 'admin-stock-entry-preview' } : { name: 'admin-stock-entry-detail', params: { entryId: createdEntry.id } }">Xem chi tiết phiếu nhập</RouterLink>
+          <p v-if="createdEntry.replayed">Receipt này đã được nhập kho từ lần gửi trước; hệ thống không cộng tồn thêm lần nữa.</p>
+          <p v-else>{{ createdEntry.simulated ? 'Đây là kết quả mô phỏng; không có dữ liệu nào được lưu.' : `Phiếu nhập đã được dịch vụ lưu; tồn kho tăng ${quantityText}.` }}</p>
+          <RouterLink v-if="createdEntry.id" class="stock-link-button" :to="entryRoute(createdEntry.id)">Xem chi tiết phiếu nhập</RouterLink>
+        </div>
+      </div>
+      <div v-else-if="processedEntry" class="stock-notice stock-notice--processed" role="status">
+        <AuthIcon name="lock" /><div><strong>Receipt đã được nhập kho</strong>
+          <p>Biên bản thực nhận {{ receipt?.id || '' }} đã có phiếu nhập kho. Mỗi receipt chỉ nhập kho một lần nên không thể gửi thêm.</p>
+          <p v-if="processedEntry.id">Mã phiếu nhập: {{ processedEntry.id }}</p>
+          <p v-if="processedEntry.processedBy || processedEntry.processedAt">Xử lý bởi {{ [processedEntry.processedBy, formatDateTime(processedEntry.processedAt)].filter(Boolean).join(' · ') }}</p>
+          <RouterLink v-if="processedEntry.id" class="stock-link-button" :to="entryRoute(processedEntry.id)">Xem phiếu nhập</RouterLink>
+          <button v-else class="stock-link-button" type="button" @click="load">Tải lại trạng thái mới nhất</button>
         </div>
       </div>
       <div v-else-if="loadError" class="stock-notice stock-notice--error" role="alert">
@@ -179,7 +206,7 @@ onMounted(load)
         </div>
       </div>
 
-      <div v-if="submitFailure && !createdEntry" ref="failureNotice" class="stock-notice stock-notice--error" role="alert">
+      <div v-if="submitFailure && !createdEntry && !processedEntry" ref="failureNotice" class="stock-notice stock-notice--error" role="alert">
         <AuthIcon name="alert-circle" />
         <div v-if="failureKind === STOCK_IN_ERROR.forbidden">
           <strong>Không có quyền nhập kho (403)</strong>
@@ -229,14 +256,15 @@ onMounted(load)
               <div><dt>Yêu cầu nguồn</dt><dd>{{ donation.id || '—' }}</dd></div>
               <div><dt>Kho dự kiến trên yêu cầu</dt><dd>{{ donation.expectedWarehouseName || '—' }}</dd></div>
               <div class="readonly-grid__match"><dt>Kho thực nhận</dt><dd>{{ warehouseName || '—' }}</dd></div>
-              <div><dt>Số lượng thực nhận</dt><dd>{{ receipt.quantity ?? '—' }}</dd></div>
+              <div><dt>Số lượng người gửi khai báo</dt><dd>{{ declaredQuantityText }}</dd></div>
+              <div class="readonly-grid__match"><dt>Số lượng thực nhận</dt><dd>{{ receipt.quantity ?? '—' }}</dd></div>
               <div><dt>Đơn vị</dt><dd>{{ receipt.unitName || '—' }}</dd></div>
               <div><dt>Tình trạng thực tế</dt><dd>{{ receipt.conditionName || '—' }}</dd></div>
               <div><dt>Người ghi nhận &amp; thời gian thực nhận</dt><dd>{{ [receipt.actorName, receivedAtText].filter(Boolean).join(' · ') || '—' }}</dd></div>
             </dl>
           </section>
 
-          <form id="stock-in-form" class="stock-card form-card" @submit.prevent="askToConfirm">
+          <form v-if="!processedEntry" id="stock-in-form" class="stock-card form-card" @submit.prevent="askToConfirm">
             <div class="card-title"><span class="card-title__icon"><AuthIcon name="inbox" /></span>
               <div><h2>Chi tiết tạo phiếu nhập kho</h2><p>Khởi tạo bản ghi phiếu nhập vào dữ liệu tồn kho.</p></div></div>
 
@@ -244,6 +272,7 @@ onMounted(load)
               <label class="field"><span>Số lượng nhập <AuthIcon name="lock" :size="13" /></span>
                 <input :value="quantityText" type="text" readonly />
                 <small>Kế thừa từ số lượng thực nhận; không sửa tại bước này.</small>
+                <small v-if="quantityDiffers" class="field__warn">Khác số khai báo ({{ declaredQuantityText }}); tồn kho tăng theo số thực nhận.</small>
               </label>
               <label class="field"><span>Chứng từ nguồn (Biên bản thực nhận)</span>
                 <input :value="receipt.id || '—'" type="text" readonly />
@@ -271,7 +300,7 @@ onMounted(load)
           <section class="stock-card side-card"><h2>Tiến trình tiếp nhận &amp; tồn</h2>
             <div class="progress-step is-done"><i>1</i><span><strong>Đã duyệt tiếp nhận</strong><small>Phê duyệt thông tin đề xuất quyên góp</small></span></div>
             <div class="progress-step" :class="isReceived ? 'is-done' : ''"><i>2</i><span><strong>Đã thực nhận</strong><small>Kiểm tra số lượng và lập biên bản</small></span></div>
-            <div class="progress-step is-current"><i>3</i><span><strong>Nhập kho &amp; lưu trữ</strong><small>Ghi nhận tồn và gán vị trí kệ</small></span></div>
+            <div class="progress-step" :class="processedEntry || createdEntry ? 'is-done' : 'is-current'"><i>3</i><span><strong>Nhập kho &amp; lưu trữ</strong><small>Ghi nhận tồn và gán vị trí kệ</small></span></div>
             <div class="progress-step"><i>4</i><span><strong>Sẵn sàng phân phối</strong><small>Được chọn để phân bổ người thụ hưởng</small></span></div>
           </section>
           <section class="stock-card side-card side-card--tinted"><h2><AuthIcon name="refresh" :size="16" />Hệ quả nghiệp vụ</h2>
@@ -284,7 +313,7 @@ onMounted(load)
         </aside>
       </div>
 
-      <div v-if="donation && receipt" class="sticky-actions">
+      <div v-if="donation && receipt && !processedEntry" class="sticky-actions">
         <RouterLink :to="backRoute" class="button button--soft">Hủy</RouterLink>
         <div><span class="sticky-actions__hint">{{ isDemoPreview ? 'Chế độ xem thử, không lưu dữ liệu' : 'Phiếu được chốt ngay khi bấm xác nhận' }}</span>
           <button type="submit" form="stock-in-form" class="button button--primary" :disabled="saving || submitLocked || !isReceived || Boolean(loadError) || Boolean(createdEntry)"><AuthIcon name="inbox" />Xác nhận nhập kho</button></div>
@@ -322,6 +351,7 @@ onMounted(load)
 .stock-notice--demo{border-color:#f2dea4;background:#fff8e6;color:#775513}
 .stock-notice--error{border-color:#ffd9d5;background:#fff2f0;color:#8e2723}.stock-notice--error p+p{color:#6b3330}
 .stock-notice--success{border-color:#c9e8cd;background:#eaf7ec;color:#175f27}
+.stock-notice--processed{border-color:#d7dceb;background:#f3f5fa;color:#273347}
 .stock-link-button{display:inline-block;margin-top:10px;padding:0;border:0;background:none;color:#176b2b;text-decoration:underline;font:inherit;font-weight:600;cursor:pointer}
 .failure-retry{margin-top:12px;min-height:38px}
 .stock-heading{display:flex;align-items:center;gap:16px;padding:8px 0}.stock-heading__title{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.stock-heading h1{font-size:26px;letter-spacing:-.02em}.stock-heading p{margin-top:6px;color:#586272}
@@ -334,7 +364,7 @@ onMounted(load)
 .readonly-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.readonly-grid>div{padding:12px 14px;border-radius:10px;background:#f0f3ff}.readonly-grid dt{color:#586272;font-size:11px;font-weight:700;letter-spacing:.03em;text-transform:uppercase}.readonly-grid dd{margin:6px 0 0;font-weight:600;overflow-wrap:anywhere}.readonly-grid__match{background:#e8f6ea!important}.readonly-grid__match dd{color:#176b2b}
 .form-card{display:grid;gap:18px}.form-card .card-title{margin-bottom:0}
 .field{display:grid;gap:7px;font-weight:600}.field>span{display:flex;align-items:center;gap:6px}.field b{color:#c42e28}.field em{margin-left:auto;color:#657080;font-size:12px;font-style:normal;font-weight:500}
-.field input,.field textarea{width:100%;min-height:42px;padding:10px 12px;border:1px solid #e5e8ef;border-radius:9px;background:#fff;color:#182235;font:inherit;font-weight:400}.field input[readonly]{background:#f0f3ff;color:#4b5666}.field textarea{min-height:90px;resize:vertical}.field :focus{outline:3px solid #1f6b2c2e;border-color:#1f6b2c}.field small{color:#626c7a;font-size:12px;font-weight:400}
+.field input,.field textarea{width:100%;min-height:42px;padding:10px 12px;border:1px solid #e5e8ef;border-radius:9px;background:#fff;color:#182235;font:inherit;font-weight:400}.field input[readonly]{background:#f0f3ff;color:#4b5666}.field textarea{min-height:90px;resize:vertical}.field :focus{outline:3px solid #1f6b2c2e;border-color:#1f6b2c}.field small{color:#626c7a;font-size:12px;font-weight:400}.field .field__warn{color:#8a5a00}
 .field-pair,.stock-meta{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
 .stock-meta>div{display:flex;gap:10px;padding:14px;border-radius:10px;background:#f0f3ff;color:#176b2b}.stock-meta span{display:grid;gap:2px}.stock-meta small{color:#586274;font-size:11px;font-weight:700;text-transform:uppercase}.stock-meta strong{color:#172238;font-size:13px}
 .inline-error{display:flex;gap:8px;align-items:center;color:#b42318}

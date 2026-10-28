@@ -1,45 +1,19 @@
 import { auth } from '../auth/firebase'
 import { demoStockInAdapter } from './stockin.demo'
+import {
+  errorFromResponse,
+  STOCK_IN_ERROR,
+  StockInRequestError,
+  toDonation,
+  toReceipt,
+  toStockEntry,
+  toStockInBody,
+  toStockInResult,
+} from './stockin.mapper'
+
+export { STOCK_IN_ERROR, StockInRequestError }
 
 const apiBase = (import.meta.env?.VITE_ADMIN_API_BASE_URL || 'https://reshare-ios-capstone1-1.onrender.com').replace(/\/$/, '')
-
-// Nhãn hiển thị cho mã đơn vị/tình trạng do API phiếu thực nhận trả về.
-const UNIT_LABEL = Object.freeze({ piece: 'chiếc', kg: 'kg', bag: 'túi', box: 'thùng/hộp', set: 'bộ' })
-const CONDITION_LABEL = Object.freeze({ good: 'Còn tốt', 'minor-wear': 'Có hao mòn nhẹ', damaged: 'Hư hỏng cần phân loại' })
-
-export const STOCK_IN_ERROR = Object.freeze({
-  forbidden: 'forbidden',
-  conflict: 'conflict',
-  retryable: 'retryable',
-  validation: 'validation',
-  auth: 'auth',
-  notFound: 'not-found',
-  other: 'other',
-})
-
-const RETRYABLE_STATUSES = new Set([408, 429])
-
-// Lỗi đã phân loại để màn hình chọn hướng xử lý; status 0 là lỗi mạng.
-export class StockInRequestError extends Error {
-  constructor(kind, message, status = 0) {
-    super(message)
-    this.name = 'StockInRequestError'
-    this.kind = kind
-    this.status = status
-  }
-}
-
-function errorFromResponse(status, message) {
-  if (status === 400) return new StockInRequestError(STOCK_IN_ERROR.validation, message || 'Dữ liệu nhập kho chưa hợp lệ.', status)
-  if (status === 401) return new StockInRequestError(STOCK_IN_ERROR.auth, 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.', status)
-  if (status === 403) return new StockInRequestError(STOCK_IN_ERROR.forbidden, message || 'Bạn không có quyền nhập kho tại kho này.', status)
-  if (status === 404) return new StockInRequestError(STOCK_IN_ERROR.notFound, message || 'Không tìm thấy đơn quyên góp hoặc phiếu thực nhận.', status)
-  if (status === 409) return new StockInRequestError(STOCK_IN_ERROR.conflict, message || 'Đơn quyên góp không còn ở trạng thái có thể nhập kho.', status)
-  if (RETRYABLE_STATUSES.has(status) || status >= 500) {
-    return new StockInRequestError(STOCK_IN_ERROR.retryable, message || 'Máy chủ tạm thời chưa xử lý được yêu cầu.', status)
-  }
-  return new StockInRequestError(STOCK_IN_ERROR.other, message || 'Không thể xử lý yêu cầu. Vui lòng thử lại.', status)
-}
 
 async function request(path, body, method = 'POST') {
   const user = auth?.currentUser
@@ -60,86 +34,34 @@ async function request(path, body, method = 'POST') {
     throw new StockInRequestError(STOCK_IN_ERROR.retryable, 'Không thể kết nối máy chủ quản trị. Vui lòng kiểm tra mạng.')
   }
   const result = await response.json().catch(() => ({}))
-  if (!response.ok) throw errorFromResponse(response.status, result.message)
+  if (!response.ok) throw errorFromResponse(response.status, result)
   return result
-}
-
-function toDateString(value) {
-  if (!value) return ''
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '' : date.toISOString()
 }
 
 export const liveStockInAdapter = {
   async getDonation(donationId) {
     const res = await request(`donations/${encodeURIComponent(donationId)}`, null, 'GET')
-    const data = res.donation
-    if (!data) throw new StockInRequestError(STOCK_IN_ERROR.notFound, 'Không tìm thấy đơn quyên góp.', 404)
-    return {
-      id: data.id,
-      status: data.status,
-      itemName: data.title || data.itemName || 'Vật phẩm quyên góp',
-      expectedWarehouseId: data.warehouseId || '',
-      expectedWarehouseName: data.warehouseName || '',
-    }
+    if (!res.donation) throw new StockInRequestError(STOCK_IN_ERROR.notFound, 'Không tìm thấy đơn quyên góp.', 404)
+    return toDonation(res.donation)
   },
 
   async getReceipt(donationId) {
     const res = await request(`donations/${encodeURIComponent(donationId)}/receipt`, null, 'GET')
-    const data = res.receipt
-    if (!data) throw new StockInRequestError(STOCK_IN_ERROR.notFound, 'Phiếu thực nhận không tồn tại.', 404)
-    return {
-      id: data.id,
-      warehouseId: data.warehouseId || '',
-      quantity: data.quantity,
-      unitId: data.unitId || '',
-      unitName: UNIT_LABEL[data.unitId] || data.unitId || '',
-      conditionName: CONDITION_LABEL[data.conditionId] || data.conditionId || '',
-      actorName: data.actorEmail || data.actorUid || '',
-      receivedAt: toDateString(data.createdAt),
-    }
+    if (!res.receipt) throw new StockInRequestError(STOCK_IN_ERROR.notFound, 'Phiếu thực nhận không tồn tại.', 404)
+    return toReceipt(res.receipt)
   },
 
   // Hợp đồng đề xuất, Backend chưa có endpoint này.
   async createStockIn(payload) {
-    const res = await request(`donations/${encodeURIComponent(payload.donationId)}/stock-in`, {
-      receiptId: payload.receiptId,
-      warehouseId: payload.warehouseId,
-      quantity: payload.quantity,
-      unitId: payload.unitId,
-      location: payload.location,
-      note: payload.note,
-      idempotencyKey: payload.idempotencyKey,
-    })
-    return res.stockEntry || res
+    const res = await request(`donations/${encodeURIComponent(payload.donationId)}/stock-in`, toStockInBody(payload))
+    return toStockInResult(res)
   },
 
   // Hợp đồng đề xuất cho màn hình chi tiết phiếu nhập, Backend chưa có endpoint này.
   async getStockEntry(entryId) {
     const res = await request(`stock-entries/${encodeURIComponent(entryId)}`, null, 'GET')
-    const data = res.stockEntry
-    if (!data) throw new StockInRequestError(STOCK_IN_ERROR.notFound, 'Không tìm thấy phiếu nhập kho.', 404)
-    return {
-      id: data.id,
-      status: data.status || '',
-      warehouseId: data.warehouseId || '',
-      warehouseName: data.warehouseName || data.warehouseId || '',
-      donationId: data.donationId || '',
-      receiptId: data.receiptId || '',
-      note: data.note || '',
-      createdBy: data.createdByEmail || data.createdByUid || '',
-      createdAt: toDateString(data.createdAt),
-      confirmedBy: data.confirmedByEmail || data.confirmedByUid || '',
-      confirmedAt: toDateString(data.confirmedAt),
-      items: (Array.isArray(data.items) ? data.items : []).map((item, index) => ({
-        id: item.id || `${data.id}-${index}`,
-        name: item.itemName || item.name || '',
-        quantity: item.quantity,
-        unitName: UNIT_LABEL[item.unitId] || item.unitId || '',
-        conditionName: CONDITION_LABEL[item.conditionId] || item.conditionId || '',
-        location: item.location || '',
-      })),
-    }
+    if (!res.stockEntry) throw new StockInRequestError(STOCK_IN_ERROR.notFound, 'Không tìm thấy phiếu nhập kho.', 404)
+    return toStockEntry(res.stockEntry)
   },
 }
 
