@@ -86,3 +86,34 @@ describe('US14 – tồn kho', () => {
     globalThis.reshareMock.setInventoryScenario('normal')
   })
 })
+
+describe('US17 – phiếu xuất kho', () => {
+  test('AC2: tổng số lượng trên phiếu khớp biến động xuất; mọi biến động xuất đều thuộc một phiếu', async () => {
+    const { movements, vouchers } = mock.createMockInventory()
+    const distributions = movements.filter(({ type }) => type === 'distribution')
+    for (const { id } of vouchers) {
+      const { lines } = await service.fetchDistributionVoucher(SYSTEM_ADMIN, id)
+      const exported = distributions.filter(({ voucherId }) => voucherId === id).reduce((sum, { quantity }) => sum - quantity, 0)
+      assert.equal(lines.reduce((sum, { quantity }) => sum + quantity, 0), exported, id)
+    }
+    assert.ok(distributions.every(({ voucherId }) => vouchers.some(({ id }) => id === voucherId)))
+  })
+
+  test('Tồn trước − SL xuất = tồn sau, khớp lịch sử biến động của vật phẩm', async () => {
+    const { lines } = await service.fetchDistributionVoucher(SYSTEM_ADMIN, 'px-0003')
+    assert.deepEqual(lines.map(({ itemId, stockBefore, quantity, stockAfter }) => [itemId, stockBefore, quantity, stockAfter]), [['vp-0001', 19, 3, 16]])
+  })
+
+  test('AC1/AC3: tra cứu trong phạm vi; phiếu kho khác hoặc không có quyền → 403; mã sai → 404', async () => {
+    assert.equal((await service.fetchDistributionVoucher(WAREHOUSE_ADMIN, 'px-0001')).voucher.warehouseId, 'wh_dn_01')
+    assert.equal(await statusOf(service.fetchDistributionVoucher(WAREHOUSE_ADMIN, 'px-0004')), 403)
+    assert.equal(await statusOf(service.fetchDistributionVoucher(null, 'px-0001')), 403)
+    assert.equal(await statusOf(service.fetchDistributionVoucher(SYSTEM_ADMIN, 'px-9999')), 404)
+  })
+
+  test('AC3: người thụ hưởng chỉ có mã hồ sơ, tên hiển thị và số lần hỗ trợ tại kho', async () => {
+    const { beneficiary } = await service.fetchDistributionVoucher(SYSTEM_ADMIN, 'px-0001')
+    assert.deepEqual(Object.keys(beneficiary).sort(), ['displayName', 'id', 'supportCount'])
+    assert.equal(beneficiary.supportCount, 2)
+  })
+})

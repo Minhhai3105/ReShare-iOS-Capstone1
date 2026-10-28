@@ -26,11 +26,16 @@ export const MOVEMENT_TYPE_LABEL = Object.freeze({
   adjustment: 'Điều chỉnh',
 })
 
+export const VOUCHER_STATUS_LABEL = Object.freeze({
+  confirmed: 'Đã xác nhận bàn giao',
+  pending: 'Chờ xác nhận',
+})
+
 // Mock chỉ dùng khi dev; bản build không tham chiếu tới nên dữ liệu mẫu bị loại khỏi bundle.
 const IS_MOCK = import.meta.env.DEV
 const mock = IS_MOCK
   ? { ...createMockInventory(), warehouses: MOCK_WAREHOUSES, getScenario: getInventoryScenario }
-  : { items: [], movements: [], warehouses: [], getScenario: () => 'normal' }
+  : { items: [], movements: [], vouchers: [], beneficiaries: [], warehouses: [], getScenario: () => 'normal' }
 const dateFormatter = new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
 const hourFormatter = new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit' })
 
@@ -106,4 +111,41 @@ export async function fetchInventoryItem(access, itemId) {
   if (!canView(access, item.warehouseId)) throw createError(INVENTORY_ERROR.forbidden)
   const movements = mock.movements.filter((movement) => movement.itemId === itemId).reverse()
   return { item: withStock(item), movements }
+}
+
+/**
+ * Chi tiết phiếu xuất (US17). Mỗi dòng kèm tồn trước/sau tính từ biến động tại thời điểm xuất.
+ * Người thụ hưởng chỉ trả mã hồ sơ, tên hiển thị và số lần hỗ trợ tại kho.
+ * @returns { voucher, beneficiary, lines }
+ */
+export async function fetchDistributionVoucher(access, voucherId) {
+  await simulateRequest(access)
+  const voucher = mock.vouchers.find(({ id }) => id === voucherId)
+  if (!voucher) throw createError(INVENTORY_ERROR.notFound)
+  if (!canView(access, voucher.warehouseId)) throw createError(INVENTORY_ERROR.forbidden)
+
+  const beneficiary = mock.beneficiaries.find(({ id }) => id === voucher.beneficiaryId)
+  const supportCount = mock.vouchers.filter(
+    ({ beneficiaryId, warehouseId }) => beneficiaryId === voucher.beneficiaryId && warehouseId === voucher.warehouseId,
+  ).length
+  const lines = voucher.lines.map(({ itemId, quantity }) => {
+    const item = mock.items.find(({ id }) => id === itemId)
+    const itemMovements = mock.movements.filter((movement) => movement.itemId === itemId)
+    const index = itemMovements.findIndex((movement) => movement.voucherId === voucher.id)
+    const stockBefore = itemMovements.slice(0, index).reduce((sum, movement) => sum + movement.quantity, 0)
+    return {
+      itemId,
+      name: item.name,
+      unit: item.unit,
+      stockInVoucherId: item.stockInVoucherId,
+      quantity,
+      stockBefore,
+      stockAfter: stockBefore + itemMovements[index].quantity,
+    }
+  })
+  return {
+    voucher: { ...voucher, warehouse: getWarehouseInfo(voucher.warehouseId) },
+    beneficiary: { id: beneficiary.id, displayName: beneficiary.displayName, supportCount },
+    lines,
+  }
 }
