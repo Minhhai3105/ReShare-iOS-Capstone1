@@ -9,6 +9,7 @@ const { ApiError: ContactApiError, createContactApi } = require('./contact-api.c
 const { createDonationReviewApi } = require('./donation-review-api.cjs');
 const { createReceiptApi } = require('./receipt-api.cjs');
 const { createStockIntakeApi } = require('./stock-intake-api.cjs');
+const { createInventoryApi } = require('./inventory-api.cjs');
 
 const {
   CLOUDINARY_CLOUD_NAME,
@@ -37,6 +38,7 @@ const contactApi = createContactApi({ db, verifyToken, serverTimestamp: () => Fi
 const donationReviewApi = createDonationReviewApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const receiptApi = createReceiptApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const stockIntakeApi = createStockIntakeApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
+const inventoryApi = createInventoryApi({ db, verifyToken });
 const adminWebOrigins = new Set((process.env.ADMIN_WEB_ORIGINS || '')
   .split(',').map(origin => origin.trim()).filter(Boolean));
 
@@ -47,6 +49,8 @@ const server = http.createServer(async (request, response) => {
   const isReceiptPath = /^\/v1\/admin\/donations\/[^/]+\/receipt$/.test(pathname);
   const isStockIntakePath = /^\/v1\/admin\/donations\/[^/]+\/stock-in$/.test(pathname) ||
     /^\/v1\/admin\/stock-entries\/[^/]+$/.test(pathname);
+  const isInventoryPath = pathname === '/v1/admin/inventory' ||
+    /^\/v1\/admin\/inventory\/[^/]+$/.test(pathname);
   const isAdminImageRead = pathname === '/v1/images/read-access';
   const isContactPath = pathname === '/v1/contact';
   const origin = request.headers.origin;
@@ -87,8 +91,8 @@ const server = http.createServer(async (request, response) => {
       try { body = JSON.parse(raw); }
       catch { throw new ApiError(400, 'Invalid JSON body'); }
     }
-    const handler = isContactPath ? contactApi : isReceiptPath ? receiptApi : isStockIntakePath ? stockIntakeApi : isDonationAdminPath ? donationReviewApi : isAdminApi ? staffApi : api;
-    const result = await handler.handle(request.method, pathname, request.headers, body);
+    const handler = isContactPath ? contactApi : isReceiptPath ? receiptApi : isStockIntakePath ? stockIntakeApi : isInventoryPath ? inventoryApi : isDonationAdminPath ? donationReviewApi : isAdminApi ? staffApi : api;
+    const result = await handler.handle(request.method, pathname, request.headers, body, request.url);
     response.writeHead(result.status, responseHeaders);
     response.end(JSON.stringify(result.body));
   } catch (error) {
