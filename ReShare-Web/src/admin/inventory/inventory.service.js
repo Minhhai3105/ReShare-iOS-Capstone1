@@ -1,7 +1,7 @@
 // Lớp dữ liệu tồn kho. Hiện dùng mock khi dev; khi có API/Firestore chỉ thay phần thân hàm,
 // giữ chữ ký và dạng kết quả để giao diện không phải sửa.
-import { MOCK_WAREHOUSES, WAREHOUSE_AREA, createMockInventory, getInventoryScenario } from './inventory.mock'
-import { normalizeText } from '../donations/donation.service'
+import { MOCK_WAREHOUSES, createMockInventory, getInventoryScenario } from './inventory.mock'
+import { normalizeText } from '../shared/text'
 
 export const INVENTORY_ERROR = Object.freeze({
   forbidden: 403,
@@ -29,8 +29,8 @@ export const MOVEMENT_TYPE_LABEL = Object.freeze({
 // Mock chỉ dùng khi dev; bản build không tham chiếu tới nên dữ liệu mẫu bị loại khỏi bundle.
 const IS_MOCK = import.meta.env.DEV
 const mock = IS_MOCK
-  ? { ...createMockInventory(), warehouses: MOCK_WAREHOUSES, areas: WAREHOUSE_AREA, getScenario: getInventoryScenario }
-  : { items: [], movements: [], warehouses: [], areas: {}, getScenario: () => 'normal' }
+  ? { ...createMockInventory(), warehouses: MOCK_WAREHOUSES, getScenario: getInventoryScenario }
+  : { items: [], movements: [], warehouses: [], getScenario: () => 'normal' }
 const dateFormatter = new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
 const hourFormatter = new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit' })
 
@@ -51,7 +51,7 @@ async function simulateRequest(access) {
 
 export function getWarehouseInfo(warehouseId) {
   const warehouse = mock.warehouses.find(({ id }) => id === warehouseId)
-  return { id: warehouseId, name: warehouse?.name ?? warehouseId, area: mock.areas[warehouseId] ?? '' }
+  return { id: warehouseId, name: warehouse?.name ?? warehouseId, area: warehouse?.area ?? '' }
 }
 
 /** Kho được chọn trong ô "Kho làm việc" theo phân công. */

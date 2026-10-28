@@ -15,7 +15,12 @@ import {
   getAccessibleWarehouses,
 } from '../inventory.service'
 
+// Màn đích đã có của US10 (chi tiết đơn) và US12 (thực nhận); phiếu PN/PX/DC chưa có màn xem.
+const DONATION_DETAIL_ROUTE = 'admin-donation-detail'
+const DONATION_RECEIPT_ROUTE = 'admin-donation-receipt'
+
 const STATE_MESSAGE = {
+  [INVENTORY_ERROR.notConfigured]: { icon: 'server', title: 'Chưa kết nối nguồn tồn kho', text: 'Phiên bản này chưa có dữ liệu tồn kho chính thức từ hệ thống, nên chưa xem được chi tiết vật phẩm.' },
   [INVENTORY_ERROR.forbidden]: { icon: 'shield', title: 'Không có quyền xem vật phẩm này', text: 'Vật phẩm thuộc kho bạn không được phân công.' },
   [INVENTORY_ERROR.notFound]: { icon: 'search', title: 'Không tìm thấy vật phẩm', text: 'Mã vật phẩm không tồn tại hoặc đã bị gỡ khỏi kho.' },
   [INVENTORY_ERROR.server]: { icon: 'cloud-off', title: 'Không tải được vật phẩm', text: 'Máy chủ hoặc kết nối mạng đang gặp sự cố. Vui lòng thử lại.' },
@@ -50,10 +55,11 @@ const accessLabel = computed(() => {
   const scope = isSystemAdmin.value ? 'toàn hệ thống' : scopeName.value.replace(/Kho /g, '')
   return `${USER_ROLE_LABEL[role]} (${scope})`
 })
+const donationParams = computed(() => ({ donationId: item.value?.donationId }))
 const sources = computed(() => [
-  { label: 'Yêu cầu quyên góp', icon: 'heart-handshake', code: item.value?.donationId, linked: 'Đã liên kết', empty: 'Chưa liên kết' },
-  { label: 'Biên bản thực nhận', icon: 'clipboard-check', code: item.value?.receiptId, linked: 'Đã xác nhận', empty: 'Chưa xác nhận' },
-  { label: 'Phiếu nhập kho', icon: 'file-text', code: item.value?.stockInVoucherId, linked: 'Đã tạo phiếu', empty: 'Chưa tạo phiếu' },
+  { label: 'Yêu cầu quyên góp', icon: 'heart-handshake', code: item.value?.donationId, linked: 'Đã liên kết', empty: 'Chưa liên kết', to: { name: DONATION_DETAIL_ROUTE, params: donationParams.value } },
+  { label: 'Biên bản thực nhận', icon: 'clipboard-check', code: item.value?.receiptId, linked: 'Đã xác nhận', empty: 'Chưa xác nhận', to: { name: DONATION_RECEIPT_ROUTE, params: donationParams.value } },
+  { label: 'Phiếu nhập kho', icon: 'file-text', code: item.value?.stockInVoucherId, linked: 'Chưa hỗ trợ xem phiếu', empty: 'Chưa tạo phiếu' },
 ])
 
 async function load() {
@@ -104,7 +110,7 @@ onBeforeUnmount(() => { latestRequestId += 1 })
     <header class="detail-head">
       <div>
         <p class="detail-tags"><span class="inv-chip mono">Chỉ đọc / Read-only</span>Phân loại kho: Tiếp nhận quyên góp</p>
-        <h1>Chi tiết vật phẩm <span class="inv-chip">Mã vật phẩm: {{ formatCode(item?.id) }}</span></h1>
+        <h1>Chi tiết vật phẩm <span class="inv-chip">Mã vật phẩm: {{ formatCode(item?.id ?? route.params.itemId) }}</span></h1>
       </div>
       <span class="inv-chip detail-access"><AuthIcon name="shield-check" :size="16" />Quyền truy cập: {{ accessLabel }}</span>
     </header>
@@ -124,7 +130,7 @@ onBeforeUnmount(() => { latestRequestId += 1 })
         <section class="inv-card">
           <div class="detail-card-head">
             <h2><AuthIcon name="clipboard-check" :size="22" />Thông tin tồn kho</h2>
-            <span class="detail-hint"><AuthIcon name="refresh" :size="15" />Tự động suy diễn logic</span>
+            <span class="detail-hint"><AuthIcon name="refresh" :size="15" />Tính từ lịch sử biến động</span>
           </div>
           <div class="detail-core">
             <div>
@@ -163,7 +169,11 @@ onBeforeUnmount(() => { latestRequestId += 1 })
                   <td><span class="inv-chip" :class="{ 'inv-chip--green': movement.quantity > 0, 'inv-chip--danger': movement.quantity < 0 }">{{ MOVEMENT_TYPE_LABEL[movement.type] }}</span></td>
                   <td class="mono detail-move" :class="movement.quantity > 0 ? 'is-green' : 'is-red'">{{ formatQuantity(movement.quantity) }}</td>
                   <td>{{ movement.actor }}</td>
-                  <td class="mono detail-nowrap">{{ formatCode(movement.voucherId) }}</td>
+                  <td class="detail-nowrap">
+                    <span class="mono">{{ formatCode(movement.voucherId) }}</span>
+                    <RouterLink v-if="movement.type === 'stock_in'" :to="{ name: DONATION_DETAIL_ROUTE, params: donationParams }" class="detail-voucher-link">Xem đơn nguồn</RouterLink>
+                    <small v-else class="detail-voucher-note">Chưa hỗ trợ xem phiếu</small>
+                  </td>
                   <td>{{ movement.note }}</td>
                 </tr>
               </tbody>
@@ -190,9 +200,13 @@ onBeforeUnmount(() => { latestRequestId += 1 })
           <h2 class="detail-side-title"><AuthIcon name="link" :size="20" />Nguồn nhập &amp; Chứng từ gốc</h2>
           <div v-for="source in sources" :key="source.label" class="detail-source">
             <span class="detail-label">{{ source.label }} <AuthIcon :name="source.icon" :size="16" /></span>
-            <span><b class="mono">{{ formatCode(source.code) }}</b><em>{{ source.code ? source.linked : source.empty }}</em></span>
+            <span>
+              <RouterLink v-if="source.code && source.to" :to="source.to" class="mono detail-source-link">{{ formatCode(source.code) }}</RouterLink>
+              <b v-else class="mono">{{ formatCode(source.code) }}</b>
+              <em>{{ source.code ? source.linked : source.empty }}</em>
+            </span>
           </div>
-          <p class="detail-source-note">Liên kết "Xem yêu cầu nguồn" chỉ xuất hiện khi đã có bản ghi nguồn được cấp quyền truy cập.</p>
+          <p class="detail-source-note">Bấm mã đơn quyên góp hoặc biên bản thực nhận để mở màn chi tiết. Phiếu nhập/xuất/điều chỉnh chưa có màn xem.</p>
           <p class="detail-hint is-green"><AuthIcon name="check-circle" :size="15" />Cam kết truy xuất nguồn gốc ReShare</p>
         </section>
 
@@ -244,6 +258,9 @@ onBeforeUnmount(() => { latestRequestId += 1 })
 .detail-history td { background: #fff; }
 .detail-move { font-weight: 700; }
 .detail-nowrap { white-space: nowrap; }
+.detail-voucher-link, .detail-source-link { display: block; font-size: 13px; font-weight: 600; color: var(--inv-green); }
+.detail-source-link { font-size: 15px; }
+.detail-voucher-note { display: block; font-size: 12px; color: var(--inv-faint); }
 .is-green { color: var(--inv-green); }
 .is-red { color: var(--inv-danger); }
 .detail-action { width: 100%; margin-bottom: 10px; }

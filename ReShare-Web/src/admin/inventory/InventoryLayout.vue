@@ -72,7 +72,7 @@ const currentYear = new Date().getFullYear()
         <span class="inv-nav is-disabled"><AuthIcon name="settings" :size="19" />Cấu hình chung</span>
       </nav>
 
-      <div class="inv-station"><span><AuthIcon name="terminal" :size="15" />WH-SGN-02</span><span class="inv-chip inv-chip--green"><i />Online</span></div>
+      <div class="inv-station"><span><AuthIcon name="terminal" :size="15" />WH-SGN-02</span><span class="inv-chip">Xem thử</span></div>
     </aside>
 
     <div class="inv-main">
@@ -89,7 +89,7 @@ const currentYear = new Date().getFullYear()
       <main class="inv-content"><slot /></main>
 
       <footer class="inv-footer">
-        <span><i />Hệ thống máy chủ: Sẵn sàng</span>
+        <span>Bản xem thử – chưa kết nối máy chủ kho</span>
         <span>© {{ currentYear }} ReShare Circular Fashion Hub. Hệ thống điều phối nội bộ.</span>
         <span>Trung tâm trợ giúp vận hành</span>
         <span>Chính sách an toàn kho</span>

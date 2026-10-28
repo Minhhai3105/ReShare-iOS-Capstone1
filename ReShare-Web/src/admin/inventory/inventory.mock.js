@@ -1,14 +1,11 @@
 // Dữ liệu tồn kho mẫu, chỉ dùng khi chạy dev (service chặn trên bản production).
 // CẦN CHỐT với BE: tên collection/field cho vật phẩm tồn (inventory) và biến động (stock movements).
-import { MOCK_WAREHOUSES } from '../donations/donation.mock'
-
-export { MOCK_WAREHOUSES }
-
-export const WAREHOUSE_AREA = {
-  wh_dn_01: 'Khu vực Hải Châu & Sơn Trà, TP. Đà Nẵng',
-  wh_dn_02: 'Khu vực Ngũ Hành Sơn, TP. Đà Nẵng',
-  wh_dn_03: 'Khu vực Liên Chiểu, TP. Đà Nẵng',
-}
+// Không import từ donations/ để bản build không kéo theo dữ liệu mẫu của module khác.
+export const MOCK_WAREHOUSES = [
+  { id: 'wh_dn_01', name: 'Kho Hải Châu', area: 'Khu vực Hải Châu & Sơn Trà, TP. Đà Nẵng' },
+  { id: 'wh_dn_02', name: 'Kho Ngũ Hành Sơn', area: 'Khu vực Ngũ Hành Sơn, TP. Đà Nẵng' },
+  { id: 'wh_dn_03', name: 'Kho Liên Chiểu', area: 'Khu vực Liên Chiểu, TP. Đà Nẵng' },
+]
 
 const STAFF = ['Nguyễn Văn An', 'Lê Thị Bình', 'Trần Quốc Huy']
 const DAY_MS = 24 * 60 * 60 * 1000

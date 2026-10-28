@@ -4,20 +4,10 @@ import { ADMIN_ROLES, USER_ROLE } from '../auth/auth.constants.js'
 import { db } from '../auth/firebase.js'
 import { auth } from '../auth/firebase.js'
 import { collection, doc, documentId, getDoc, getDocs, limit, orderBy, query as firestoreQuery, startAfter, where } from 'firebase/firestore'
+import { normalizeText } from '../shared/text'
 
 function createQueueError(status) {
   return Object.assign(new Error(String(status)), { status })
-}
-
-// Bỏ dấu tiếng Việt để tìm "nguyen" khớp "Nguyễn".
-export function normalizeText(text) {
-  return text
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/đ/gi, 'd')
-    .replace(/^#/, '')
-    .toLowerCase()
-    .trim()
 }
 
 function toDayBoundary(date, isEndOfDay) {

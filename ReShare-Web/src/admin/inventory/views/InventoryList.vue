@@ -31,6 +31,8 @@ const RULES = [
 ]
 const timeFormatter = new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
 
+// Dữ liệu mẫu chỉ có khi chạy dev (service chặn trên bản production).
+const IS_SAMPLE_DATA = import.meta.env.DEV
 const route = useRoute()
 const router = useRouter()
 const filters = reactive({ ...DEFAULT_FILTERS })
@@ -53,7 +55,8 @@ const scopeName = computed(() =>
 const hasActiveFilters = computed(() => Object.keys(DEFAULT_FILTERS).some((key) => filters[key] !== DEFAULT_FILTERS[key]))
 const viewState = computed(() => {
   if (errorStatus.value === INVENTORY_ERROR.forbidden) return 'forbidden'
-  if (errorStatus.value && errorStatus.value !== INVENTORY_ERROR.notConfigured) return 'error'
+  if (errorStatus.value === INVENTORY_ERROR.notConfigured) return 'not-configured'
+  if (errorStatus.value) return 'error'
   if (!result.value && !errorStatus.value) return 'loading'
   if (result.value?.items.length) return 'ready'
   return hasActiveFilters.value ? 'no-match' : 'empty'
@@ -82,9 +85,13 @@ function selectWarehouse(warehouseId) {
   router.replace({ query: { ...route.query, warehouseId: warehouseId || undefined } })
 }
 
+// Bộ lọc đổi thì watcher tự tải; nếu vốn đã mặc định thì tải lại trực tiếp (chỉ một đường tải).
 function resetFilters() {
+  if (!hasActiveFilters.value) {
+    load()
+    return
+  }
   Object.assign(filters, DEFAULT_FILTERS)
-  load()
 }
 
 watch([() => ({ ...filters }), selectedWarehouseId, staffAssignment], () => {
@@ -105,7 +112,7 @@ onBeforeUnmount(() => {
       <div>
         <strong>Môi trường thử nghiệm (Sandbox Node)</strong> <span class="inv-chip">Độc lập vật lý</span>
         <p>
-          Dữ liệu kho dưới đây được đồng bộ theo phạm vi <strong>{{ scopeName }}</strong>. Không tác động đến các luồng
+          Dữ liệu kho dưới đây thuộc phạm vi <strong>{{ scopeName }}</strong>. Không tác động đến các luồng
           intake thực tế tại trung tâm phân phối chính.
         </p>
       </div>
@@ -134,10 +141,10 @@ onBeforeUnmount(() => {
             :class="{ 'is-active': filters.stock === tab.value }"
             @click="filters.stock = tab.value"
           >
-            {{ tab.label }} <span class="mono">({{ result?.counts[tab.value] ?? 0 }})</span>
+            {{ tab.label }}<span v-if="result" class="mono"> ({{ result.counts[tab.value] }})</span>
           </button>
         </div>
-        <span class="inventory-sync"><i />Đồng bộ tự động: <b class="mono">{{ syncedAt ? timeFormatter.format(syncedAt) : '--:--:--' }}</b></span>
+        <span v-if="syncedAt" class="inventory-sync">Cập nhật lúc: <b class="mono">{{ timeFormatter.format(syncedAt) }}</b></span>
       </div>
       <div class="inventory-filters__row">
         <label class="inventory-search">
@@ -183,6 +190,13 @@ onBeforeUnmount(() => {
 
       <div v-if="viewState === 'loading'" class="inv-state"><AuthIcon name="loader" :size="32" class="inventory-spin" /><p>Đang tải tồn kho…</p></div>
 
+      <div v-else-if="viewState === 'not-configured'" class="inv-state">
+        <span class="inv-state__icon"><AuthIcon name="server" :size="36" /></span>
+        <h2>Chưa kết nối nguồn tồn kho</h2>
+        <p>Phiên bản này chưa có dữ liệu tồn kho chính thức từ hệ thống. Danh sách sẽ hiển thị khi backend kho được triển khai.</p>
+        <RouterLink :to="{ name: ADMIN_ROUTE.donationQueue }" class="inv-btn"><AuthIcon name="download" :size="18" />Xem yêu cầu chờ nhập kho</RouterLink>
+      </div>
+
       <div v-else-if="viewState === 'empty'" class="inv-state">
         <span class="inv-state__icon"><AuthIcon name="archive" :size="38" /></span>
         <h2>Chưa có dữ liệu kho thực tế</h2>
@@ -215,8 +229,8 @@ onBeforeUnmount(() => {
       </div>
 
       <footer class="inventory-table__footer">
-        <span>Tổng số phân loại vật phẩm: <b class="mono">{{ result?.items.length ?? 0 }} bản ghi</b></span>
-        <span><AuthIcon name="shield" :size="16" />Chỉ số phản ánh kho thời gian thực</span>
+        <span><template v-if="result">Tổng số phân loại vật phẩm: <b class="mono">{{ result.items.length }} bản ghi</b></template></span>
+        <span v-if="IS_SAMPLE_DATA"><AuthIcon name="info" :size="16" />Dữ liệu mẫu – chưa kết nối nguồn tồn kho</span>
       </footer>
     </section>
 
