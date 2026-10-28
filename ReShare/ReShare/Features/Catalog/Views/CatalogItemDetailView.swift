@@ -6,6 +6,9 @@ struct CatalogItemDetailView: View {
     @Environment(\.dismiss) private var dismiss
     let item: CatalogItem
     @State private var selectedPhotoIndex = 0
+    @State private var showContactSheet = false
+    @State private var openChatAfterSheet = false
+    @State private var showChat = false
 
 
     // Màu sắc nhận diện ReShare
@@ -71,10 +74,72 @@ struct CatalogItemDetailView: View {
                 .foregroundColor(.primary)
             }
         }
-        // Thanh nút bấm cố định dính đáy (Dùng NavigationLink push sang Chat, không chồng Sheet)
+        // Thanh nút bấm cố định dính đáy.
         .safeAreaInset(edge: .bottom) {
             stickyBottomActionBar
         }
+        .sheet(isPresented: $showContactSheet, onDismiss: {
+            if openChatAfterSheet {
+                openChatAfterSheet = false
+                showChat = true
+            }
+        }) {
+            contactSheet
+        }
+        .navigationDestination(isPresented: $showChat) {
+            ChatConversationView(item: item)
+        }
+    }
+
+    private var contactSheet: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("Liên hệ người cho")
+                    .font(.system(size: 20, weight: .bold))
+                Spacer()
+                Button("Đóng", systemImage: "xmark") { showContactSheet = false }
+                    .labelStyle(.iconOnly)
+                    .tint(.secondary)
+            }
+
+            Text("Trao đổi về \(item.title) với \(item.donorName).")
+                .font(.system(size: 14))
+                .foregroundColor(.secondary)
+                .lineLimit(2)
+
+            Button {
+                openChatAfterSheet = true
+                showContactSheet = false
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "message.fill")
+                        .frame(width: 36, height: 36)
+                        .background(softMint, in: RoundedRectangle(cornerRadius: 10))
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Nhắn tin trong ReShare")
+                            .font(.system(size: 15, weight: .bold))
+                        Text("Hẹn gặp và xác nhận bàn giao tại đây")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                }
+                .foregroundColor(primaryGreen)
+                .padding(14)
+                .background(Color.white, in: RoundedRectangle(cornerRadius: 14))
+                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.black.opacity(0.08)))
+            }
+
+            Text("Chỉ người cho và người nhận trong cuộc trò chuyện xem được tin nhắn.")
+                .font(.system(size: 12))
+                .foregroundColor(.secondary)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Color(red: 0.97, green: 0.98, blue: 0.96))
+        .presentationDetents([.height(290)])
+        .presentationDragIndicator(.visible)
     }
 
     // MARK: - 1. Photo Carousel
@@ -404,19 +469,29 @@ struct CatalogItemDetailView: View {
             } else {
                 // Giao diện dành cho Người B (Người xin đồ từ cộng đồng)
                 HStack(spacing: 12) {
-                    // Nút Nhắn tin nhận đồ (Dùng NavigationLink push sang ngang mượt mà)
-                    NavigationLink(destination: ChatConversationView(item: item)) {
-                        HStack(spacing: 8) {
-                            Image(systemName: item.status == .completed ? "checkmark.circle.fill" : "message.fill")
-                            Text(item.status == .completed ? "Món đồ đã được trao tặng" : (item.status == .reserved ? "Nhắn tin (Đã có người hẹn)" : "Nhắn tin nhận đồ (0đ)"))
-                                .font(.system(size: 15, weight: .bold))
+                    // Mở sheet liên hệ trước khi vào chat P2P.
+                    if item.status == .completed {
+                        Text("Món đồ đã được trao tặng")
+                            .font(.system(size: 15, weight: .bold))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .background(Color(uiColor: .systemGray2))
+                            .foregroundColor(.white)
+                            .cornerRadius(14)
+                    } else {
+                        Button { showContactSheet = true } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "message.fill")
+                                Text(item.status == .reserved ? "Liên hệ (Đã có người hẹn)" : "Liên hệ người cho (0đ)")
+                                    .font(.system(size: 15, weight: .bold))
+                            }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .background(item.status == .reserved ? Color.orange : primaryGreen)
+                            .foregroundColor(.white)
+                            .cornerRadius(14)
+                            .shadow(color: primaryGreen.opacity(0.3), radius: 6, y: 3)
                         }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(item.status == .completed ? Color(uiColor: .systemGray2) : (item.status == .reserved ? Color.orange : primaryGreen))
-                        .foregroundColor(.white)
-                        .cornerRadius(14)
-                        .shadow(color: primaryGreen.opacity(0.3), radius: 6, y: 3)
                     }
                 }
 
