@@ -8,6 +8,8 @@ const { createStaffApi } = require('./staff-api.cjs');
 const { ApiError: ContactApiError, createContactApi } = require('./contact-api.cjs');
 const { createDonationReviewApi } = require('./donation-review-api.cjs');
 const { createReceiptApi } = require('./receipt-api.cjs');
+const { createDistributionApi } = require('./distribution-api.cjs');
+const { createReportsApi } = require('./reports-api.cjs');
 
 const {
   CLOUDINARY_CLOUD_NAME,
@@ -35,6 +37,8 @@ const staffApi = createStaffApi({ db, auth: getAuth(), verifyToken });
 const contactApi = createContactApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const donationReviewApi = createDonationReviewApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const receiptApi = createReceiptApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
+const distributionApi = createDistributionApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
+const reportsApi = createReportsApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const adminWebOrigins = new Set((process.env.ADMIN_WEB_ORIGINS || '')
   .split(',').map(origin => origin.trim()).filter(Boolean));
 
@@ -43,6 +47,8 @@ const server = http.createServer(async (request, response) => {
   const isAdminApi = pathname.startsWith('/v1/admin/');
   const isDonationAdminPath = pathname.startsWith('/v1/admin/donations');
   const isReceiptPath = /^\/v1\/admin\/donations\/[^/]+\/receipt$/.test(pathname);
+  const isDistributionPath = pathname.startsWith('/v1/admin/distribution');
+  const isReportsPath = pathname.startsWith('/v1/admin/reports');
   const isAdminImageRead = pathname === '/v1/images/read-access';
   const isContactPath = pathname === '/v1/contact';
   const origin = request.headers.origin;
@@ -83,15 +89,24 @@ const server = http.createServer(async (request, response) => {
       try { body = JSON.parse(raw); }
       catch { throw new ApiError(400, 'Invalid JSON body'); }
     }
-    const handler = isContactPath ? contactApi : isReceiptPath ? receiptApi : isDonationAdminPath ? donationReviewApi : isAdminApi ? staffApi : api;
-    const result = await handler.handle(request.method, pathname, request.headers, body);
+    const handler = isContactPath ? contactApi
+      : isReceiptPath ? receiptApi
+      : isDonationAdminPath ? donationReviewApi
+      : isDistributionPath ? distributionApi
+      : isReportsPath ? reportsApi
+      : isAdminApi ? staffApi
+      : api;
+    const result = await handler.handle(request.method, request.url, request.headers, body);
     response.writeHead(result.status, responseHeaders);
     response.end(JSON.stringify(result.body));
   } catch (error) {
     const status = error instanceof ApiError || error instanceof ContactApiError ? error.status : 500;
     if (status === 500) console.error('ReShare API failure:', error);
     response.writeHead(status, responseHeaders);
-    response.end(JSON.stringify({ message: status === 500 ? 'Internal server error' : error.message }));
+    const errBody = { message: status === 500 ? 'Internal server error' : error.message };
+    if (error.code) errBody.code = error.code;
+    if (error.details) errBody.details = error.details;
+    response.end(JSON.stringify(errBody));
   }
 });
 

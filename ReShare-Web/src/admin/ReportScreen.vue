@@ -47,7 +47,11 @@ async function load() {
   try {
     const repository = props.repository || createMockReportsRepository({ scenario: scenario.value })
     const access = assignment.value
-    const response = await repository.load({ assignment: { active: access.active, role: access.role, warehouseIds: Array.isArray(access.warehouseIds) ? [...access.warehouseIds] : [] }, signal: controller.signal })
+    const response = await repository.load({
+      assignment: { active: access.active, role: access.role, warehouseIds: Array.isArray(access.warehouseIds) ? [...access.warehouseIds] : [] },
+      filters: applied.value,
+      signal: controller.signal,
+    })
     if (id !== requestId) return
     if (applied.value.warehouseId && !response.warehouses.some((entry) => entry.id === applied.value.warehouseId)) {
       applied.value = { ...applied.value, warehouseId: '' }
@@ -88,16 +92,22 @@ function applyFilters() {
   catch (error) { filterError.value = error.message; return }
   applied.value = { ...filters }
   dialog.value?.close()
+  if (props.authenticatedContext || props.repository) {
+    load()
+  }
 }
 async function openDrill(type) { drillType.value = type; await nextTick(); dialog.value?.showModal() }
 function exportCsv() {
   if (!exportReady.value) return
   try {
-    const text = buildReportsCsv(data.value, applied.value, assignment.value)
+    const isLive = props.authenticatedContext || !!props.repository
+    const text = buildReportsCsv(data.value, applied.value, assignment.value, isLive ? 'Dữ liệu chính thức' : null)
     const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8;' }))
     const link = document.createElement('a')
     link.href = url
-    link.download = `DU-LIEU-MAU-bao-cao-${applied.value.from}-${applied.value.to}.csv`
+    link.download = isLive
+      ? `bao-cao-${applied.value.from}-${applied.value.to}.csv`
+      : `DU-LIEU-MAU-bao-cao-${applied.value.from}-${applied.value.to}.csv`
     link.click()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   } catch { exportError.value = 'Không thể xuất CSV. Vui lòng tải lại báo cáo và thử lại.' }
@@ -107,7 +117,7 @@ function exportCsv() {
 <template>
   <AdminChrome screen="Q" :role="displayRole" :warehouse-label="warehouseLabel" :actor-name="actorName" :lock-role="authenticatedContext || !!props.assignment" reports-page @navigate="emit('navigate', $event)" @role="onRole">
     <div class="reports-page">
-      <section class="q-sandbox"><span class="q-icon"><AdminIcon name="flask" :size="27" /></span><div><b>MÔI TRƯỜNG THỬ NGHIỆM (SANDBOX NODE) <code>RC1D-94 / STAGING-HC01</code></b><p><strong>Dữ liệu mẫu — không dùng làm báo cáo chính thức.</strong> Dữ liệu dưới đây chỉ mô phỏng hoạt động kho, không phản ánh số liệu vận hành thực tế.</p></div><span class="q-badge">● Sandbox Active</span></section>
+      <section v-if="!authenticatedContext && !props.repository" class="q-sandbox"><span class="q-icon"><AdminIcon name="flask" :size="27" /></span><div><b>MÔI TRƯỜNG THỬ NGHIỆM (SANDBOX NODE) <code>RC1D-94 / STAGING-HC01</code></b><p><strong>Dữ liệu mẫu — không dùng làm báo cáo chính thức.</strong> Dữ liệu dưới đây chỉ mô phỏng hoạt động kho, không phản ánh số liệu vận hành thực tế.</p></div><span class="q-badge">● Sandbox Active</span></section>
       <header class="q-heading"><div class="q-tags"><span>PHẠM VI KHO: {{ warehouseLabel }}</span><span>PHÂN HỆ BÁO CÁO VẬN HÀNH (REPORTS)</span></div><h1>Báo cáo</h1><p>Theo dõi yêu cầu và hoạt động kho theo phạm vi được phân quyền</p></header>
 
       <form class="q-card q-filter" @submit.prevent="applyFilters" novalidate>
