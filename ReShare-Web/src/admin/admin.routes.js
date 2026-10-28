@@ -11,6 +11,12 @@ import {
 
 export const adminRoutes = [
   ...(import.meta.env.DEV ? [{
+    path: '/admin/reports-preview',
+    name: 'admin-reports-preview',
+    component: () => import('./reports/ReportsRoute.vue'),
+    meta: { requiresAuth: true, roles: ADMIN_ROLES, devPreview: true },
+  }] : []),
+  ...(import.meta.env.DEV ? [{
     path: '/admin/distribution-preview',
     name: 'admin-distribution-preview',
     component: () => import('./distribution/DistributionRoute.vue'),
