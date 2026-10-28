@@ -1,0 +1,132 @@
+{
+  "scope": "FE mock only; not Backend US26 acceptance",
+  "results": [
+    {
+      "name": "L FORBIDDEN",
+      "expected": "Clear inventory, close dialog, lock submit; distinguish permission/session",
+      "actual": "Clear inventory, close dialog, lock submit; distinguish permission/session",
+      "result": "PASS",
+      "scope": "FE mock browser"
+    },
+    {
+      "name": "L UNAUTHENTICATED",
+      "expected": "Clear inventory, close dialog, lock submit; distinguish permission/session",
+      "actual": "Clear inventory, close dialog, lock submit; distinguish permission/session",
+      "result": "PASS",
+      "scope": "FE mock browser"
+    },
+    {
+      "name": "L shortage",
+      "expected": "Reload stock, discard old confirmation, require handover confirmation again",
+      "actual": "Reload stock, discard old confirmation, require handover confirmation again",
+      "result": "PASS",
+      "scope": "FE mock browser"
+    },
+    {
+      "name": "L conflict",
+      "expected": "Reload stock, discard old confirmation, require handover confirmation again",
+      "actual": "Reload stock, discard old confirmation, require handover confirmation again",
+      "result": "PASS",
+      "scope": "FE mock browser"
+    },
+    {
+      "name": "L STALE_DATA",
+      "expected": "Reload stock, discard old confirmation, require handover confirmation again",
+      "actual": "Reload stock, discard old confirmation, require handover confirmation again",
+      "result": "PASS",
+      "scope": "FE mock browser"
+    },
+    {
+      "name": "L known not sent",
+      "expected": "Retry read data then explicitly confirm a new write",
+      "actual": "Retry read data then explicitly confirm a new write",
+      "result": "PASS",
+      "scope": "FE mock browser"
+    },
+    {
+      "name": "L revoke after success",
+      "expected": "Clear success voucher and inventory when assignment is revoked",
+      "actual": "Clear success voucher and inventory when assignment is revoked",
+      "result": "PASS",
+      "scope": "FE mock browser"
+    },
+    {
+      "name": "L TIMEOUT",
+      "expected": "Unknown outcome; no blind retry after cancel, item change or reload",
+      "actual": "Unknown outcome; no blind retry after cancel, item change or reload",
+      "result": "PASS",
+      "scope": "FE mock browser"
+    },
+    {
+      "name": "L TIMEOUT_AFTER_COMMIT",
+      "expected": "Unknown outcome; no blind retry after cancel, item change or reload",
+      "actual": "Unknown outcome; no blind retry after cancel, item change or reload",
+      "result": "PASS",
+      "scope": "FE mock browser"
+    },
+    {
+      "name": "L revoke during submit",
+      "expected": "Late result cannot reveal revoked data",
+      "actual": "Late result cannot reveal revoked data",
+      "result": "PASS",
+      "scope": "FE mock browser"
+    },
+    {
+      "name": "Q FORBIDDEN",
+      "expected": "No source table, CSV or open drill-down on error; suitable recovery action",
+      "actual": "No source table, CSV or open drill-down on error; suitable recovery action",
+      "result": "PASS",
+      "scope": "FE mock browser"
+    },
+    {
+      "name": "Q UNAUTHENTICATED",
+      "expected": "No source table, CSV or open drill-down on error; suitable recovery action",
+      "actual": "No source table, CSV or open drill-down on error; suitable recovery action",
+      "result": "PASS",
+      "scope": "FE mock browser"
+    },
+    {
+      "name": "Q STALE_DATA",
+      "expected": "No source table, CSV or open drill-down on error; suitable recovery action",
+      "actual": "No source table, CSV or open drill-down on error; suitable recovery action",
+      "result": "PASS",
+      "scope": "FE mock browser"
+    },
+    {
+      "name": "Q STOCK_CONFLICT",
+      "expected": "No source table, CSV or open drill-down on error; suitable recovery action",
+      "actual": "No source table, CSV or open drill-down on error; suitable recovery action",
+      "result": "PASS",
+      "scope": "FE mock browser"
+    },
+    {
+      "name": "Q error",
+      "expected": "No source table, CSV or open drill-down on error; suitable recovery action",
+      "actual": "No source table, CSV or open drill-down on error; suitable recovery action",
+      "result": "PASS",
+      "scope": "FE mock browser"
+    },
+    {
+      "name": "Q applied filters on retry",
+      "expected": "Retry sends applied filters, preserves uncommitted draft, restores same filtered report",
+      "actual": "Retry sends applied filters, preserves uncommitted draft, restores same filtered report",
+      "result": "PASS",
+      "scope": "FE mock browser"
+    },
+    {
+      "name": "Q late response ignoring abort",
+      "expected": "Newest request wins; revoked data cannot return from late success",
+      "actual": "Newest request wins; revoked data cannot return from late success",
+      "result": "PASS",
+      "scope": "FE mock browser"
+    },
+    {
+      "name": "Q selected warehouse removed",
+      "expected": "Do not broaden the applied warehouse scope after refresh",
+      "actual": "Do not broaden the applied warehouse scope after refresh",
+      "result": "PASS",
+      "scope": "FE mock browser"
+    }
+  ],
+  "pageErrors": []
+}

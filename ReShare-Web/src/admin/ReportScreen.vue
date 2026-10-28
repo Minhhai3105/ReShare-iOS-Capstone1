@@ -5,6 +5,7 @@ import AdminChrome from './AdminChrome.vue'
 import { calculateReviewMetrics } from './reviewMetrics'
 import { calculateReports, REPORT_TYPES, reportDay, validateReportFilters } from './reports/reports.model.js'
 import { createMockReportsRepository } from './reports/reports.repository.js'
+import { mapLqError, mockError } from './lq-errors.js'
 import { buildReportsCsv } from './reports/reports.csv.js'
 
 const props = defineProps({
@@ -25,7 +26,7 @@ function onRole(role) { if (props.assignment || props.authenticatedContext) retu
 const filters = reactive({ from: '2025-05-01', to: '2025-05-31', warehouseId: '', categoryId: '' })
 const applied = ref({ ...filters })
 const filterError = ref('')
-const loadError = ref('')
+const loadError = ref(null)
 const exportError = ref('')
 const loading = ref(true)
 const data = ref(null)
@@ -35,30 +36,33 @@ const drillType = ref('donation')
 let controller
 let requestId = 0
 
-async function load() {
+async function load(retry = false) {
   const id = ++requestId
   controller?.abort()
   controller = new AbortController()
   loading.value = true
   data.value = null
-  loadError.value = ''
+  loadError.value = null
   exportError.value = ''
   dialog.value?.close()
   try {
-    const repository = props.repository || createMockReportsRepository({ scenario: scenario.value })
+    const repository = props.repository || createMockReportsRepository({ scenario: retry ? 'normal' : scenario.value })
     const access = assignment.value
-    const response = await repository.load({ assignment: { active: access.active, role: access.role, warehouseIds: Array.isArray(access.warehouseIds) ? [...access.warehouseIds] : [] }, signal: controller.signal })
+    const response = await repository.load({ assignment: { active: access.active, role: access.role, warehouseIds: Array.isArray(access.warehouseIds) ? [...access.warehouseIds] : [] }, signal: controller.signal, filters: { ...applied.value } })
     if (id !== requestId) return
     if (applied.value.warehouseId && !response.warehouses.some((entry) => entry.id === applied.value.warehouseId)) {
-      applied.value = { ...applied.value, warehouseId: '' }
+      throw mockError('FORBIDDEN')
     }
-    filters.warehouseId = applied.value.warehouseId
     data.value = response
   } catch (error) {
-    if (id === requestId && error.name !== 'AbortError') loadError.value = error.message || 'Không thể tải báo cáo.'
+    if (id === requestId && error.name !== 'AbortError') {
+      data.value = null
+      loadError.value = mapLqError(error)
+      dialog.value?.close()
+    }
   } finally { if (id === requestId) loading.value = false }
 }
-watch([assignment, scenario, () => props.repository], load, { immediate: true, deep: true })
+watch([assignment, scenario, () => props.repository], () => load(), { immediate: true, deep: true, flush: 'sync' })
 onBeforeUnmount(() => { requestId += 1; controller?.abort() })
 
 const report = computed(() => {
@@ -89,7 +93,7 @@ function applyFilters() {
   applied.value = { ...filters }
   dialog.value?.close()
 }
-async function openDrill(type) { drillType.value = type; await nextTick(); dialog.value?.showModal() }
+async function openDrill(type) { if (!report.value) return; const id = requestId; drillType.value = type; await nextTick(); if (id === requestId && report.value) dialog.value?.showModal() }
 function exportCsv() {
   if (!exportReady.value) return
   try {
@@ -118,7 +122,7 @@ function exportCsv() {
       </form>
 
       <div v-if="loading" class="q-card q-state" role="status" aria-live="polite"><AdminIcon name="clock" :size="30" /><h2>Đang tải dữ liệu báo cáo mẫu...</h2><p>Đang đối chiếu bản ghi và phạm vi kho được phép.</p></div>
-      <div v-else-if="loadError" class="q-card q-state q-error-state" role="alert"><AdminIcon name="warning" :size="30" /><h2>Không thể hiển thị báo cáo</h2><p>{{ loadError }}</p><button class="q-primary" @click="load">Thử lại</button></div>
+      <div v-else-if="loadError" class="q-card q-state q-error-state" role="alert"><AdminIcon name="warning" :size="30" /><h2>{{ loadError.title }}</h2><p>{{ loadError.message }}</p><a v-if="loadError.kind === 'session'" href="/admin/login">Đăng nhập lại</a><button v-else-if="['retry', 'conflict'].includes(loadError.kind)" class="q-primary" @click="load(true)">{{ loadError.action }}</button></div>
 
       <template v-if="report">
         <section class="q-section"><h2><AdminIcon name="clock" :size="21" />Hoạt động trong khoảng thời gian</h2><p>Đang áp dụng: {{ dateText(applied.from) }} – {{ dateText(applied.to) }} · {{ warehouseLabel }} · {{ categoryLabel }}</p>
@@ -142,7 +146,7 @@ function exportCsv() {
       </template>
 
       <div class="q-bottom"><section class="q-card"><h2><AdminIcon name="shield" />Nguyên tắc kiến trúc báo cáo &amp; Thẩm quyền dữ liệu</h2><div><b>Phân quyền theo phạm vi kho</b><p>Quản trị viên kho chỉ xem kho được giao. System Admin có thể lọc các kho mẫu trong hệ thống.</p></div><div><b>Nguồn dữ liệu có căn cứ</b><p>Donation, thực nhận, nhập kho và phân phối có bản ghi riêng. Số tổng, biểu đồ, bảng và CSV lấy cùng dữ liệu đã lọc.</p></div></section><section class="q-card"><h2><AdminIcon name="monitor" />Trạng thái kỹ thuật &amp; Giới hạn Prototype</h2><div><b>Không suy diễn trạng thái</b><p>Đếm sự kiện xác nhận và chứng từ, không suy từ trạng thái sau cùng của donation.</p></div><div><b>Không tính toán số học giả định</b><p>Tồn kho là snapshot riêng, không lấy số yêu cầu trừ số phân phối.</p></div><div><b>Giao diện mục tiêu</b><p>Chưa tích hợp API thật. Backend phải thực thi phân quyền và đối chiếu nguồn trước khi dùng vận hành chính thức.</p></div></section></div>
-      <section v-if="!props.repository" class="q-demo-controls"><label>Kịch bản demo<select aria-label="Kịch bản demo" v-model="scenario"><option value="normal">Dữ liệu mẫu bình thường</option><option value="empty">Mô phỏng dữ liệu rỗng</option><option value="error">Mô phỏng lỗi tải</option></select></label><p>Chỉ phục vụ kiểm tra loading, rỗng và lỗi; không thay đổi dữ liệu thật.</p></section>
+      <section v-if="!props.repository" class="q-demo-controls"><label>Kịch bản demo<select aria-label="Kịch bản demo" v-model="scenario"><option value="normal">Dữ liệu mẫu bình thường</option><option value="empty">Mô phỏng dữ liệu rỗng</option><option value="FORBIDDEN">Mất quyền (mock)</option><option value="UNAUTHENTICATED">Hết phiên (mock)</option><option value="STALE_DATA">Dữ liệu cũ (mock)</option><option value="STOCK_CONFLICT">Xung đột (mock)</option><option value="error">Mô phỏng lỗi tải</option></select></label><p>Mã lỗi là đề xuất/mock, chưa phải hợp đồng Backend. Thử lại sau lỗi tải/conflict sẽ tải dữ liệu mẫu bình thường, giữ bộ lọc đã áp dụng.</p></section>
       <footer class="q-footer">● Dữ liệu mẫu — không dùng làm báo cáo chính thức <span>ReShare · RC1D-94</span></footer>
 
       <dialog ref="dialog" class="q-dialog" aria-labelledby="q-drill-title"><header><div><span class="q-badge">Dữ liệu mẫu</span><h2 id="q-drill-title">{{ drillTitle }}</h2></div><button class="q-secondary" autofocus @click="dialog.close()">Đóng</button></header><p>{{ warehouseLabel }} · {{ categoryLabel }} · {{ drillType === 'stock' ? `Snapshot ${dateText(reportDay(report?.snapshotAt))}, không lọc theo ngày` : `${dateText(applied.from)} – ${dateText(applied.to)}` }}</p><p v-if="!drillRows.length" class="q-empty">Không có bản ghi nguồn tương ứng.</p><div v-else class="q-table-wrap"><table aria-label="Chi tiết bản ghi nguồn"><thead><tr><th>Mã nguồn</th><th>Kho</th><th>Vật phẩm</th><th>{{ drillType === 'stock' ? 'Tồn' : 'Số lượng' }}</th><th>{{ drillType === 'stock' ? 'Danh mục' : 'Ngày / Tham chiếu' }}</th></tr></thead><tbody><tr v-for="row in drillRows" :key="row.id"><td><code>{{ row.id }}</code></td><td>{{ warehouseName(row.warehouseId) }}</td><td>{{ row.item }}</td><td>{{ drillType === 'stock' ? row.available : row.quantity }} {{ row.unit }}</td><td>{{ drillType === 'stock' ? categoryName(row.categoryId) : `${dateText(reportDay(row.timestamp))} · ${row.reference || '—'}` }}</td></tr></tbody></table></div><p class="q-dialog-note">Chỉ đối chiếu dữ liệu nguồn tại màn Q. Không mở hoặc triển khai màn Y.</p></dialog>

@@ -1,0 +1,165 @@
+﻿TAP version 13
+# Subtest: stock 3 -> export 2 -> stock 1; subsequent export 2 fails without deducting again
+ok 1 - stock 3 -> export 2 -> stock 1; subsequent export 2 fails without deducting again
+  ---
+  duration_ms: 454.1687
+  ...
+# Subtest: two concurrent mock requests cannot both spend stock 3 with quantity 2
+ok 2 - two concurrent mock requests cannot both spend stock 3 with quantity 2
+  ---
+  duration_ms: 223.1253
+  ...
+# Subtest: partial exports leave the remainder available, with unique document references
+ok 3 - partial exports leave the remainder available, with unique document references
+  ---
+  duration_ms: 464.5309
+  ...
+# Subtest: quantity rejects zero, negatives, decimals, exponent/hex input, unsafe integers and blank
+ok 4 - quantity rejects zero, negatives, decimals, exponent/hex input, unsafe integers and blank
+  ---
+  duration_ms: 2333.4193
+  ...
+# Subtest: requires approved beneficiary in same warehouse and physical handover
+ok 5 - requires approved beneficiary in same warehouse and physical handover
+  ---
+  duration_ms: 1155.387
+  ...
+# Subtest: lists only assigned warehouse data and refuses cross-warehouse inventory
+ok 6 - lists only assigned warehouse data and refuses cross-warehouse inventory
+  ---
+  duration_ms: 453.5507
+  ...
+# Subtest: rechecks assignment at commit, including revocation while request is pending
+ok 7 - rechecks assignment at commit, including revocation while request is pending
+  ---
+  duration_ms: 223.8989
+  ...
+# Subtest: simulated shortage returns new stock and allows an adjusted submission
+ok 8 - simulated shortage returns new stock and allows an adjusted submission
+  ---
+  duration_ms: 467.288
+  ...
+# Subtest: simulated version conflict does not deduct stock and requires fresh confirmation
+ok 9 - simulated version conflict does not deduct stock and requires fresh confirmation
+  ---
+  duration_ms: 699.2268
+  ...
+# Subtest: snapshots cannot mutate the mock ledger and new sessions restore fixtures
+ok 10 - snapshots cannot mutate the mock ledger and new sessions restore fixtures
+  ---
+  duration_ms: 234.0085
+  ...
+# Subtest: FE validation reports stock and prevents negative preview
+ok 11 - FE validation reports stock and prevents negative preview
+  ---
+  duration_ms: 0.4116
+  ...
+# Subtest: US09: resolveQueueAccess maps roles and warehouse scope correctly
+ok 12 - US09: resolveQueueAccess maps roles and warehouse scope correctly
+  ---
+  duration_ms: 1.8717
+  ...
+# Subtest: US09: Warehouse Admin is forbidden from requesting another warehouse
+ok 13 - US09: Warehouse Admin is forbidden from requesting another warehouse
+  ---
+  duration_ms: 0.9485
+  ...
+# Subtest: US09: processAndPaginateDonations filters strictly by assigned warehouse and supports stable pagination
+ok 14 - US09: processAndPaginateDonations filters strictly by assigned warehouse and supports stable pagination
+  ---
+  duration_ms: 16.5007
+  ...
+# Subtest: session and permission errors have distinct recovery; HTTP 401/403 take the same paths
+ok 15 - session and permission errors have distinct recovery; HTTP 401/403 take the same paths
+  ---
+  duration_ms: 1.4805
+  ...
+# Subtest: write errors with uncertain outcome never propose blind retry, including unclassified 409/500
+ok 16 - write errors with uncertain outcome never propose blind retry, including unclassified 409/500
+  ---
+  duration_ms: 0.3359
+  ...
+# Subtest: mock conflict codes request a reload instead of replaying the write
+ok 17 - mock conflict codes request a reload instead of replaying the write
+  ---
+  duration_ms: 0.3098
+  ...
+# Subtest: identical timeout errors may represent either no commit or a committed mock voucher
+ok 18 - identical timeout errors may represent either no commit or a committed mock voucher
+  ---
+  duration_ms: 457.0017
+  ...
+# Subtest: report adapter exposes proposed mock errors without any fallback data
+ok 19 - report adapter exposes proposed mock errors without any fallback data
+  ---
+  duration_ms: 23.1226
+  ...
+# Subtest: May report totals match independently identified source documents
+ok 20 - May report totals match independently identified source documents
+  ---
+  duration_ms: 14.5847
+  ...
+# Subtest: same filtered rows drive summary, daily series and source table
+ok 21 - same filtered rows drive summary, daily series and source table
+  ---
+  duration_ms: 21.7108
+  ...
+# Subtest: UTC+7 start/end boundaries include the whole selected day
+ok 22 - UTC+7 start/end boundaries include the whole selected day
+  ---
+  duration_ms: 11.9907
+  ...
+# Subtest: rejects missing, reversed and impossible dates or unknown category
+ok 23 - rejects missing, reversed and impossible dates or unknown category
+  ---
+  duration_ms: 0.5792
+  ...
+# Subtest: warehouse scope applies to rows, snapshot, summary, CSV and repository
+ok 24 - warehouse scope applies to rows, snapshot, summary, CSV and repository
+  ---
+  duration_ms: 13.1572
+  ...
+# Subtest: inactive and non-staff roles receive no data
+ok 25 - inactive and non-staff roles receive no data
+  ---
+  duration_ms: 31.5988
+  ...
+# Subtest: current stock snapshot ignores date, retains warehouse/category scope
+ok 26 - current stock snapshot ignores date, retains warehouse/category scope
+  ---
+  duration_ms: 8.7123
+  ...
+# Subtest: stock fixture reconciles to posted intakes and exports, not donations
+ok 27 - stock fixture reconciles to posted intakes and exports, not donations
+  ---
+  duration_ms: 0.3885
+  ...
+# Subtest: mixed quantity units stay separate and approved donation creates no intake
+ok 28 - mixed quantity units stay separate and approved donation creates no intake
+  ---
+  duration_ms: 8.9007
+  ...
+# Subtest: CSV contains exact filtered source IDs, Vietnamese BOM and scope/date metadata
+ok 29 - CSV contains exact filtered source IDs, Vietnamese BOM and scope/date metadata
+  ---
+  duration_ms: 7.4088
+  ...
+# Subtest: PII is removed from model, repository projection and CSV; CSV escaping handles formulas and quotes
+ok 30 - PII is removed from model, repository projection and CSV; CSV escaping handles formulas and quotes
+  ---
+  duration_ms: 17.5595
+  ...
+# Subtest: empty, failed and aborted requests do not provide fallback data
+ok 31 - empty, failed and aborted requests do not provide fallback data
+  ---
+  duration_ms: 23.8372
+  ...
+1..31
+# tests 31
+# suites 0
+# pass 31
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 6820.002

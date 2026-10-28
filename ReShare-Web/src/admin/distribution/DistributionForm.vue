@@ -1,11 +1,12 @@
 <script setup>
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import AdminIcon from '../AdminIcon.vue'
 import brandLogo from '../auth/assets/reshare-logo.png'
 import { canDistribute, createDemoDistributionRepository, validateDistribution } from './distribution.repository.js'
+import { mapLqError, mockError } from '../lq-errors.js'
 
-const props = defineProps({ assignment: Object, actor: Object })
-const repository = createDemoDistributionRepository({ getAssignment: () => props.assignment, getActor: () => props.actor })
+const props = defineProps({ assignment: Object, actor: Object, repository: Object })
+const repository = props.repository || createDemoDistributionRepository({ getAssignment: () => props.assignment, getActor: () => props.actor })
 const options = ref({ warehouses: [], inventory: [], beneficiaries: [] })
 const warehouseId = ref('')
 const itemId = ref('')
@@ -15,20 +16,50 @@ const note = ref('')
 const handedOver = ref(false)
 const scenario = ref('normal')
 const saving = ref(false)
-const submitError = ref('')
+const failure = ref(null)
+const refreshing = ref(false)
+// Only a conservative browser-session guard, NOT backend idempotency/result lookup.
+const pendingKey = 'reshare-demo-lq-unresolved'
+function hasUnresolvedWrite() {
+  try { return sessionStorage.getItem(pendingKey) === 'yes' } catch { return true }
+}
+const uncertain = ref(hasUnresolvedWrite())
+if (uncertain.value) failure.value = mapLqError(mockError('TIMEOUT'), { write: true })
+let accessEpoch = 0
+let refreshId = 0
+const emptyOptions = () => ({ warehouses: [], inventory: [], beneficiaries: [] })
+function closeConfirmation() { confirmation.value = null; dialog.value?.close(); handedOver.value = false }
+async function refresh() {
+  const id = ++refreshId
+  const epoch = accessEpoch
+  refreshing.value = true
+  closeConfirmation()
+  options.value = emptyOptions()
+  result.value = null
+  try {
+    if (!props.actor?.id) throw mockError('UNAUTHENTICATED')
+    const fresh = await repository.list()
+    if (id !== refreshId || epoch !== accessEpoch) return
+    options.value = fresh
+    if (!fresh.warehouses.length) throw mockError('FORBIDDEN')
+    if (!fresh.warehouses.some((entry) => entry.id === warehouseId.value)) warehouseId.value = fresh.warehouses[0].id
+  } catch (error) {
+    if (id === refreshId && epoch === accessEpoch) { options.value = emptyOptions(); failure.value = mapLqError(error) }
+  } finally { if (id === refreshId) refreshing.value = false }
+}
 const result = ref(null)
 const confirmation = ref(null)
 const dialog = ref(null)
 const resultPanel = ref(null)
 
-watch(() => props.assignment, () => {
-  options.value = repository.list()
-  if (!options.value.warehouses.some((entry) => entry.id === warehouseId.value)) {
-    warehouseId.value = options.value.warehouses[0]?.id ?? ''
-  }
-  confirmation.value = null
-  dialog.value?.close()
-}, { immediate: true, deep: true })
+watch([() => props.assignment, () => props.actor], () => {
+  accessEpoch += 1
+  closeConfirmation()
+  result.value = null
+  failure.value = uncertain.value ? mapLqError(mockError('TIMEOUT'), { write: true }) : null
+  void refresh()
+}, { immediate: true, deep: true, flush: 'sync' })
+onBeforeUnmount(() => { accessEpoch += 1; refreshId += 1 })
 
 const warehouse = computed(() => options.value.warehouses.find((entry) => entry.id === warehouseId.value))
 const inventory = computed(() => options.value.inventory.filter((entry) => entry.warehouseId === warehouseId.value))
@@ -38,7 +69,7 @@ const beneficiary = computed(() => beneficiaries.value.find((entry) => entry.id 
 const draft = computed(() => ({ quantity: quantity.value, beneficiaryId: beneficiaryId.value, note: note.value, handedOver: handedOver.value }))
 const errors = computed(() => validateDistribution(draft.value, item.value, beneficiaries.value))
 const authorized = computed(() => canDistribute(props.assignment, warehouseId.value))
-const valid = computed(() => authorized.value && !Object.keys(errors.value).length)
+const valid = computed(() => authorized.value && !uncertain.value && !refreshing.value && !['session', 'permission', 'retry'].includes(failure.value?.kind) && !Object.keys(errors.value).length)
 const stockAfter = computed(() => item.value && !errors.value.quantity ? item.value.available - Number(quantity.value) : null)
 const actorName = computed(() => props.actor?.displayName || props.actor?.email || 'Chưa xác định nhân sự')
 const roleName = computed(() => props.assignment?.role === 'system_admin' ? 'System Admin' : 'Warehouse Admin')
@@ -60,7 +91,6 @@ function resetForm() {
   beneficiaryId.value = ''
   note.value = ''
   handedOver.value = false
-  submitError.value = ''
   result.value = null
   scenario.value = 'normal'
 }
@@ -69,7 +99,7 @@ watch(itemId, resetForm)
 
 async function askToConfirm() {
   if (!valid.value || saving.value) return
-  submitError.value = ''
+  if (!uncertain.value) failure.value = null
   confirmation.value = {
     ...draft.value, quantity: Number(quantity.value), itemId: item.value.id, warehouseId: warehouseId.value,
     expectedVersion: item.value.version, itemName: item.value.name, unit: item.value.unit,
@@ -77,31 +107,48 @@ async function askToConfirm() {
     before: item.value.available, after: stockAfter.value, scenario: scenario.value,
   }
   await nextTick()
-  dialog.value.showModal()
+  if (confirmation.value && valid.value && !saving.value) dialog.value?.showModal()
 }
 
 async function submit() {
-  if (saving.value || !confirmation.value) return
+  if (saving.value || uncertain.value || !valid.value || !confirmation.value) return
   saving.value = true
   const pending = confirmation.value
+  const epoch = accessEpoch
+  // Persist before sending, so reload during an in-flight write cannot silently unlock it.
+  uncertain.value = true
   try {
-    result.value = await repository.createVoucher(pending, pending.scenario)
-    options.value = repository.list()
-    handedOver.value = false
-    dialog.value.close()
-    confirmation.value = null
+    sessionStorage.setItem(pendingKey, 'yes')
+    const response = await repository.createVoucher(pending, pending.scenario)
+    uncertain.value = false
+    sessionStorage.removeItem(pendingKey)
+    if (epoch !== accessEpoch) return
+    await refresh()
+    if (epoch !== accessEpoch || ['permission', 'session'].includes(failure.value?.kind)) return
+    result.value = response
     await nextTick()
     resultPanel.value?.focus()
   } catch (error) {
-    options.value = repository.list()
-    submitError.value = error.message || 'Không thể tạo phiếu mẫu. Vui lòng thử lại.'
-    handedOver.value = false
+    const mapped = mapLqError(error, { write: true })
+    if (mapped.kind !== 'unknown') { uncertain.value = false; sessionStorage.removeItem(pendingKey) }
+    if (epoch !== accessEpoch) return
+    closeConfirmation()
     scenario.value = 'normal'
-    dialog.value.close()
-    confirmation.value = null
+    failure.value = mapped
+    if (['permission', 'session'].includes(mapped.kind)) { options.value = emptyOptions(); result.value = null }
+    else if (mapped.kind === 'conflict') {
+      await refresh()
+      if (epoch === accessEpoch && !failure.value) failure.value = mapped
+    }
   } finally {
     saving.value = false
+    if (uncertain.value) { closeConfirmation(); failure.value = mapLqError(mockError('TIMEOUT'), { write: true }) }
   }
+}
+async function recover() {
+  if (uncertain.value || saving.value) return
+  failure.value = null
+  await refresh()
 }
 
 function cancelConfirmation(event) {
@@ -142,7 +189,7 @@ const formatTime = (value) => new Intl.DateTimeFormat('vi-VN', {
       <div class="d-breadcrumb"><AdminIcon name="box" :size="15" />Kho hàng <span>/</span> Chi tiết vật phẩm <span>/</span><b>Phân phối hàng</b></div>
       <section class="d-card d-sandbox" aria-label="Thông báo dữ liệu mẫu">
         <span class="d-icon-tile"><AdminIcon name="flask" :size="24" /></span>
-        <div><b><code>SANDBOX NODE: RC1D-82</code> MÔI TRƯỜNG THỬ NGHIỆM ĐỐI CHIẾU</b><p><strong>Dữ liệu mẫu.</strong> Mọi thao tác phân phối và phiếu xuất chỉ được mô phỏng trong bộ nhớ, tải lại trang để đặt lại. Không ghi dữ liệu vận hành thật, không dùng làm báo cáo chính thức. Chưa bảo đảm transaction Backend.</p></div>
+        <div><b><code>SANDBOX NODE: RC1D-82</code> MÔI TRƯỜNG THỬ NGHIỆM ĐỐI CHIẾU</b><p><strong>Dữ liệu mẫu.</strong> Mọi thao tác phân phối và phiếu xuất chỉ được mô phỏng trong bộ nhớ, tải lại trang chỉ đặt lại dữ liệu mẫu, không mở khóa request chưa xác định kết quả. Không ghi dữ liệu vận hành thật, không dùng làm báo cáo chính thức. Chưa bảo đảm transaction Backend.</p></div>
       </section>
 
       <section class="d-card d-heading">
@@ -183,8 +230,9 @@ const formatTime = (value) => new Intl.DateTimeFormat('vi-VN', {
 
           <section class="d-card d-math"><div class="d-section-heading"><AdminIcon name="log" /><h2>Bảng tính toán đối chiếu tức thời</h2><code>MATH PREVIEW</code></div><div class="d-equation" aria-live="polite"><div><small>TỒN TRƯỚC</small><strong>{{ item?.available ?? '—' }}</strong><small>Hiện tại</small></div><b>−</b><div><small>SỐ XUẤT</small><strong>{{ quantity !== '' && !errors.quantity ? Number(quantity) : '—' }}</strong><small>Khấu trừ</small></div><b>=</b><div><small>TỒN SAU</small><strong>{{ stockAfter ?? '—' }}</strong><small>Dự kiến (≥ 0)</small></div></div><p><b>Cơ chế xem trước (Preview Mode):</b> Giá trị cuối cùng được kiểm tra lại ở bước xác nhận trên sổ kho mẫu. Mô phỏng này không chứng minh transaction Backend.</p></section>
 
-          <section class="d-card d-demo-controls"><h2><AdminIcon name="flask" />Kịch bản kiểm thử · Dữ liệu mẫu</h2><label for="distribution-scenario">Thay đổi tại thời điểm xác nhận</label><select id="distribution-scenario" v-model="scenario" :disabled="saving || !!result"><option value="normal">Bình thường — kiểm tra lại tồn mẫu</option><option value="shortage">Thiếu tồn — mô phỏng nhân sự khác vừa xuất hàng</option><option value="conflict">Xung đột — phiên bản sổ kho mẫu vừa thay đổi</option></select><p>Thiếu tồn sẽ cập nhật tồn mẫu; xung đột yêu cầu đối chiếu và xác nhận lại. Tải lại trang để trở về dữ liệu ban đầu (áo khoác: 3 chiếc).</p></section>
-          <div v-if="submitError" class="d-alert" role="alert" data-testid="submit-error">{{ submitError }}</div>
+          <section class="d-card d-demo-controls"><h2><AdminIcon name="flask" />Kịch bản kiểm thử · Dữ liệu mẫu</h2><label for="distribution-scenario">Thay đổi tại thời điểm xác nhận</label><select id="distribution-scenario" v-model="scenario" :disabled="saving || !!result"><option value="normal">Bình thường — kiểm tra lại tồn mẫu</option><option value="shortage">Thiếu tồn — mô phỏng nhân sự khác vừa xuất hàng</option><option value="FORBIDDEN">Mất quyền (mock)</option><option value="UNAUTHENTICATED">Hết phiên (mock)</option><option value="STALE_DATA">Dữ liệu cũ (mock)</option><option value="NOT_SENT">Chưa gửi do mất kết nối (mock)</option><option value="TIMEOUT">Timeout trước ghi, client không biết (mock)</option><option value="TIMEOUT_AFTER_COMMIT">Timeout sau ghi, client không biết (mock)</option><option value="conflict">Xung đột — phiên bản sổ kho mẫu vừa thay đổi</option></select><p>Mã lỗi là đề xuất/mock, chưa phải hợp đồng Backend. Thiếu tồn sẽ cập nhật tồn mẫu; xung đột yêu cầu đối chiếu và xác nhận lại. Tải lại trang đặt lại tồn mẫu (áo khoác: 3 chiếc), nhưng vẫn khóa tạo phiếu nếu còn request chưa xác định kết quả.</p></section>
+          <div v-if="refreshing" class="d-alert" role="status">Đang tải lại dữ liệu mẫu...</div>
+          <div v-if="failure" class="d-alert" role="alert" data-testid="submit-error"><strong>{{ failure.title }}</strong><p>{{ failure.message }}</p><a v-if="failure.kind === 'session'" href="/admin/login">Đăng nhập lại</a><button v-else-if="['conflict', 'retry'].includes(failure.kind) && !uncertain" class="d-secondary" :disabled="refreshing || saving" @click="recover">{{ failure.action }}</button></div>
           <section v-if="!result" class="d-card d-actions"><p><AdminIcon name="shield" /><span><b>Chế độ khóa:</b> Cần vật phẩm hợp lệ, số lượng ≤ tồn khả dụng, người thụ hưởng và xác nhận bàn giao thực tế.</span></p><button type="button" class="d-secondary" :disabled="saving" @click="resetForm">Hủy</button><button type="submit" form="distribution-form" class="d-primary" :disabled="!valid || saving"><AdminIcon name="play" :size="15" />Xác nhận phân phối</button></section>
         </div>
 
