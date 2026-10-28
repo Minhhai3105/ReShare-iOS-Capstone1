@@ -7,5 +7,5 @@ const liveRepository = createLiveDistributionRepository()
 </script>
 
 <template>
-  <DistributionForm :assignment="staffAssignment" :actor="currentUser" :repository="liveRepository" />
+  <DistributionForm :assignment="staffAssignment" :actor="currentUser" :repository="liveRepository" :preview="false" />
 </template>

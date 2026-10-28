@@ -135,6 +135,25 @@ test('US16: Concurrent distribution requests in Firestore Emulator never result 
     assert.equal(movement.inventoryItemId, itemId);
     assert.equal(movement.quantity, -2);
   } finally {
+    try {
+      const db = getFirestore(app);
+      await db.doc(`warehouses/${warehouseId}`).delete();
+      await db.doc('staff_assignments/staff-hc-1').delete();
+      await db.doc('staff_assignments/staff-hc-2').delete();
+      await db.doc(`beneficiaries/${beneficiaryId}`).delete();
+      await db.doc(`inventory/${itemId}`).delete();
+      if (typeof results !== 'undefined') {
+        for (const r of results) {
+          if (r.status === 'fulfilled' && r.value?.body?.voucher) {
+            await db.doc(`distribution_vouchers/${r.value.body.voucher.id}`).delete();
+            await db.doc(`inventory_movements/${r.value.body.movement.id}`).delete();
+          }
+        }
+      }
+    } catch {
+      // ignore cleanup errors
+    }
     await deleteApp(app);
   }
 });
+

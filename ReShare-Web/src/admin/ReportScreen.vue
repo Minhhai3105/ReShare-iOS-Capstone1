@@ -22,7 +22,23 @@ const assignment = computed(() => props.assignment || (props.authenticatedContex
 const displayRole = computed(() => assignment.value.role)
 function onRole(role) { if (props.assignment || props.authenticatedContext) return; localRole.value = role; emit('role', role) }
 
-const filters = reactive({ from: '2025-05-01', to: '2025-05-31', warehouseId: '', categoryId: '' })
+function getDefaultFilters(isLive) {
+  if (!isLive) {
+    return { from: '2025-05-01', to: '2025-05-31', warehouseId: '', categoryId: '' }
+  }
+  const now = new Date()
+  const vnFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' })
+  const toParts = Object.fromEntries(vnFormatter.formatToParts(now).map(({ type, value }) => [type, value]))
+  const to = `${toParts.year}-${toParts.month}-${toParts.day}`
+
+  const past = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+  const fromParts = Object.fromEntries(vnFormatter.formatToParts(past).map(({ type, value }) => [type, value]))
+  const from = `${fromParts.year}-${fromParts.month}-${fromParts.day}`
+
+  return { from, to, warehouseId: '', categoryId: '' }
+}
+
+const filters = reactive(getDefaultFilters(props.authenticatedContext))
 const applied = ref({ ...filters })
 const filterError = ref('')
 const loadError = ref('')
