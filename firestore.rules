@@ -447,6 +447,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Phiếu xuất chỉ do trusted API của US16 tạo; client không sửa hoặc đọc khác phạm vi kho.
+    match /distribution_vouchers/{voucherId} {
+      allow get, list: if request.auth != null && canReadWarehouse(resource.data.warehouseId);
+      allow write: if false;
+    }
+
     // Contact records are accepted and accessed only by the trusted backend using Admin SDK.
     match /contacts/{contactId} {
       allow read, write: if false;
