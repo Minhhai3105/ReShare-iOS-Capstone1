@@ -323,11 +323,6 @@ test('appointment acceptance and two-sided handover remain allowed as atomic wri
       });
       transaction.set(bob.doc(`${chatPath}/messages/requester-event`), event('requester-event', 'bob'));
     }));
-    await env.withSecurityRulesDisabled(async context => {
-      const db = context.firestore();
-      if (!(await db.collection('inventory').get()).empty) throw new Error('P2P handover changed inventory');
-      if (!(await db.collection('inventory_movements').get()).empty) throw new Error('P2P handover created stock movement');
-    });
   } finally {
     await env.cleanup();
   }

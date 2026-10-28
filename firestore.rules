@@ -152,29 +152,6 @@ service cloud.firestore {
               (!(donorConfirmed && requesterConfirmed) && request.resource.data.status == 'reserved'));
       }
 
-      function canEditAvailableItem() {
-        let data = request.resource.data;
-        return request.auth.uid == resource.data.donorId
-          && resource.data.status in ['available', 'Sẵn sàng nhận đồ']
-          && data.status == resource.data.status
-          && changedOnly(['title', 'category', 'condition', 'district', 'pickupAddress', 'donorNote', 'imageName'])
-          && data.title is string && data.title.size() > 0 && data.title.size() <= 120
-          && data.category is string && data.category.size() > 0 && data.category.size() <= 80
-          && data.condition is string && data.condition.size() > 0 && data.condition.size() <= 80
-          && data.district is string && data.district.size() > 0 && data.district.size() <= 80
-          && data.pickupAddress is string && data.pickupAddress.size() > 0 && data.pickupAddress.size() <= 240
-          && data.donorNote is string && data.donorNote.size() <= 1000
-          && data.imageName is string && data.imageName.size() > 0 && data.imageName.size() <= 80;
-      }
-
-      function canCloseAvailableItem() {
-        return request.auth.uid == resource.data.donorId
-          && resource.data.status in ['available', 'Sẵn sàng nhận đồ']
-          && request.resource.data.status == 'closed'
-          && changedOnly(['status', 'closedAt'])
-          && request.resource.data.closedAt == request.time;
-      }
-
       allow read: if request.auth != null;
       allow create: if request.auth != null
         && request.resource.data.donorId == request.auth.uid
@@ -186,9 +163,9 @@ service cloud.firestore {
         && request.resource.data.get('requesterHandoverConfirmed', false) == false;
 
       allow update: if request.auth != null &&
-        (canReserve() || canCancel() || canConfirmHandover() || canEditAvailableItem() || canCloseAvailableItem());
+        (canReserve() || canCancel() || canConfirmHandover());
 
-      allow delete: if false;
+      allow delete: if request.auth != null && resource.data.donorId == request.auth.uid;
     }
 
     // 3. Conversations (In-App Chat 1-1)

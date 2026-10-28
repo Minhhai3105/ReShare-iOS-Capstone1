@@ -14,7 +14,6 @@ struct CommunityCatalogView: View {
     // State mở Camera chụp ảnh đồ 0đ
     @State private var showPublishCamera: Bool = false
     @State private var loadError: String? = nil
-    @State private var isLoading = false
 
     private var currentUserId: String {
         AuthService.shared.currentUserId ?? ""
@@ -36,10 +35,6 @@ struct CommunityCatalogView: View {
     // MARK: - Bộ lọc dữ liệu thông minh thời gian thực (Computed Property)
     private var filteredItems: [CatalogItem] {
         catalogItems.filter { item in
-            // Bài đã đóng chỉ còn trong mục "Đồ của tôi" để chủ bài xem lại.
-            if item.status == .closed && categories[selectedCategoryIndex] != "⭐️ Đồ của tôi" {
-                return false
-            }
             // 1. Lọc theo danh mục hoặc đồ của tôi
             let matchCategory: Bool
             let categoryName = categories[selectedCategoryIndex]
@@ -84,13 +79,7 @@ struct CommunityCatalogView: View {
                         .font(.system(size: 12))
                         .foregroundColor(.red)
                     }
-                    if isLoading && catalogItems.isEmpty {
-                        ProgressView("Đang tải Kho đồ 0đ...")
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 32)
-                    } else if loadError == nil || !catalogItems.isEmpty {
-                        itemsGridView
-                    }
+                    itemsGridView
 
                     // 5. Banner tuần hoàn cộng đồng Đà Nẵng
                     circularEconomyBanner
@@ -142,25 +131,22 @@ struct CommunityCatalogView: View {
                 )
             }
         }
-        .onAppear {
-            Task { await loadCatalog() }
+        .task {
+            await loadCatalog()
         }
     }
 
     // Tải danh sách đồ 0đ thật từ Cloud Firestore
     private func loadCatalog() async {
-        isLoading = true
         do {
             let liveItems = try await FirestoreService.shared.fetchCatalogItems()
             await MainActor.run {
                 self.catalogItems = liveItems
                 self.loadError = nil
-                self.isLoading = false
             }
         } catch {
             await MainActor.run {
                 self.loadError = "Không thể tải Kho đồ 0đ: \(error.localizedDescription)"
-                self.isLoading = false
             }
         }
     }
@@ -317,15 +303,15 @@ struct CommunityCatalogView: View {
                 .clipped()
                 .cornerRadius(14)
 
-                // Trạng thái hiển thị thống nhất với màn chi tiết.
+                // Huy hiệu Free / 0đ hoặc Đã có người hẹn
                 HStack(spacing: 3) {
-                    Text(item.status.displayText)
+                    Text(item.status == .reserved ? "Đã hẹn lấy" : "Free / 0đ")
                         .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(item.status.color)
+                        .foregroundColor(item.status == .reserved ? Color.orange : Color(red: 0.08, green: 0.35, blue: 0.18))
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(item.status.badgeBgColor)
+                .background(item.status == .reserved ? Color.white : Color(red: 0.55, green: 0.92, blue: 0.70))
                 .clipShape(Capsule())
                 .padding(8)
             }
