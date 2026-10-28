@@ -1,5 +1,6 @@
 import SwiftUI
 import MapKit
+import FirebaseFirestore
 
 /// Màn hình Chi tiết Món đồ 0đ Cộng đồng (P2P Trao tặng trực tiếp giữa người dân Đà Nẵng)
 struct CatalogItemDetailView: View {
@@ -9,6 +10,13 @@ struct CatalogItemDetailView: View {
     @State private var showContactSheet = false
     @State private var openChatAfterSheet = false
     @State private var showChat = false
+    @State private var liveItem: CatalogItem?
+    @State private var itemListener: ListenerRegistration?
+    @State private var showCloseConfirmation = false
+    @State private var isClosing = false
+    @State private var actionError: String?
+
+    private var displayedItem: CatalogItem { liveItem ?? item }
 
 
     // Màu sắc nhận diện ReShare
@@ -22,7 +30,7 @@ struct CatalogItemDetailView: View {
 
     private var isMyItem: Bool {
         guard !currentUserId.isEmpty else { return false }
-        return item.donorId == currentUserId
+        return displayedItem.donorId == currentUserId
     }
 
     var body: some View {
@@ -66,7 +74,7 @@ struct CatalogItemDetailView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 HStack(spacing: 14) {
-                    ShareLink(item: "Món đồ 0đ trên ReShare: \(item.title) — \(item.district), Đà Nẵng") {
+                    ShareLink(item: "Món đồ 0đ trên ReShare: \(displayedItem.title) — \(displayedItem.district), Đà Nẵng") {
                         Image(systemName: "square.and.arrow.up")
                     }
                 }
@@ -79,15 +87,32 @@ struct CatalogItemDetailView: View {
             stickyBottomActionBar
         }
         .sheet(isPresented: $showContactSheet, onDismiss: {
-            if openChatAfterSheet {
+            if openChatAfterSheet && displayedItem.status != .closed && displayedItem.status != .completed {
                 openChatAfterSheet = false
                 showChat = true
+            } else {
+                openChatAfterSheet = false
             }
         }) {
             contactSheet
         }
         .navigationDestination(isPresented: $showChat) {
-            ChatConversationView(item: item)
+            ChatConversationView(item: displayedItem)
+        }
+        .onAppear {
+            guard itemListener == nil else { return }
+            itemListener = FirestoreService.shared.observeItem(itemId: item.id) { updated in
+                Task { @MainActor in liveItem = updated }
+            }
+        }
+        .onDisappear {
+            itemListener?.remove()
+            itemListener = nil
+        }
+        .confirmationDialog("Đóng bài đăng này?", isPresented: $showCloseConfirmation) {
+            Button("Đóng bài", role: .destructive) { closeItem() }
+        } message: {
+            Text("Bài sẽ không còn hiện trong Kho đồ 0đ. Ảnh và lịch sử vẫn được giữ lại.")
         }
     }
 
@@ -102,33 +127,38 @@ struct CatalogItemDetailView: View {
                     .tint(.secondary)
             }
 
-            Text("Trao đổi về \(item.title) với \(item.donorName).")
+            Text("Trao đổi về \(displayedItem.title) với \(displayedItem.donorName).")
                 .font(.system(size: 14))
                 .foregroundColor(.secondary)
                 .lineLimit(2)
 
-            Button {
-                openChatAfterSheet = true
-                showContactSheet = false
-            } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "message.fill")
-                        .frame(width: 36, height: 36)
-                        .background(softMint, in: RoundedRectangle(cornerRadius: 10))
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Nhắn tin trong ReShare")
-                            .font(.system(size: 15, weight: .bold))
-                        Text("Hẹn gặp và xác nhận bàn giao tại đây")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary)
+            if displayedItem.status == .closed || displayedItem.status == .completed {
+                Text("Món đồ không còn nhận liên hệ mới.")
+                    .foregroundColor(.secondary)
+            } else {
+                Button {
+                    openChatAfterSheet = true
+                    showContactSheet = false
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "message.fill")
+                            .frame(width: 36, height: 36)
+                            .background(softMint, in: RoundedRectangle(cornerRadius: 10))
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Nhắn tin trong ReShare")
+                                .font(.system(size: 15, weight: .bold))
+                            Text("Hẹn gặp và xác nhận bàn giao tại đây")
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
                     }
-                    Spacer()
-                    Image(systemName: "chevron.right")
+                    .foregroundColor(primaryGreen)
+                    .padding(14)
+                    .background(Color.white, in: RoundedRectangle(cornerRadius: 14))
+                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.black.opacity(0.08)))
                 }
-                .foregroundColor(primaryGreen)
-                .padding(14)
-                .background(Color.white, in: RoundedRectangle(cornerRadius: 14))
-                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.black.opacity(0.08)))
             }
 
             Text("Chỉ người cho và người nhận trong cuộc trò chuyện xem được tin nhắn.")
@@ -149,13 +179,13 @@ struct CatalogItemDetailView: View {
                 .fill(Color(red: 0.92, green: 0.94, blue: 0.90))
                 .frame(height: 240)
 
-            if !item.photoURLs.isEmpty {
+            if !displayedItem.photoURLs.isEmpty {
                 TabView(selection: $selectedPhotoIndex) {
-                    ForEach(item.photoURLs.indices, id: \.self) { index in
+                    ForEach(displayedItem.photoURLs.indices, id: \.self) { index in
                         CatalogItemPhotoView(
-                            urlString: item.photoURLs[index],
+                            urlString: displayedItem.photoURLs[index],
                             legacyBase64: nil,
-                            placeholderName: item.imageName
+                            placeholderName: displayedItem.imageName
                         )
                         .frame(maxWidth: .infinity, maxHeight: 240)
                         .clipped()
@@ -168,8 +198,8 @@ struct CatalogItemDetailView: View {
             } else {
                 CatalogItemPhotoView(
                     urlString: nil,
-                    legacyBase64: item.imageBase64,
-                    placeholderName: item.imageName
+                    legacyBase64: displayedItem.imageBase64,
+                    placeholderName: displayedItem.imageName
                 )
                 .frame(maxWidth: .infinity, maxHeight: 240)
                 .clipped()
@@ -198,7 +228,7 @@ struct CatalogItemDetailView: View {
             }
             .padding(12)
 
-            Text("📷 \(selectedPhotoIndex + 1)/\(max(item.photoURLs.count, 1))")
+            Text("📷 \(selectedPhotoIndex + 1)/\(max(displayedItem.photoURLs.count, 1))")
                 .font(.system(size: 11, weight: .bold))
                 .foregroundColor(.white)
                 .padding(.horizontal, 10)
@@ -215,14 +245,14 @@ struct CatalogItemDetailView: View {
             // Hàng Badge trạng thái
             HStack(spacing: 8) {
                 HStack(spacing: 4) {
-                    Circle().fill(item.status.color).frame(width: 6, height: 6)
-                    Text(item.status.displayText)
+                    Circle().fill(displayedItem.status.color).frame(width: 6, height: 6)
+                    Text(displayedItem.status.displayText)
                         .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(item.status.color)
+                        .foregroundColor(displayedItem.status.color)
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
-                .background(item.status.badgeBgColor)
+                .background(displayedItem.status.badgeBgColor)
                 .clipShape(Capsule())
 
                 Text("Free / 0đ")
@@ -233,7 +263,7 @@ struct CatalogItemDetailView: View {
                     .background(Color(red: 0.55, green: 0.92, blue: 0.70))
                     .clipShape(Capsule())
 
-                Text("Độ mới: \(item.condition)")
+                Text("Độ mới: \(displayedItem.condition)")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(.secondary)
                     .padding(.horizontal, 10)
@@ -256,7 +286,7 @@ struct CatalogItemDetailView: View {
             }
 
             // Tiêu đề
-            Text(item.title)
+            Text(displayedItem.title)
                 .font(.system(size: 22, weight: .bold))
                 .foregroundColor(.primary)
 
@@ -265,7 +295,7 @@ struct CatalogItemDetailView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "tag.fill")
                         .font(.system(size: 11))
-                    Text(item.category)
+                    Text(displayedItem.category)
                         .font(.system(size: 12, weight: .medium))
                 }
                 .foregroundColor(.secondary)
@@ -275,7 +305,7 @@ struct CatalogItemDetailView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "clock")
                         .font(.system(size: 11))
-                    Text("Đăng \(item.timeAgo)")
+                    Text("Đăng \(displayedItem.timeAgo)")
                         .font(.system(size: 12))
                 }
                 .foregroundColor(.secondary)
@@ -295,7 +325,7 @@ struct CatalogItemDetailView: View {
                     .foregroundColor(.secondary)
             }
 
-            Text(item.donorNote)
+            Text(displayedItem.donorNote)
                 .font(.system(size: 13))
                 .foregroundColor(.primary.opacity(0.9))
                 .lineSpacing(4)
@@ -338,20 +368,21 @@ struct CatalogItemDetailView: View {
         HStack(spacing: 12) {
             ZStack {
                 Circle().fill(Color(red: 0.15, green: 0.35, blue: 0.22)).frame(width: 44, height: 44)
-                Text((isMyItem ? "BẠN" : String(item.donorName.prefix(2))).uppercased())
+                Text((isMyItem ? "BẠN" : String(displayedItem.donorName.prefix(2))).uppercased())
                     .font(.system(size: isMyItem ? 11 : 14, weight: .bold))
                     .foregroundColor(.white)
             }
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
-                    Text(isMyItem ? "Bạn (Người đăng tặng)" : item.donorName)
+                    Text(isMyItem ? "Bạn (Người đăng tặng)" : displayedItem.donorName)
                         .font(.system(size: 14, weight: .bold))
                     Image(systemName: "checkmark.seal.fill")
                         .font(.system(size: 11))
                         .foregroundColor(mintGreen)
                 }
-                Text(isMyItem ? "Món đồ đang chia sẻ tại \(item.district), Đà Nẵng" : "Cư dân tại \(item.district), Đà Nẵng")
+                Text(isMyItem && displayedItem.status == .closed ? "Bài đăng đã đóng" :
+                    (isMyItem ? "Món đồ đang chia sẻ tại \(displayedItem.district), Đà Nẵng" : "Cư dân tại \(displayedItem.district), Đà Nẵng"))
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
             }
@@ -395,7 +426,7 @@ struct CatalogItemDetailView: View {
                     Image(systemName: "mappin.circle.fill")
                         .foregroundColor(primaryGreen)
                         .font(.system(size: 16))
-                    Text(item.pickupAddress)
+                    Text(displayedItem.pickupAddress)
                         .font(.system(size: 13, weight: .bold))
                         .foregroundColor(.primary)
                 }
@@ -446,9 +477,31 @@ struct CatalogItemDetailView: View {
         VStack(spacing: 6) {
             if isMyItem {
                 // Giao diện dành riêng cho Người A (Chủ món đồ)
+                if displayedItem.status == .available {
+                    HStack(spacing: 12) {
+                        NavigationLink(destination: CatalogItemEditView(item: displayedItem)) {
+                            Text("Sửa thông tin")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+
+                        Button("Đóng bài") { showCloseConfirmation = true }
+                            .frame(maxWidth: .infinity)
+                            .buttonStyle(.bordered)
+                            .disabled(isClosing)
+                    }
+                    .tint(primaryGreen)
+                }
+
+                if let actionError {
+                    Text(actionError)
+                        .font(.system(size: 12))
+                        .foregroundColor(.red)
+                }
+
                 NavigationLink(destination: ConversationsListView(
-                    filteredItemId: item.id,
-                    filterItemTitle: item.title
+                    filteredItemId: displayedItem.id,
+                    filterItemTitle: displayedItem.title
                 )) {
                     HStack(spacing: 8) {
                         Image(systemName: "bubble.left.and.bubble.right.fill")
@@ -470,8 +523,8 @@ struct CatalogItemDetailView: View {
                 // Giao diện dành cho Người B (Người xin đồ từ cộng đồng)
                 HStack(spacing: 12) {
                     // Mở sheet liên hệ trước khi vào chat P2P.
-                    if item.status == .completed {
-                        Text("Món đồ đã được trao tặng")
+                    if displayedItem.status == .completed || displayedItem.status == .closed {
+                        Text(displayedItem.status.displayText)
                             .font(.system(size: 15, weight: .bold))
                             .frame(maxWidth: .infinity)
                             .frame(height: 50)
@@ -482,12 +535,12 @@ struct CatalogItemDetailView: View {
                         Button { showContactSheet = true } label: {
                             HStack(spacing: 8) {
                                 Image(systemName: "message.fill")
-                                Text(item.status == .reserved ? "Liên hệ (Đã có người hẹn)" : "Liên hệ người cho (0đ)")
+                                Text(displayedItem.status == .reserved ? "Liên hệ (Đã có người hẹn)" : "Liên hệ người cho (0đ)")
                                     .font(.system(size: 15, weight: .bold))
                             }
                             .frame(maxWidth: .infinity)
                             .frame(height: 50)
-                            .background(item.status == .reserved ? Color.orange : primaryGreen)
+                            .background(displayedItem.status == .reserved ? Color.orange : primaryGreen)
                             .foregroundColor(.white)
                             .cornerRadius(14)
                             .shadow(color: primaryGreen.opacity(0.3), radius: 6, y: 3)
@@ -508,6 +561,21 @@ struct CatalogItemDetailView: View {
                 .shadow(color: Color.black.opacity(0.06), radius: 8, y: -4)
                 .ignoresSafeArea(edges: .bottom)
         )
+    }
+
+    private func closeItem() {
+        guard let ownerId = AuthService.shared.currentUserId, !ownerId.isEmpty else { return }
+        isClosing = true
+        actionError = nil
+        Task {
+            do {
+                try await FirestoreService.shared.closeCatalogItem(itemId: displayedItem.id, ownerId: ownerId)
+                isClosing = false
+            } catch {
+                actionError = "Không thể đóng bài: \(error.localizedDescription)"
+                isClosing = false
+            }
+        }
     }
 }
 
