@@ -10,6 +10,12 @@ import {
 } from './auth/auth.store'
 
 export const adminRoutes = [
+  ...(import.meta.env.DEV ? [{
+    path: '/admin/reports-preview',
+    name: 'admin-reports-preview',
+    component: () => import('./reports/ReportsRoute.vue'),
+    meta: { requiresAuth: true, roles: ADMIN_ROLES, devPreview: true },
+  }] : []),
   { path: '/admin/login', name: ADMIN_ROUTE.login, component: () => import('./auth/views/AdminLogin.vue') },
   {
     path: '/admin/forgot-password',

@@ -1,36 +1,153 @@
-<script setup lang="ts">
-import { computed, ref } from 'vue';
-import AdminIcon from './AdminIcon.vue';
-import AdminChrome from './AdminChrome.vue';
-import { calculateReviewMetrics } from './reviewMetrics';
-import type { DonationAiReviewItem } from './mockDonationAiReview';
-const props = defineProps<{ items: DonationAiReviewItem[]; role: 'system_admin' | 'warehouse_admin' | 'viewer' }>();
-const emit = defineEmits<{ navigate: [screen: 'E' | 'F' | 'Q']; role: [role: 'system_admin' | 'warehouse_admin' | 'viewer'] }>();
-const dateFrom = ref('2025-05-01');
-const dateTo = ref('2025-05-31');
-const appliedFrom = ref(dateFrom.value);
-const appliedTo = ref(dateTo.value);
-const filterError = ref('');
-const applyFilter = () => { if (!dateFrom.value || !dateTo.value || dateFrom.value > dateTo.value) { filterError.value = 'Hãy chọn khoảng thời gian hợp lệ.'; return; } appliedFrom.value = dateFrom.value; appliedTo.value = dateTo.value; filterError.value = ''; };
-const metrics = computed(() => calculateReviewMetrics(props.items, appliedFrom.value, appliedTo.value));
-const dateText = (value: string) => value.split('-').reverse().join('/');
+<script setup>
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import AdminIcon from './AdminIcon.vue'
+import AdminChrome from './AdminChrome.vue'
+import { calculateReviewMetrics } from './reviewMetrics'
+import { calculateReports, REPORT_TYPES, reportDay, validateReportFilters } from './reports/reports.model.js'
+import { createMockReportsRepository } from './reports/reports.repository.js'
+import { buildReportsCsv } from './reports/reports.csv.js'
+
+const props = defineProps({
+  items: { type: Array, default: () => [] }, role: { type: String, default: 'system_admin' },
+  assignment: { type: Object, default: null }, actorName: { type: String, default: 'Nhân sự mẫu' },
+  authenticatedContext: { type: Boolean, default: false },
+  repository: { type: Object, default: null },
+})
+const emit = defineEmits(['navigate', 'role'])
+const localRole = ref(props.role)
+watch(() => props.role, (role) => { localRole.value = role })
+const assignment = computed(() => props.assignment || (props.authenticatedContext
+  ? { active: false, role: 'viewer', warehouseIds: [] }
+  : { active: true, role: localRole.value, warehouseIds: localRole.value === 'warehouse_admin' ? ['hai-chau'] : [] }))
+const displayRole = computed(() => assignment.value.role)
+function onRole(role) { if (props.assignment || props.authenticatedContext) return; localRole.value = role; emit('role', role) }
+
+const filters = reactive({ from: '2025-05-01', to: '2025-05-31', warehouseId: '', categoryId: '' })
+const applied = ref({ ...filters })
+const filterError = ref('')
+const loadError = ref('')
+const exportError = ref('')
+const loading = ref(true)
+const data = ref(null)
+const scenario = ref('normal')
+const dialog = ref(null)
+const drillType = ref('donation')
+let controller
+let requestId = 0
+
+async function load() {
+  const id = ++requestId
+  controller?.abort()
+  controller = new AbortController()
+  loading.value = true
+  data.value = null
+  loadError.value = ''
+  exportError.value = ''
+  dialog.value?.close()
+  try {
+    const repository = props.repository || createMockReportsRepository({ scenario: scenario.value })
+    const access = assignment.value
+    const response = await repository.load({ assignment: { active: access.active, role: access.role, warehouseIds: Array.isArray(access.warehouseIds) ? [...access.warehouseIds] : [] }, signal: controller.signal })
+    if (id !== requestId) return
+    if (applied.value.warehouseId && !response.warehouses.some((entry) => entry.id === applied.value.warehouseId)) {
+      applied.value = { ...applied.value, warehouseId: '' }
+    }
+    filters.warehouseId = applied.value.warehouseId
+    data.value = response
+  } catch (error) {
+    if (id === requestId && error.name !== 'AbortError') loadError.value = error.message || 'Không thể tải báo cáo.'
+  } finally { if (id === requestId) loading.value = false }
+}
+watch([assignment, scenario, () => props.repository], load, { immediate: true, deep: true })
+onBeforeUnmount(() => { requestId += 1; controller?.abort() })
+
+const report = computed(() => {
+  if (!data.value || loading.value || loadError.value) return null
+  return calculateReports(data.value, applied.value, assignment.value)
+})
+const warehouseLabel = computed(() => applied.value.warehouseId
+  ? data.value?.warehouses.find((entry) => entry.id === applied.value.warehouseId)?.name || 'Kho được phân công'
+  : data.value?.warehouses.length === 1 ? data.value.warehouses[0].name : 'Các kho được phân quyền')
+const categoryLabel = computed(() => data.value?.categories.find((entry) => entry.id === applied.value.categoryId)?.name || 'Tất cả danh mục')
+const pending = computed(() => Object.keys(filters).some((key) => filters[key] !== applied.value[key]))
+const maxCount = computed(() => Math.max(1, ...(report.value?.series.flatMap((entry) => Object.values(entry.counts)) || [])))
+const aiMetrics = computed(() => calculateReviewMetrics(props.items, applied.value.from, applied.value.to))
+const dateText = (value) => value?.split('-').reverse().join('/') || '—'
+const typeLabel = (type) => REPORT_TYPES.find((entry) => entry.id === type)?.label || type
+const warehouseName = (id) => data.value?.warehouses.find((entry) => entry.id === id)?.name || '—'
+const categoryName = (id) => data.value?.categories.find((entry) => entry.id === id)?.name || '—'
+const drillRows = computed(() => drillType.value === 'stock' ? report.value?.stock || [] : report.value?.rows.filter((row) => row.type === drillType.value) || [])
+const drillTitle = computed(() => drillType.value === 'stock' ? 'Tồn kho snapshot — dữ liệu nguồn' : `${typeLabel(drillType.value)} — bản ghi nguồn`)
+const exportReady = computed(() => !!report.value?.rows.length && !loading.value && !loadError.value && !filterError.value)
+
+function applyFilters() {
+  filterError.value = validateReportFilters(filters)
+  exportError.value = ''
+  if (filterError.value || !data.value) return
+  try { calculateReports(data.value, filters, assignment.value) }
+  catch (error) { filterError.value = error.message; return }
+  applied.value = { ...filters }
+  dialog.value?.close()
+}
+async function openDrill(type) { drillType.value = type; await nextTick(); dialog.value?.showModal() }
+function exportCsv() {
+  if (!exportReady.value) return
+  try {
+    const text = buildReportsCsv(data.value, applied.value, assignment.value)
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8;' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `DU-LIEU-MAU-bao-cao-${applied.value.from}-${applied.value.to}.csv`
+    link.click()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  } catch { exportError.value = 'Không thể xuất CSV. Vui lòng tải lại báo cáo và thử lại.' }
+}
 </script>
 
 <template>
-  <AdminChrome screen="Q" :role="role" @navigate="emit('navigate', $event)" @role="emit('role', $event)">
-    <div class="q-sandbox"><span><AdminIcon name="flask" :size="26" /></span><div><strong>MÔI TRƯỜNG THỬ NGHIỆM (SANDBOX NODE) <small>SBX-HC-9402 // STAGING-HC01</small></strong><p>Dữ liệu thuộc phạm vi kiểm thử {{ role === 'warehouse_admin' ? 'Kho demo Hải Châu' : 'các kho demo' }}. Các chỉ số báo cáo tại đây hoàn toàn cô lập, không phản ánh số liệu vận hành thực tế hay các kho khác.</p></div><b>● Sandbox Active</b></div>
-    <div class="q-heading"><div><div class="q-tags"><span>PHẠM VI KHO: {{ role === 'warehouse_admin' ? 'KHO DEMO HẢI CHÂU' : 'CÁC KHO DEMO' }}</span><span>PHÂN HỆ BÁO CÁO VẬN HÀNH (REPORTS)</span></div><h1>Báo cáo</h1><p>Theo dõi yêu cầu và hoạt động kho theo phạm vi được phân quyền</p></div></div>
-    <section class="q-filter"><div><b><AdminIcon name="calendar" :size="17" /> Khoảng thời gian thống kê:</b><div class="q-filter-controls"><label>Từ ngày <input aria-label="Từ ngày" type="date" v-model="dateFrom" /></label><span>–</span><label>Đến ngày <input aria-label="Đến ngày" type="date" v-model="dateTo" /></label><button @click="applyFilter"><AdminIcon name="filter" :size="16" /> Áp dụng</button></div></div><p>♙ &nbsp;Phạm vi kho được xác định tự động từ vai trò demo. Warehouse Admin chỉ xem kho Hải Châu.</p><small v-if="filterError" role="alert">{{ filterError }}</small></section>
-    <section class="q-section q-activity"><h2><AdminIcon name="history" :size="20" /> Hoạt động trong khoảng thời gian</h2><p>Thống kê số lượng chứng từ sự kiện vận hành kho đã được xác nhận thực tế trong khoảng thời gian đã chọn.</p><div class="q-activity-grid"><article><h3>Yêu cầu được gửi <AdminIcon name="donation" :size="19" /></h3><p>Đếm số yêu cầu quyên góp được tạo trong khoảng thời gian đã chọn</p><div><strong>{{ metrics.submitted }}</strong><button @click="emit('navigate', 'E')">Xem chi tiết →</button></div></article><article><h3>Lượt thực nhận <AdminIcon name="check" :size="19" /></h3><p>Đếm số sự kiện thực nhận hàng vật lý đã xác nhận tại kho</p><div><strong>—</strong><small>Chưa có mock giao dịch</small></div></article><article><h3>Phiếu nhập kho <AdminIcon name="box" :size="19" /></h3><p>Đếm số phiếu nhập kho vật tư/quần áo đã ký duyệt ghi sổ</p><div><strong>—</strong><small>Chưa có mock giao dịch</small></div></article><article><h3>Phiếu xuất kho <AdminIcon name="box" :size="19" /></h3><p>Đếm số phiếu xuất phân phối thực tế cho người thụ hưởng</p><div><strong>—</strong><small>Chưa có mock giao dịch</small></div></article></div><div class="q-principle"><AdminIcon name="check" :size="19" /><p><b>Nguyên tắc dữ liệu hoạt động:</b><br />Không cộng gộp số lượng các mặt hàng có đơn vị đo lường khác nhau thành một con số tổng. Không tính một yêu cầu đã duyệt là đã thực nhận hay đã nhập kho khi chưa có chứng từ tương ứng.</p></div></section>
-    <section class="q-ai"><div><span class="q-ai-mark"><AdminIcon name="flask" :size="26" /></span><div><h2>Độ trùng khớp AI và staff <small>RC1D-59 · DỮ LIỆU DEMO</small></h2><p>Chỉ tính đơn đã được staff xác nhận trong {{ dateText(appliedFrom) }} – {{ dateText(appliedTo) }} và có gợi ý AI. So sánh danh mục AI ban đầu với danh mục staff thực tế.</p></div></div><div class="q-ai-results"><div><strong>{{ metrics.rate === null ? '—' : `${metrics.rate}%` }}</strong><small>{{ metrics.matched }} / {{ metrics.withAi }} mẫu AI trùng staff</small></div><div><b>{{ metrics.confirmed }}</b><small>đơn staff đã xác nhận</small></div><div><b>{{ metrics.noModel }}</b><small>đơn thiếu model, loại khỏi mẫu AI</small></div><div><b>{{ metrics.donorManual }}</b><small>donor nhập thủ công</small></div></div><p v-if="metrics.withAi === 0" class="q-no-sample">Chưa có mẫu đã xác nhận với AI trong khoảng thời gian này; không tính tỷ lệ.</p></section>
-    <section class="q-section q-stock"><h2><AdminIcon name="warehouse" :size="20" /> Tồn kho hiện tại</h2><p>Số dư tồn kho cần lấy từ chứng từ kho thật. Bản xem thử chưa có dữ liệu này.</p><div class="q-stock-card"><span><AdminIcon name="warehouse" :size="32" /></span><div><b>Mặt hàng còn tồn <small>CHƯA CÓ DỮ LIỆU</small></b><strong>—</strong><p>Số mặt hàng có lượng còn lớn hơn 0 tại thời điểm hiện tại</p></div><div class="q-stock-note"><b>Tính toán vẹn kiểm kê</b><p>Chưa có giao dịch kho hợp lệ trong mock. Không hiển thị một tổng tồn kho giả lập cộng gộp các đơn vị khác nhau.</p></div></div></section>
-    <section class="q-section q-ledger"><h2><AdminIcon name="log" :size="20" /> Dữ liệu báo cáo &amp; Sổ kế toán kho</h2><p>Lưu trữ truy xuất kiểm toán, biên bản kết chuyển và nhật trình kế toán vật tư theo kho phân quyền.</p><div class="q-ledger-empty"><span><AdminIcon name="box" :size="32" /></span><h3>Chưa có dữ liệu vận hành kho thực tế</h3><p>Báo cáo nhập, xuất và tồn sẽ hiển thị sau khi quy trình kho và chứng từ được triển khai. Mọi số liệu báo cáo sẽ được truy xuất trực tiếp từ các sự kiện kiểm toán và chứng từ kế toán kho đã được phê duyệt.</p><small>Scope: /v1/wh/reports/summary &nbsp;|&nbsp; Auth: Demo &nbsp;|&nbsp; Filter: {{ role === 'warehouse_admin' ? 'Kho demo Hải Châu' : 'Các kho demo' }}</small></div></section>
-    <div class="q-bottom"><section><h2>Nguyên tắc kiến trúc báo cáo &amp; Thẩm quyền dữ liệu</h2><div><b>Phân quyền theo phạm vi kho</b><p>Quản trị viên kho chỉ xem số liệu của kho được phân công (Kho demo Hải Châu), không xem hay nhận dữ liệu từ các kho khác.</p></div><div><b>Nguồn dữ liệu có căn cứ</b><p>Chỉ số AI lấy từ các đơn đã staff xác nhận; tồn kho và chứng từ kho cần dữ liệu giao dịch thực tế.</p></div></section><section><h2>Trạng thái kỹ thuật &amp; Giới hạn Prototype</h2><div><b>Không suy diễn trạng thái</b><p>Hoạt động lịch sử được đếm từ sự kiện xác nhận, không suy diễn từ trạng thái sau cùng của yêu cầu quyên góp.</p></div><div><b>Không tính toán số học giả định</b><p>Số dư tồn kho dựa trên giao dịch kho hợp lệ, không suy từ số yêu cầu đã duyệt.</p></div><div><b>Giao diện mục tiêu</b><p>Báo cáo API, truy vết truy cập kho và bản ghi giao dịch thuộc lộ trình phát triển.</p></div></section></div>
-    <footer class="q-footer">ReShare · Bản xem thử RC1D-59 · Không kết nối dữ liệu vận hành <span>Trung tâm hỗ trợ &nbsp;&nbsp; Chính sách bảo mật</span></footer>
+  <AdminChrome screen="Q" :role="displayRole" :warehouse-label="warehouseLabel" :actor-name="actorName" :lock-role="authenticatedContext || !!props.assignment" reports-page @navigate="emit('navigate', $event)" @role="onRole">
+    <div class="reports-page">
+      <section class="q-sandbox"><span class="q-icon"><AdminIcon name="flask" :size="27" /></span><div><b>MÔI TRƯỜNG THỬ NGHIỆM (SANDBOX NODE) <code>RC1D-94 / STAGING-HC01</code></b><p><strong>Dữ liệu mẫu — không dùng làm báo cáo chính thức.</strong> Dữ liệu dưới đây chỉ mô phỏng hoạt động kho, không phản ánh số liệu vận hành thực tế.</p></div><span class="q-badge">● Sandbox Active</span></section>
+      <header class="q-heading"><div class="q-tags"><span>PHẠM VI KHO: {{ warehouseLabel }}</span><span>PHÂN HỆ BÁO CÁO VẬN HÀNH (REPORTS)</span></div><h1>Báo cáo</h1><p>Theo dõi yêu cầu và hoạt động kho theo phạm vi được phân quyền</p></header>
+
+      <form class="q-card q-filter" @submit.prevent="applyFilters" novalidate>
+        <h2><AdminIcon name="calendar" />Khoảng thời gian thống kê:</h2>
+        <fieldset :disabled="loading || !data"><div class="q-filter-controls"><label>Từ ngày<input aria-label="Từ ngày" v-model="filters.from" type="date" /></label><span class="q-date-separator">–</span><label>Đến ngày<input aria-label="Đến ngày" v-model="filters.to" type="date" /></label><label>Kho<select aria-label="Kho" v-model="filters.warehouseId"><option value="">Tất cả kho được phép</option><option v-for="entry in data?.warehouses || []" :key="entry.id" :value="entry.id">{{ entry.name }}</option></select></label><label>Danh mục<select aria-label="Danh mục" v-model="filters.categoryId"><option value="">Tất cả danh mục</option><option v-for="entry in data?.categories || []" :key="entry.id" :value="entry.id">{{ entry.name }}</option></select></label><button class="q-primary" type="submit"><AdminIcon name="filter" :size="16" />Áp dụng</button></div></fieldset>
+        <p class="q-filter-note"><AdminIcon name="lock" :size="13" />Chỉ hiển thị kho trong phạm vi quyền. Ngày tính theo múi giờ Việt Nam (UTC+7), gồm cả ngày bắt đầu và kết thúc.</p>
+        <p v-if="filterError" class="q-error" role="alert">{{ filterError }}</p><p v-else-if="pending" class="q-pending">Bộ lọc chưa áp dụng. Bảng, biểu đồ và CSV vẫn dùng phạm vi đã áp dụng bên dưới.</p>
+      </form>
+
+      <div v-if="loading" class="q-card q-state" role="status" aria-live="polite"><AdminIcon name="clock" :size="30" /><h2>Đang tải dữ liệu báo cáo mẫu...</h2><p>Đang đối chiếu bản ghi và phạm vi kho được phép.</p></div>
+      <div v-else-if="loadError" class="q-card q-state q-error-state" role="alert"><AdminIcon name="warning" :size="30" /><h2>Không thể hiển thị báo cáo</h2><p>{{ loadError }}</p><button class="q-primary" @click="load">Thử lại</button></div>
+
+      <template v-if="report">
+        <section class="q-section"><h2><AdminIcon name="clock" :size="21" />Hoạt động trong khoảng thời gian</h2><p>Đang áp dụng: {{ dateText(applied.from) }} – {{ dateText(applied.to) }} · {{ warehouseLabel }} · {{ categoryLabel }}</p>
+          <div class="q-activity-grid"><article v-for="metric in report.summary" :key="metric.id" class="q-card"><h3>{{ metric.label }}<AdminIcon :name="metric.icon" :size="20" /></h3><p>{{ metric.description }}</p><div><strong :data-testid="`count-${metric.id}`">{{ metric.count }}</strong><button :aria-label="`Xem chi tiết ${metric.label}`" @click="openDrill(metric.id)">Xem chi tiết →</button></div></article></div>
+          <div class="q-principle"><AdminIcon name="check" /><p><b>Nguyên tắc dữ liệu hoạt động:</b><br />Đếm bản ghi nguồn; không cộng số lượng khác đơn vị. Không tính một yêu cầu đã duyệt là đã thực nhận hay đã nhập kho khi chưa có chứng từ tương ứng.</p></div>
+        </section>
+
+        <section class="q-section"><h2><AdminIcon name="chart" :size="21" />Diễn biến hoạt động</h2><p>Số bản ghi theo ngày có phát sinh · cùng bộ lọc với bảng và CSV</p><div class="q-card">
+          <ul class="q-legend"><li v-for="type in REPORT_TYPES" :key="type.id"><i :class="`q-color-${type.id}`" />{{ type.label }}</li></ul>
+          <div v-if="report.series.length" class="q-chart-scroll"><div class="q-chart" role="img" aria-label="Biểu đồ số bản ghi theo ngày, số liệu tương ứng trong bảng tổng hợp bên dưới"><div v-for="point in report.series" :key="point.day" class="q-chart-day"><div class="q-bars"><span v-for="type in REPORT_TYPES" :key="type.id" :class="`q-color-${type.id}`" :style="{ height: `${point.counts[type.id] / maxCount * 100}%` }" :title="`${dateText(point.day)} · ${type.label}: ${point.counts[type.id]}`" /></div><small>{{ point.day.slice(8) }}/{{ point.day.slice(5, 7) }}</small></div></div></div><p v-else class="q-empty">Không có hoạt động trong khoảng thời gian này.</p>
+          <div class="q-table-wrap"><table aria-label="Tổng hợp đối chiếu biểu đồ"><thead><tr><th>Loại bản ghi</th><th>Số bản ghi</th><th>Số lượng theo đơn vị riêng</th><th>Đối chiếu</th></tr></thead><tbody><tr v-for="metric in report.summary" :key="metric.id"><td>{{ metric.label }}</td><td :data-testid="`summary-${metric.id}`">{{ metric.count }}</td><td>{{ metric.quantities.map(entry => `${entry.quantity} ${entry.unit}`).join(' · ') || '—' }}</td><td><button class="q-link" @click="openDrill(metric.id)">Bản ghi nguồn →</button></td></tr></tbody></table></div>
+        </div></section>
+
+        <section class="q-section q-stock"><h2><AdminIcon name="warehouse" :size="21" />Tồn kho hiện tại</h2><p>Snapshot mẫu cố định tại {{ dateText(reportDay(report.snapshotAt)) }} · bộ lọc khoảng ngày KHÔNG thay đổi snapshot. Kho và danh mục vẫn áp dụng.</p><div class="q-card q-stock-card"><span class="q-stock-icon"><AdminIcon name="warehouse" :size="32" /></span><div><h3>Mặt hàng còn tồn <code>SNAPSHOT MẪU</code></h3><strong data-testid="stock-count">{{ report.stock.length }}</strong><p>Số dòng vật phẩm–kho có lượng còn lớn hơn 0</p></div><div class="q-stock-note"><b>Tính toàn vẹn kiểm kê</b><p>Không cộng tồn khác đơn vị (chiếc, kg, bộ). Snapshot độc lập từ sổ kho mẫu, không suy diễn từ số yêu cầu.</p><button class="q-link" @click="openDrill('stock')">Xem kho hàng →</button></div></div></section>
+
+        <section class="q-section"><div class="q-ledger-heading"><div><h2><AdminIcon name="log" :size="21" />Dữ liệu báo cáo &amp; Sổ kế toán kho</h2><p>Các bản ghi nguồn khớp phạm vi đang áp dụng. Không hiển thị danh tính hoặc thông tin liên hệ cá nhân.</p></div><button class="q-primary" :disabled="!exportReady" @click="exportCsv">Xuất CSV · Dữ liệu mẫu</button></div><p v-if="exportError" class="q-error" role="alert">{{ exportError }}</p>
+          <div class="q-card"><div v-if="!report.rows.length" class="q-state"><AdminIcon name="box" :size="34" /><h3>Chưa có dữ liệu trong phạm vi đã chọn</h3><p>Thử thay đổi khoảng ngày, kho hoặc danh mục. Đây là dữ liệu mẫu, không phải số liệu vận hành chính thức.</p></div><template v-else><p class="q-row-count" data-testid="row-count">{{ report.rows.length }} bản ghi nguồn · CSV xuất đúng các dòng trong bảng này</p><div class="q-table-wrap"><table aria-label="Bản ghi nguồn báo cáo" data-testid="source-table"><thead><tr><th>Mã bản ghi</th><th>Loại</th><th>Ngày (UTC+7)</th><th>Kho</th><th>Danh mục / Vật phẩm</th><th>Số lượng</th><th>Tham chiếu</th></tr></thead><tbody><tr v-for="row in report.rows" :key="row.id"><td><code>{{ row.id }}</code></td><td>{{ typeLabel(row.type) }}</td><td>{{ dateText(reportDay(row.timestamp)) }}</td><td>{{ warehouseName(row.warehouseId) }}</td><td>{{ categoryName(row.categoryId) }}<small>{{ row.item }}</small></td><td>{{ row.quantity }} {{ row.unit }}</td><td><code>{{ row.reference || '—' }}</code></td></tr></tbody></table></div></template></div>
+        </section>
+
+        <section v-if="items.length" class="q-card q-ai"><h2><AdminIcon name="flask" />Độ trùng khớp AI và staff <code>RC1D-59 · DEMO RIÊNG</code></h2><p>Chỉ số demo AI cũ, độc lập bộ dữ liệu báo cáo kho và CSV. Chỉ áp dụng khoảng ngày đã chọn.</p><strong>{{ aiMetrics.rate === null ? '—' : `${aiMetrics.rate}%` }}</strong><p>{{ aiMetrics.matched }} / {{ aiMetrics.withAi }} mẫu AI trùng staff · {{ aiMetrics.confirmed }} đơn staff xác nhận · {{ aiMetrics.noModel }} thiếu model · {{ aiMetrics.donorManual }} donor nhập thủ công</p></section>
+      </template>
+
+      <div class="q-bottom"><section class="q-card"><h2><AdminIcon name="shield" />Nguyên tắc kiến trúc báo cáo &amp; Thẩm quyền dữ liệu</h2><div><b>Phân quyền theo phạm vi kho</b><p>Quản trị viên kho chỉ xem kho được giao. System Admin có thể lọc các kho mẫu trong hệ thống.</p></div><div><b>Nguồn dữ liệu có căn cứ</b><p>Donation, thực nhận, nhập kho và phân phối có bản ghi riêng. Số tổng, biểu đồ, bảng và CSV lấy cùng dữ liệu đã lọc.</p></div></section><section class="q-card"><h2><AdminIcon name="monitor" />Trạng thái kỹ thuật &amp; Giới hạn Prototype</h2><div><b>Không suy diễn trạng thái</b><p>Đếm sự kiện xác nhận và chứng từ, không suy từ trạng thái sau cùng của donation.</p></div><div><b>Không tính toán số học giả định</b><p>Tồn kho là snapshot riêng, không lấy số yêu cầu trừ số phân phối.</p></div><div><b>Giao diện mục tiêu</b><p>Chưa tích hợp API thật. Backend phải thực thi phân quyền và đối chiếu nguồn trước khi dùng vận hành chính thức.</p></div></section></div>
+      <section v-if="!props.repository" class="q-demo-controls"><label>Kịch bản demo<select aria-label="Kịch bản demo" v-model="scenario"><option value="normal">Dữ liệu mẫu bình thường</option><option value="empty">Mô phỏng dữ liệu rỗng</option><option value="error">Mô phỏng lỗi tải</option></select></label><p>Chỉ phục vụ kiểm tra loading, rỗng và lỗi; không thay đổi dữ liệu thật.</p></section>
+      <footer class="q-footer">● Dữ liệu mẫu — không dùng làm báo cáo chính thức <span>ReShare · RC1D-94</span></footer>
+
+      <dialog ref="dialog" class="q-dialog" aria-labelledby="q-drill-title"><header><div><span class="q-badge">Dữ liệu mẫu</span><h2 id="q-drill-title">{{ drillTitle }}</h2></div><button class="q-secondary" autofocus @click="dialog.close()">Đóng</button></header><p>{{ warehouseLabel }} · {{ categoryLabel }} · {{ drillType === 'stock' ? `Snapshot ${dateText(reportDay(report?.snapshotAt))}, không lọc theo ngày` : `${dateText(applied.from)} – ${dateText(applied.to)}` }}</p><p v-if="!drillRows.length" class="q-empty">Không có bản ghi nguồn tương ứng.</p><div v-else class="q-table-wrap"><table aria-label="Chi tiết bản ghi nguồn"><thead><tr><th>Mã nguồn</th><th>Kho</th><th>Vật phẩm</th><th>{{ drillType === 'stock' ? 'Tồn' : 'Số lượng' }}</th><th>{{ drillType === 'stock' ? 'Danh mục' : 'Ngày / Tham chiếu' }}</th></tr></thead><tbody><tr v-for="row in drillRows" :key="row.id"><td><code>{{ row.id }}</code></td><td>{{ warehouseName(row.warehouseId) }}</td><td>{{ row.item }}</td><td>{{ drillType === 'stock' ? row.available : row.quantity }} {{ row.unit }}</td><td>{{ drillType === 'stock' ? categoryName(row.categoryId) : `${dateText(reportDay(row.timestamp))} · ${row.reference || '—'}` }}</td></tr></tbody></table></div><p class="q-dialog-note">Chỉ đối chiếu dữ liệu nguồn tại màn Q. Không mở hoặc triển khai màn Y.</p></dialog>
+    </div>
   </AdminChrome>
 </template>
 
-<style scoped>
-*{box-sizing:border-box}.q-sandbox{background:#eef2ff;min-height:104px;border-radius:9px;display:flex;align-items:center;gap:12px;padding:16px;margin-bottom:14px}.q-sandbox>span{display:grid;place-items:center;width:40px;height:40px;border-radius:8px;background:#9bf392;color:#236e2b;flex-shrink:0}.q-sandbox>div{max-width:620px}.q-sandbox strong{color:#267138;font-size:13px}.q-sandbox strong small{color:#768176;font-size:10px;background:#e3eaf9;padding:3px 5px}.q-sandbox p{margin:3px 0;color:#4b594e;font-size:12px}.q-sandbox>b{margin-left:auto;background:#a1f49b;border-radius:20px;padding:5px 12px;white-space:nowrap;font-size:11px;color:#20632a}.q-heading{margin:10px 0 16px}.q-tags{display:flex;gap:4px;font-size:11px;font-weight:700;color:#526456}.q-tags span{background:#e4ebfb;border-radius:20px;padding:2px 7px}.q-tags span:last-child{background:#9ef39a;color:#286932}.q-heading h1{font-size:32px;margin:7px 0 0;line-height:1.15}.q-heading p{margin:3px 0 0;color:#596659}.q-filter{background:#fff;border-radius:10px;padding:15px;display:flex;align-items:center;justify-content:space-between;gap:20px;min-height:105px;position:relative}.q-filter b{display:flex;align-items:center;gap:8px;font-size:14px}.q-filter b svg{color:#13812c}.q-filter-controls{display:flex;align-items:center;gap:12px;margin-top:13px}.q-filter-controls label{font-size:0}.q-filter-controls input{background:#eef2ff;border:0;border-radius:8px;padding:10px;color:#455244;font:600 13px 'Segoe UI',sans-serif}.q-filter-controls button{background:#005319;border:0;border-radius:8px;padding:11px 17px;color:#fff;font-weight:700;display:flex;align-items:center;gap:7px;cursor:pointer}.q-filter>p{font-size:11px;color:#697368;max-width:425px;text-align:right;margin:0}.q-filter>small{position:absolute;bottom:2px;left:20px;color:#b22a2a}.q-section h2{font-size:20px;margin:0;display:flex;align-items:center;gap:8px}.q-section h2 svg{color:#247331}.q-section>p{color:#5e6a60;margin:3px 0 17px;font-size:13px}.q-activity{margin-top:24px}.q-activity-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.q-activity-grid article{background:white;border-radius:9px;min-height:203px;padding:20px;display:flex;flex-direction:column}.q-activity-grid h3{display:flex;justify-content:space-between;align-items:center;margin:0;font-size:14px;gap:5px}.q-activity-grid h3 svg{background:#e7edfc;color:#486a55;box-sizing:content-box;padding:8px;border-radius:50%;flex-shrink:0}.q-activity-grid article>p{font-size:12px;color:#5c675c;margin:9px 0}.q-activity-grid article>div{display:flex;align-items:end;justify-content:space-between;margin-top:auto}.q-activity-grid strong{font-size:28px;line-height:1}.q-activity-grid button{border:0;background:none;color:#1b7a30;font-size:12px;font-weight:700;cursor:pointer}.q-activity-grid small{font-size:10px;color:#697367;text-align:right}.q-principle{background:#eef2ff;border-radius:8px;padding:14px;display:flex;align-items:start;gap:8px;margin-top:14px;min-height:90px;font-size:12px;color:#4f5c50}.q-principle svg{color:#247934;flex-shrink:0}.q-principle p{margin:0;max-width:780px}.q-ai{margin-top:25px;background:#fff;border-radius:10px;border-left:5px solid #236e2d;padding:20px 22px}.q-ai>div:first-child{display:flex;gap:13px;align-items:center}.q-ai-mark{display:grid;place-items:center;background:#a1f49c;border-radius:9px;width:48px;height:48px;color:#155d22;flex-shrink:0}.q-ai h2{margin:0;font-size:19px}.q-ai h2 small{font-size:10px;color:#216630;background:#e5f7e4;padding:4px 6px;border-radius:5px}.q-ai p{margin:5px 0;color:#5d695d;font-size:12px}.q-ai-results{display:grid;grid-template-columns:2fr repeat(3,1fr);gap:12px;margin-top:17px}.q-ai-results>div{background:#eef2ff;border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:4px}.q-ai-results strong{font-size:31px;color:#146025}.q-ai-results b{font-size:23px}.q-ai-results small{font-size:11px;color:#546255}.q-no-sample{color:#8b5f0c!important}.q-stock{margin-top:31px}.q-stock-card{display:flex;align-items:center;gap:20px;background:#fff;border-left:5px solid #005b1d;border-radius:8px;padding:24px;min-height:150px}.q-stock-card>span{display:grid;place-items:center;background:#9ef39a;color:#135c22;width:54px;height:54px;border-radius:8px;flex-shrink:0}.q-stock-card>div:nth-child(2){min-width:310px}.q-stock-card b{font-size:14px}.q-stock-card b small{font-size:10px;color:#778177;background:#e9edf9;padding:3px 6px;border-radius:5px}.q-stock-card strong{display:block;font-size:30px}.q-stock-card p{font-size:12px;color:#617061;margin:3px 0}.q-stock-note{margin-left:auto;background:#eef2ff;border-radius:8px;padding:14px;max-width:420px}.q-stock-note b{font-size:12px}.q-ledger{margin-top:32px}.q-ledger-empty{height:270px;background:#fff;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px}.q-ledger-empty>span{display:grid;place-items:center;width:56px;height:56px;border-radius:50%;background:#e7edfc;color:#546751}.q-ledger-empty h3{font-size:16px;margin:15px 0 3px}.q-ledger-empty p{max-width:650px;margin:0;color:#5a665c;font-size:13px}.q-ledger-empty small{background:#eef2ff;color:#6a776b;border-radius:5px;padding:5px;margin-top:17px;font:11px Consolas,monospace}.q-bottom{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:32px}.q-bottom section{background:#fff;border-radius:10px;padding:22px}.q-bottom h2{font-size:16px;margin:0 0 18px}.q-bottom section>div{background:#eef2ff;border-radius:8px;padding:12px;margin-top:10px;font-size:12px;color:#4f5c50}.q-bottom b{color:#29392c}.q-bottom p{margin:4px 0 0}.q-footer{background:#fff;margin:36px -32px 0;padding:12px 32px;font-size:11px;color:#4b644e}.q-footer span{float:right}
-@media(max-width:1100px){.q-activity-grid{grid-template-columns:repeat(2,1fr)}.q-ai-results{grid-template-columns:repeat(2,1fr)}}@media(max-width:700px){.q-sandbox,.q-filter,.q-stock-card{flex-wrap:wrap}.q-sandbox>b{margin-left:0}.q-filter-controls{flex-wrap:wrap}.q-activity-grid,.q-ai-results,.q-bottom{grid-template-columns:1fr}.q-stock-note{margin-left:0}.q-ledger-empty{height:auto}.q-footer{margin-inline:-16px}.q-footer span{float:none;display:block}}
-</style>
+<style scoped src="./reports/reports.css"></style>
