@@ -99,3 +99,77 @@ export function createDemoDistributionRepository({ getAssignment, getActor }) {
 
   return { list, createVoucher }
 }
+
+export function createLiveDistributionRepository({
+  apiBase = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_ADMIN_API_BASE_URL ? import.meta.env.VITE_ADMIN_API_BASE_URL : 'https://reshare-ios-capstone1-1.onrender.com').replace(/\/$/, ''),
+  authInstance = null,
+} = {}) {
+  async function resolveAuth() {
+    if (authInstance) return authInstance
+    try {
+      const mod = await import('../auth/firebase.js')
+      return mod.auth
+    } catch {
+      return null
+    }
+  }
+
+  async function getToken() {
+    const authObj = await resolveAuth()
+    const user = authObj?.currentUser
+    if (!user) throw fail('UNAUTHENTICATED', 'Vui lòng đăng nhập lại để tiếp tục.')
+    return user.getIdToken()
+  }
+
+  async function list() {
+    const token = await getToken()
+    let response
+    try {
+      response = await fetch(`${apiBase}/v1/admin/distribution/options`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+    } catch {
+      throw fail('NETWORK_ERROR', 'Không thể kết nối máy chủ phân phối.')
+    }
+    const result = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      throw fail(result.code || 'ERROR', result.message || 'Không thể tải danh sách kho và vật phẩm.')
+    }
+    return result
+  }
+
+  async function createVoucher(draft) {
+    const token = await getToken()
+    let response
+    try {
+      response = await fetch(`${apiBase}/v1/admin/distribution`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          warehouseId: draft.warehouseId,
+          itemId: draft.itemId,
+          beneficiaryId: draft.beneficiaryId,
+          quantity: Number(draft.quantity),
+          handedOver: draft.handedOver,
+          note: draft.note || '',
+          expectedVersion: draft.expectedVersion,
+        }),
+      })
+    } catch {
+      throw fail('NETWORK_ERROR', 'Không thể kết nối máy chủ phân phối.')
+    }
+    const result = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      throw fail(result.code || 'ERROR', result.message || 'Không thể tạo phiếu xuất.', {
+        item: result.details?.item,
+        errors: result.details?.errors,
+      })
+    }
+    return result
+  }
+
+  return { list, createVoucher }
+}

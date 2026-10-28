@@ -4,8 +4,11 @@ import AdminIcon from '../AdminIcon.vue'
 import brandLogo from '../auth/assets/reshare-logo.png'
 import { canDistribute, createDemoDistributionRepository, validateDistribution } from './distribution.repository.js'
 
-const props = defineProps({ assignment: Object, actor: Object })
-const repository = createDemoDistributionRepository({ getAssignment: () => props.assignment, getActor: () => props.actor })
+const props = defineProps({ assignment: Object, actor: Object, repository: Object })
+const activeRepo = computed(() => {
+  if (props.repository) return props.repository
+  return createDemoDistributionRepository({ getAssignment: () => props.assignment, getActor: () => props.actor })
+})
 const options = ref({ warehouses: [], inventory: [], beneficiaries: [] })
 const warehouseId = ref('')
 const itemId = ref('')
@@ -21,10 +24,15 @@ const confirmation = ref(null)
 const dialog = ref(null)
 const resultPanel = ref(null)
 
-watch(() => props.assignment, () => {
-  options.value = repository.list()
-  if (!options.value.warehouses.some((entry) => entry.id === warehouseId.value)) {
-    warehouseId.value = options.value.warehouses[0]?.id ?? ''
+watch(() => [props.assignment, activeRepo.value], async () => {
+  try {
+    const res = await Promise.resolve(activeRepo.value.list())
+    options.value = res || { warehouses: [], inventory: [], beneficiaries: [] }
+    if (!options.value.warehouses.some((entry) => entry.id === warehouseId.value)) {
+      warehouseId.value = options.value.warehouses[0]?.id ?? ''
+    }
+  } catch (err) {
+    submitError.value = err.message || 'Không thể tải danh sách kho.'
   }
   confirmation.value = null
   dialog.value?.close()
@@ -85,15 +93,17 @@ async function submit() {
   saving.value = true
   const pending = confirmation.value
   try {
-    result.value = await repository.createVoucher(pending, pending.scenario)
-    options.value = repository.list()
+    result.value = await activeRepo.value.createVoucher(pending, pending.scenario)
+    const listRes = await Promise.resolve(activeRepo.value.list())
+    options.value = listRes || { warehouses: [], inventory: [], beneficiaries: [] }
     handedOver.value = false
     dialog.value.close()
     confirmation.value = null
     await nextTick()
     resultPanel.value?.focus()
   } catch (error) {
-    options.value = repository.list()
+    const listRes = await Promise.resolve(activeRepo.value.list()).catch(() => null)
+    if (listRes) options.value = listRes
     submitError.value = error.message || 'Không thể tạo phiếu mẫu. Vui lòng thử lại.'
     handedOver.value = false
     scenario.value = 'normal'
