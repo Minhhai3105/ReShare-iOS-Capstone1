@@ -8,13 +8,13 @@ test('US16: Concurrent distribution requests in Firestore Emulator never result 
   skip: !process.env.FIRESTORE_EMULATOR_HOST,
 }, async () => {
   const app = initializeApp({ projectId: 'demo-reshare' }, 'distribution-api-emulator-test');
+  const db = getFirestore(app);
+  const warehouseId = 'kho-hai-chau';
+  const itemId = 'item-emu-concurrent';
+  const beneficiaryId = 'ben-emu-concurrent';
+  let results = [];
+
   try {
-    const db = getFirestore(app);
-
-    const warehouseId = 'kho-hai-chau';
-    const itemId = 'item-emu-concurrent';
-    const beneficiaryId = 'ben-emu-concurrent';
-
     // 1. Seed initial data
     await db.doc(`warehouses/${warehouseId}`).set({ name: 'Kho Hải Châu', status: 'active' });
     await db.doc('staff_assignments/staff-hc-1').set({
@@ -90,7 +90,7 @@ test('US16: Concurrent distribution requests in Firestore Emulator never result 
       }
     );
 
-    const results = await Promise.allSettled([request1, request2]);
+    results = await Promise.allSettled([request1, request2]);
 
     const fulfilled = results.filter((r) => r.status === 'fulfilled');
     const rejected = results.filter((r) => r.status === 'rejected');
@@ -136,20 +136,24 @@ test('US16: Concurrent distribution requests in Firestore Emulator never result 
     assert.equal(movement.quantity, -2);
   } finally {
     try {
-      const db = getFirestore(app);
-      await db.doc(`warehouses/${warehouseId}`).delete();
-      await db.doc('staff_assignments/staff-hc-1').delete();
-      await db.doc('staff_assignments/staff-hc-2').delete();
-      await db.doc(`beneficiaries/${beneficiaryId}`).delete();
-      await db.doc(`inventory/${itemId}`).delete();
-      if (typeof results !== 'undefined') {
+      const deleteOps = [
+        db.doc(`warehouses/${warehouseId}`).delete(),
+        db.doc('staff_assignments/staff-hc-1').delete(),
+        db.doc('staff_assignments/staff-hc-2').delete(),
+        db.doc(`beneficiaries/${beneficiaryId}`).delete(),
+        db.doc(`inventory/${itemId}`).delete(),
+      ];
+      if (Array.isArray(results)) {
         for (const r of results) {
-          if (r.status === 'fulfilled' && r.value?.body?.voucher) {
-            await db.doc(`distribution_vouchers/${r.value.body.voucher.id}`).delete();
-            await db.doc(`inventory_movements/${r.value.body.movement.id}`).delete();
+          if (r.status === 'fulfilled' && r.value?.body?.voucher?.id) {
+            deleteOps.push(db.doc(`distribution_vouchers/${r.value.body.voucher.id}`).delete());
+          }
+          if (r.status === 'fulfilled' && r.value?.body?.movement?.id) {
+            deleteOps.push(db.doc(`inventory_movements/${r.value.body.movement.id}`).delete());
           }
         }
       }
+      await Promise.allSettled(deleteOps);
     } catch {
       // ignore cleanup errors
     }
