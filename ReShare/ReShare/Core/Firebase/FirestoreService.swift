@@ -22,8 +22,6 @@ protocol FirestoreServiceProtocol {
     // MARK: - Kênh 1: Kho đồ 0đ Cộng đồng (P2P Catalog)
     func publishCatalogItem(_ item: CatalogItem) async throws
     func fetchCatalogItems() async throws -> [CatalogItem]
-    func updateCatalogItem(itemId: String, ownerId: String, fields: CatalogItemEditFields) async throws
-    func closeCatalogItem(itemId: String, ownerId: String) async throws
     func reserveCatalogItem(
         chatId: String,
         itemId: String,
@@ -253,59 +251,6 @@ final class FirestoreService: FirestoreServiceProtocol {
 
         return snapshot.documents.compactMap { doc in
             try? doc.data(as: CatalogItem.self)
-        }
-    }
-
-    func updateCatalogItem(itemId: String, ownerId: String, fields: CatalogItemEditFields) async throws {
-        let title = fields.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let address = fields.pickupAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty, title.count <= 120, !address.isEmpty, address.count <= 240,
-              fields.donorNote.count <= 1000 else {
-            throw NSError(domain: "ReShare", code: 400, userInfo: [NSLocalizedDescriptionKey: "Thông tin món đồ chưa hợp lệ."])
-        }
-        let reference = db.collection(Constants.FirestoreCollections.catalogItems).document(itemId)
-        _ = try await db.runTransaction { transaction, errorPointer -> Any? in
-            do {
-                let snapshot = try transaction.getDocument(reference)
-                guard let data = snapshot.data(), data["donorId"] as? String == ownerId,
-                      ["available", "Sẵn sàng nhận đồ"].contains(data["status"] as? String ?? "") else {
-                    errorPointer?.pointee = NSError(domain: "ReShare", code: 409,
-                        userInfo: [NSLocalizedDescriptionKey: "Chỉ chủ bài được sửa khi món đồ còn sẵn sàng nhận."])
-                    return nil
-                }
-                transaction.updateData([
-                    "title": title, "category": fields.category, "condition": fields.condition,
-                    "district": fields.district, "pickupAddress": address,
-                    "donorNote": fields.donorNote, "imageName": fields.imageName,
-                ], forDocument: reference)
-                return true
-            } catch {
-                errorPointer?.pointee = error as NSError
-                return nil
-            }
-        }
-    }
-
-    func closeCatalogItem(itemId: String, ownerId: String) async throws {
-        let reference = db.collection(Constants.FirestoreCollections.catalogItems).document(itemId)
-        _ = try await db.runTransaction { transaction, errorPointer -> Any? in
-            do {
-                let snapshot = try transaction.getDocument(reference)
-                guard let data = snapshot.data(), data["donorId"] as? String == ownerId,
-                      ["available", "Sẵn sàng nhận đồ"].contains(data["status"] as? String ?? "") else {
-                    errorPointer?.pointee = NSError(domain: "ReShare", code: 409,
-                        userInfo: [NSLocalizedDescriptionKey: "Chỉ chủ bài được đóng khi món đồ còn sẵn sàng nhận."])
-                    return nil
-                }
-                transaction.updateData([
-                    "status": CatalogItemStatus.closed.rawValue,
-                    "closedAt": FieldValue.serverTimestamp(),
-                ], forDocument: reference)
-                return true
-            } catch {
-                errorPointer?.pointee = error as NSError
-                return nil
-            }
         }
     }
 

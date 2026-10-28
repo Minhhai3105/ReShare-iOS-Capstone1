@@ -5,7 +5,6 @@ enum CatalogItemStatus: String, Codable, CaseIterable {
     case available = "available"
     case reserved = "reserved"
     case completed = "completed"
-    case closed = "closed"
 
     // Text tiếng Việt hiển thị trên giao diện người dùng
     var displayText: String {
@@ -13,7 +12,6 @@ enum CatalogItemStatus: String, Codable, CaseIterable {
         case .available: return "Sẵn sàng nhận đồ"
         case .reserved: return "Đã có người hẹn"
         case .completed: return "Đã trao tặng"
-        case .closed: return "Đã đóng bài"
         }
     }
 
@@ -22,7 +20,6 @@ enum CatalogItemStatus: String, Codable, CaseIterable {
         case .available: return Color(red: 0.08, green: 0.35, blue: 0.18)
         case .reserved: return Color.orange
         case .completed: return Color.secondary
-        case .closed: return Color.secondary
         }
     }
 
@@ -31,7 +28,6 @@ enum CatalogItemStatus: String, Codable, CaseIterable {
         case .available: return Color(red: 0.82, green: 0.96, blue: 0.86)
         case .reserved: return Color.orange.opacity(0.15)
         case .completed: return Color(uiColor: .systemGray5)
-        case .closed: return Color(uiColor: .systemGray5)
         }
     }
 
@@ -45,8 +41,6 @@ enum CatalogItemStatus: String, Codable, CaseIterable {
             self = .reserved
         case "completed", "đã trao tặng":
             self = .completed
-        case "closed", "đã đóng bài":
-            self = .closed
         default:
             throw DecodingError.dataCorrupted(
                 DecodingError.Context(
@@ -190,16 +184,6 @@ struct CatalogItem: Identifiable, Codable, Hashable {
         self.donorHandoverConfirmed = donorHandoverConfirmed
         self.requesterHandoverConfirmed = requesterHandoverConfirmed
     }
-}
-
-struct CatalogItemEditFields {
-    let title: String
-    let category: String
-    let condition: String
-    let district: String
-    let pickupAddress: String
-    let donorNote: String
-    let imageName: String
 }
 
 extension CatalogItem {
