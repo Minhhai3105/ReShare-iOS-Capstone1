@@ -66,6 +66,16 @@ describe('US14 – tồn kho', () => {
     assert.ok(movements[0].createdAt >= movements.at(-1).createdAt, 'mới nhất trước')
   })
 
+  test('AC3: chỉ mã yêu cầu quyên góp mở màn xem chi tiết; biên bản và phiếu nhập chỉ hiện mã, ghi chưa hỗ trợ', async () => {
+    const { item } = await service.fetchInventoryItem(SYSTEM_ADMIN, 'vp-0002')
+    const [donation, receipt, stockIn] = service.getItemSources(item)
+    assert.deepEqual(donation.to, { name: 'admin-donation-detail', params: { donationId: item.donationId } })
+    assert.equal(receipt.code, item.receiptId)
+    assert.equal(receipt.to, null, 'không dẫn tới màn tạo biên bản')
+    assert.match(receipt.linked, /Chưa hỗ trợ/)
+    assert.equal(stockIn.to, null)
+  })
+
   test('Tìm theo tên không dấu, mã vật phẩm, mã phiếu nhập', async () => {
     assert.equal((await service.fetchInventory(SYSTEM_ADMIN, query({ search: 'ao khoac' }))).items.length, 1)
     assert.equal((await service.fetchInventory(SYSTEM_ADMIN, query({ search: 'VP-0003' }))).items[0].id, 'vp-0003')

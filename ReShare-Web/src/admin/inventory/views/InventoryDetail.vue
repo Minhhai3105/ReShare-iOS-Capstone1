@@ -8,16 +8,14 @@ import { ADMIN_ROUTE, USER_ROLE, USER_ROLE_LABEL } from '../../auth/auth.constan
 import { resolveQueueAccess } from '../../donations/donation.service'
 import {
   CONDITION_LABEL,
+  DONATION_DETAIL_ROUTE,
   INVENTORY_ERROR,
   MOVEMENT_TYPE_LABEL,
   fetchInventoryItem,
   formatDateTime,
   getAccessibleWarehouses,
+  getItemSources,
 } from '../inventory.service'
-
-// Màn đích đã có của US10 (chi tiết đơn) và US12 (thực nhận); phiếu PX mở màn US17; PN/DC chưa có màn xem.
-const DONATION_DETAIL_ROUTE = 'admin-donation-detail'
-const DONATION_RECEIPT_ROUTE = 'admin-donation-receipt'
 
 const STATE_MESSAGE = {
   [INVENTORY_ERROR.notConfigured]: { icon: 'server', title: 'Chưa kết nối nguồn tồn kho', text: 'Phiên bản này chưa có dữ liệu tồn kho chính thức từ hệ thống, nên chưa xem được chi tiết vật phẩm.' },
@@ -56,16 +54,14 @@ const accessLabel = computed(() => {
   return `${USER_ROLE_LABEL[role]} (${scope})`
 })
 const donationParams = computed(() => ({ donationId: item.value?.donationId }))
-const sources = computed(() => [
-  { label: 'Yêu cầu quyên góp', icon: 'heart-handshake', code: item.value?.donationId, linked: 'Đã liên kết', empty: 'Chưa liên kết', to: { name: DONATION_DETAIL_ROUTE, params: donationParams.value } },
-  { label: 'Biên bản thực nhận', icon: 'clipboard-check', code: item.value?.receiptId, linked: 'Đã xác nhận', empty: 'Chưa xác nhận', to: { name: DONATION_RECEIPT_ROUTE, params: donationParams.value } },
-  { label: 'Phiếu nhập kho', icon: 'file-text', code: item.value?.stockInVoucherId, linked: 'Chưa hỗ trợ xem phiếu', empty: 'Chưa tạo phiếu' },
-])
+const sources = computed(() => getItemSources(item.value))
 
 async function load() {
   const requestId = ++latestRequestId
   isLoading.value = true
   errorStatus.value = null
+  // Đổi vật phẩm hoặc phân công thì không giữ dữ liệu của lần xem trước.
+  data.value = null
   try {
     const nextData = await fetchInventoryItem(access.value, route.params.itemId)
     if (requestId === latestRequestId) data.value = nextData
@@ -207,7 +203,7 @@ onBeforeUnmount(() => { latestRequestId += 1 })
               <em>{{ source.code ? source.linked : source.empty }}</em>
             </span>
           </div>
-          <p class="detail-source-note">Bấm mã đơn quyên góp hoặc biên bản thực nhận để mở màn chi tiết. Phiếu xuất mở từ lịch sử biến động; phiếu nhập/điều chỉnh chưa có màn xem.</p>
+          <p class="detail-source-note">Bấm mã yêu cầu quyên góp để mở màn chi tiết. Phiếu xuất mở từ lịch sử biến động; biên bản thực nhận và phiếu nhập/điều chỉnh chưa có màn xem.</p>
           <p class="detail-hint is-green"><AuthIcon name="check-circle" :size="15" />Cam kết truy xuất nguồn gốc ReShare</p>
         </section>
 
