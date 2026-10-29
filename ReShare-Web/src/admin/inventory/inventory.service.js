@@ -1,7 +1,7 @@
 // Lớp dữ liệu tồn kho. Hiện dùng mock khi dev; khi có API/Firestore chỉ thay phần thân hàm,
 // giữ chữ ký và dạng kết quả để giao diện không phải sửa.
 import { MOCK_WAREHOUSES, createMockInventory, getInventoryScenario } from './inventory.mock'
-import { normalizeText } from '../shared/text'
+import { normalizeText } from '../shared/text.js'
 
 export const INVENTORY_ERROR = Object.freeze({
   forbidden: 403,
@@ -25,6 +25,22 @@ export const MOVEMENT_TYPE_LABEL = Object.freeze({
   distribution: 'Phân phối',
   adjustment: 'Điều chỉnh',
 })
+
+// Màn xem chứng từ đã có: chi tiết yêu cầu quyên góp (US10). Biên bản thực nhận chỉ có màn tạo (US12)
+// và phiếu nhập chưa có màn xem, nên chỉ hiển thị mã, không gắn đường dẫn.
+export const DONATION_DETAIL_ROUTE = 'admin-donation-detail'
+
+/** Nguồn nhập & chứng từ gốc của vật phẩm; `to` = null khi chưa có màn xem. */
+export function getItemSources(item) {
+  return [
+    {
+      label: 'Yêu cầu quyên góp', icon: 'heart-handshake', code: item?.donationId, linked: 'Đã liên kết', empty: 'Chưa liên kết',
+      to: item?.donationId ? { name: DONATION_DETAIL_ROUTE, params: { donationId: item.donationId } } : null,
+    },
+    { label: 'Biên bản thực nhận', icon: 'clipboard-check', code: item?.receiptId, linked: 'Chưa hỗ trợ mở biên bản', empty: 'Chưa xác nhận', to: null },
+    { label: 'Phiếu nhập kho', icon: 'file-text', code: item?.stockInVoucherId, linked: 'Chưa hỗ trợ xem phiếu', empty: 'Chưa tạo phiếu', to: null },
+  ]
+}
 
 // Mock chỉ dùng khi dev; bản build không tham chiếu tới nên dữ liệu mẫu bị loại khỏi bundle.
 const IS_MOCK = import.meta.env.DEV

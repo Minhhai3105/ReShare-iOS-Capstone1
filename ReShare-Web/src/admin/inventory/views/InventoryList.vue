@@ -94,6 +94,13 @@ function resetFilters() {
   Object.assign(filters, DEFAULT_FILTERS)
 }
 
+// Đổi kho hoặc phân công: xóa ngay dữ liệu phạm vi cũ và bỏ qua lần tải đang chạy của phạm vi đó.
+watch([selectedWarehouseId, staffAssignment], () => {
+  latestRequestId += 1
+  result.value = null
+  errorStatus.value = null
+})
+
 watch([() => ({ ...filters }), selectedWarehouseId, staffAssignment], () => {
   clearTimeout(reloadTimer)
   reloadTimer = setTimeout(load, 250)
