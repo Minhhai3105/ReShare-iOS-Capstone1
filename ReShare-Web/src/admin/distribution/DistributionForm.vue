@@ -2,7 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import AdminIcon from '../AdminIcon.vue'
 import brandLogo from '../auth/assets/reshare-logo.png'
-import { canDistribute, createDemoDistributionRepository, validateDistribution } from './distribution.repository.js'
+import { canDistribute, createDemoDistributionRepository, newRequestKey, validateDistribution } from './distribution.repository.js'
 
 const props = defineProps({
   assignment: Object,
@@ -90,7 +90,7 @@ watch([quantity, beneficiaryId, note, handedOver], () => {
 async function askToConfirm() {
   if (!valid.value || saving.value) return
   submitError.value = ''
-  pendingRequestKey.value ||= crypto.randomUUID()
+  pendingRequestKey.value ||= newRequestKey()
   confirmation.value = {
     ...draft.value, quantity: Number(quantity.value), itemId: item.value.id, warehouseId: warehouseId.value,
     idempotencyKey: pendingRequestKey.value,
