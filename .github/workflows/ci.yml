@@ -74,6 +74,14 @@ jobs:
       # Gọi node --test trực tiếp thay vì qua npm script: package.json hiện chỉ có
       # test:queue trỏ donation.service.test.mjs, còn distribution.test.mjs và
       # reports.test.mjs chưa được script nào gọi tới.
-      - name: Chạy toàn bộ test trong ReShare-Web/tests
+      # Pattern đặt trong ngoặc kép để NODE tự glob, không phải shell: bash không bật
+      # globstar nên src/**/ sẽ chỉ khớp 1 cấp và bỏ sót test nằm sâu hơn
+      # (ví dụ src/admin/inventory/inventory.service.test.mjs).
+      - name: Chạy test trong ReShare-Web/tests và src
         working-directory: ReShare-Web
-        run: node --test tests/*.test.mjs
+        run: node --test --test-concurrency=1 "tests/**/*.test.mjs" "src/**/*.test.mjs"
+      # verify-landing.mjs nằm ở gốc ReShare-Web (ngoài tests/) và cần dist/ từ bước
+      # build ở trên, nên phải gọi riêng — nếu không thì US24 không có check nào.
+      - name: Kiểm tra bản build landing (US24)
+        working-directory: ReShare-Web
+        run: node --test verify-landing.mjs
