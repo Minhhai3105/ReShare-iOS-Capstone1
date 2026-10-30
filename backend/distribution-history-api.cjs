@@ -49,9 +49,12 @@ function createDistributionHistoryApi({ db, verifyToken }) {
     if (!/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z)?$/.test(value)) {
       throw new ApiError(400, 'Invalid date filter');
     }
-    const date = new Date(value);
+    // Ngày trần (YYYY-MM-DD) là ngày vận hành theo Asia/Ho_Chi_Minh (UTC+7), giống
+    // reports-api. Diễn giải theo UTC sẽ lệch 7 giờ và bỏ sót phiếu tạo lúc 00:00-07:00.
+    const date = value.length === 10
+      ? new Date(`${value}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}+07:00`)
+      : new Date(value);
     if (!Number.isFinite(date.getTime())) throw new ApiError(400, 'Invalid date filter');
-    if (endOfDay && value.length === 10) date.setUTCHours(23, 59, 59, 999);
     return date;
   }
 

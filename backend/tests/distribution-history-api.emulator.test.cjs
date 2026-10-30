@@ -66,6 +66,23 @@ test('US17: distribution history is scoped, filtered and tied to confirmed movem
       voucherId: 'history-dist-a', warehouseId: 'history-kho-a', createdAt: new Date(),
     });
     await assert.rejects(get('/v1/admin/distributions/history-dist-a', 'history-a'), { status: 409 });
+
+    // 2026-10-20T20:00Z = 03:00 ngày 21/10 giờ VN: phải thuộc ngày 21, không thuộc ngày 20.
+    await db.doc('distribution_vouchers/history-dist-late').set({
+      warehouseId: 'history-kho-a', beneficiaryId: 'person-a', status: 'confirmed',
+      createdAt: new Date('2026-10-20T20:00:00Z'), confirmedAt: new Date('2026-10-20T20:00:00Z'),
+      createdByUid: 'history-admin', confirmedByUid: 'history-admin',
+      lines: [{ inventoryItemId: 'inv_history-dist-late', quantity: 1, unitId: 'piece' }],
+    });
+    await db.doc('inventory_movements/mov_history-dist-late').set({
+      type: 'distribution', quantity: -1, inventoryItemId: 'inv_history-dist-late',
+      voucherId: 'history-dist-late', warehouseId: 'history-kho-a',
+      actorUid: 'history-admin', createdAt: new Date('2026-10-20T20:00:00Z'),
+    });
+    const vnDay20 = (await get('/v1/admin/distributions?from=2026-10-20&to=2026-10-20', 'history-a')).body;
+    assert.ok(!vnDay20.vouchers.some(v => v.id === 'history-dist-late'));
+    const vnDay21 = (await get('/v1/admin/distributions?from=2026-10-21&to=2026-10-21', 'history-a')).body;
+    assert.deepEqual(vnDay21.vouchers.map(v => v.id), ['history-dist-late']);
   } finally {
     await deleteApp(app);
   }
