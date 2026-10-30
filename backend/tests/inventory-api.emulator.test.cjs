@@ -57,6 +57,19 @@ test('US14: read inventory by assigned warehouse, filter, paginate and trace rec
     assert.equal(detail.movements[0].receiptId, 'rcp_item-a');
     assert.equal(detail.movements[0].voucherId, null);
     assert.equal(detail.movements[0].stockEntryId, 'ste_rcp_item-a');
+
+    // Dòng trong danh sách phải mở được dù ID không theo tiền tố inv_rcp_ (dữ liệu seed/demo).
+    await db.doc('inventory/legacy-item').set({
+      warehouseId: 'kho-a', itemName: 'Thùng cũ', category: 'household',
+      conditionId: 'good', unitId: 'piece', quantityReceived: 1, quantityAvailable: 1,
+      createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+    });
+    const legacy = (await get('/v1/admin/inventory/legacy-item', 'inventory-worker-a')).body;
+    assert.equal(legacy.item.id, 'legacy-item');
+    assert.deepEqual(legacy.movements, []);
+    await assert.rejects(get('/v1/admin/inventory/khong@hop-le', 'inventory-worker-a'), { status: 400 });
+    // Trần offset chặn request bill quá nhiều document read.
+    await assert.rejects(get('/v1/admin/inventory?offset=999999', 'inventory-worker-a'), { status: 400 });
   } finally {
     await deleteApp(app);
   }

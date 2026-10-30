@@ -431,22 +431,6 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Tồn kho và movement chỉ được ghi bằng transaction ở trusted API.
-    match /inventory/{itemId} {
-      allow get, list: if request.auth != null && canReadWarehouse(resource.data.warehouseId);
-      allow write: if false;
-    }
-
-    match /inventory_movements/{movementId} {
-      allow get, list: if request.auth != null && canReadWarehouse(resource.data.warehouseId);
-      allow write: if false;
-    }
-
-    match /stock_entries/{entryId} {
-      allow get, list: if request.auth != null && canReadWarehouse(resource.data.warehouseId);
-      allow write: if false;
-    }
-
     // Contact records are accepted and accessed only by the trusted backend using Admin SDK.
     match /contacts/{contactId} {
       allow read, write: if false;
