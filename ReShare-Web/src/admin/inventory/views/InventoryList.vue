@@ -31,7 +31,7 @@ const RULES = [
 ]
 const timeFormatter = new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
 
-// Dữ liệu mẫu chỉ có khi chạy dev (service chặn trên bản production).
+// Dữ liệu mẫu chỉ có khi chạy dev (service chặn trên bản production); nhãn demo cũng chỉ hiện khi đó.
 const IS_SAMPLE_DATA = import.meta.env.DEV
 const route = useRoute()
 const router = useRouter()
@@ -114,7 +114,7 @@ onBeforeUnmount(() => {
 
 <template>
   <InventoryLayout :warehouses="warehouses" :selected-warehouse-id="selectedWarehouseId" @select-warehouse="selectWarehouse">
-    <section class="inv-sandbox">
+    <section v-if="IS_SAMPLE_DATA" class="inv-sandbox">
       <AuthIcon name="flask" :size="30" />
       <div>
         <strong>Môi trường thử nghiệm (Sandbox Node)</strong> <span class="inv-chip">Độc lập vật lý</span>
@@ -251,7 +251,7 @@ onBeforeUnmount(() => {
       </section>
 
       <div class="inventory-side">
-        <section class="inv-card">
+        <section v-if="IS_SAMPLE_DATA" class="inv-card">
           <h2 class="inventory-title"><AuthIcon name="flask" :size="20" />Giai đoạn Prototype</h2>
           <p class="inventory-muted">Mô hình dữ liệu kho (Warehouse Inventory Model), đối soát phiếu nhập/xuất và sổ nhật ký kiểm toán (audit logs) đang ở trạng thái triển khai kiểm thử giao diện chuẩn.</p>
           <dl class="inventory-specs">

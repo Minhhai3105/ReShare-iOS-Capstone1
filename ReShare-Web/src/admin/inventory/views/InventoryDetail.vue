@@ -17,6 +17,9 @@ import {
   getItemSources,
 } from '../inventory.service'
 
+// Nhãn demo (Sandbox, Demo, Xem thử, Prototype) chỉ hiện khi chạy dữ liệu mẫu ở dev, không hiện trên bản production.
+const IS_SAMPLE_DATA = import.meta.env.DEV
+
 const STATE_MESSAGE = {
   [INVENTORY_ERROR.notConfigured]: { icon: 'server', title: 'Chưa kết nối nguồn tồn kho', text: 'Phiên bản này chưa có dữ liệu tồn kho chính thức từ hệ thống, nên chưa xem được chi tiết vật phẩm.' },
   [INVENTORY_ERROR.forbidden]: { icon: 'shield', title: 'Không có quyền xem vật phẩm này', text: 'Vật phẩm thuộc kho bạn không được phân công.' },
@@ -94,7 +97,7 @@ onBeforeUnmount(() => { latestRequestId += 1 })
       </RouterLink>
     </nav>
 
-    <section class="inv-sandbox">
+    <section v-if="IS_SAMPLE_DATA" class="inv-sandbox">
       <AuthIcon name="flask" :size="26" />
       <div>
         <span class="inv-chip inv-chip--solid">Môi trường thử nghiệm (Sandbox Node)</span>
