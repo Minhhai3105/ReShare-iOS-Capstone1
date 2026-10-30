@@ -26,6 +26,7 @@ const saving = ref(false)
 const submitError = ref('')
 const result = ref(null)
 const confirmation = ref(null)
+const pendingRequestKey = ref(null)
 const dialog = ref(null)
 const resultPanel = ref(null)
 
@@ -62,13 +63,15 @@ const menu = [
 ]
 const checks = computed(() => [
   { label: 'Kho vật lý xác thực', detail: 'Vật phẩm thuộc kho được phân công.', ok: authorized.value && !!item.value },
-  { label: 'Tồn khả dụng hợp lệ', detail: 'Số lượng xuất ≤ số còn trong sổ kho mẫu.', ok: !!item.value && !errors.value.quantity },
+  { label: 'Tồn khả dụng hợp lệ', detail: preview ? 'Số lượng xuất ≤ số còn trong sổ kho mẫu.' : 'Số lượng xuất ≤ tồn khả dụng trong sổ kho.', ok: !!item.value && !errors.value.quantity },
   { label: 'Người thụ hưởng hợp lệ', detail: 'Hồ sơ đã duyệt thuộc phạm vi kho.', ok: !errors.value.beneficiaryId },
   { label: 'Xác nhận bàn giao thực tế', detail: 'Cam kết vật phẩm đã được trao.', ok: handedOver.value },
   { label: 'Kiểm soát số dư không âm', detail: 'Tồn sau phân phối ≥ 0 đơn vị chuẩn.', ok: stockAfter.value !== null && stockAfter.value >= 0 },
 ])
 
 function resetForm() {
+  pendingRequestKey.value = null
+  confirmation.value = null
   quantity.value = ''
   beneficiaryId.value = ''
   note.value = ''
@@ -79,12 +82,18 @@ function resetForm() {
 }
 watch(warehouseId, () => { itemId.value = inventory.value[0]?.id ?? ''; resetForm() }, { immediate: true })
 watch(itemId, resetForm)
+watch([quantity, beneficiaryId, note, handedOver], () => {
+  pendingRequestKey.value = null
+  confirmation.value = null
+})
 
 async function askToConfirm() {
   if (!valid.value || saving.value) return
   submitError.value = ''
+  pendingRequestKey.value ||= crypto.randomUUID()
   confirmation.value = {
     ...draft.value, quantity: Number(quantity.value), itemId: item.value.id, warehouseId: warehouseId.value,
+    idempotencyKey: pendingRequestKey.value,
     expectedVersion: item.value.version, itemName: item.value.name, unit: item.value.unit,
     warehouseName: warehouse.value.name, beneficiaryName: beneficiary.value.name,
     before: item.value.available, after: stockAfter.value, scenario: scenario.value,
@@ -99,21 +108,30 @@ async function submit() {
   const pending = confirmation.value
   try {
     result.value = await activeRepo.value.createVoucher(pending, pending.scenario)
-    const listRes = await Promise.resolve(activeRepo.value.list())
-    options.value = listRes || { warehouses: [], inventory: [], beneficiaries: [] }
+    const listRes = await Promise.resolve(activeRepo.value.list()).catch(() => null)
+    if (listRes) options.value = listRes
+    pendingRequestKey.value = null
     handedOver.value = false
-    dialog.value.close()
+    if (dialog.value?.open) dialog.value.close()
     confirmation.value = null
     await nextTick()
     resultPanel.value?.focus()
   } catch (error) {
-    const listRes = await Promise.resolve(activeRepo.value.list()).catch(() => null)
-    if (listRes) options.value = listRes
-    submitError.value = error.message || 'Không thể tạo phiếu mẫu. Vui lòng thử lại.'
-    handedOver.value = false
+    const uncertainResult = error.code === 'NETWORK_ERROR'
+    if (!uncertainResult) {
+      const listRes = await Promise.resolve(activeRepo.value.list()).catch(() => null)
+      if (listRes) options.value = listRes
+    }
+    submitError.value = uncertainResult
+      ? 'Chưa rõ máy chủ đã ghi phiếu hay chưa. Bấm kiểm tra lại lần gửi; hệ thống sẽ không trừ tồn hai lần.'
+      : error.message || 'Không thể tạo phiếu. Vui lòng thử lại.'
+    if (!uncertainResult) {
+      pendingRequestKey.value = null
+      handedOver.value = false
+      confirmation.value = null
+    }
     scenario.value = 'normal'
-    dialog.value.close()
-    confirmation.value = null
+    if (dialog.value?.open) dialog.value.close()
   } finally {
     saving.value = false
   }
@@ -199,7 +217,7 @@ const formatTime = (value) => new Intl.DateTimeFormat('vi-VN', {
           <section class="d-card d-math"><div class="d-section-heading"><AdminIcon name="log" /><h2>Bảng tính toán đối chiếu tức thời</h2><code>{{ preview ? 'MATH PREVIEW' : 'ĐỐI CHIẾU SỐ DƯ' }}</code></div><div class="d-equation" aria-live="polite"><div><small>TỒN TRƯỚC</small><strong>{{ item?.available ?? '—' }}</strong><small>Hiện tại</small></div><b>−</b><div><small>SỐ XUẤT</small><strong>{{ quantity !== '' && !errors.quantity ? Number(quantity) : '—' }}</strong><small>Khấu trừ</small></div><b>=</b><div><small>TỒN SAU</small><strong>{{ stockAfter ?? '—' }}</strong><small>{{ preview ? 'Dự kiến (≥ 0)' : 'Sau xuất (≥ 0)' }}</small></div></div><p><b>Cơ chế kiểm soát an toàn tồn kho:</b> {{ preview ? 'Giá trị cuối cùng được kiểm tra lại ở bước xác nhận trên sổ kho mẫu. Mô phỏng này không chứng minh transaction Backend.' : 'Số dư khả dụng và phiên bản sổ kho được kiểm tra nguyên tử (atomic transaction) tại thời điểm commit, bảo đảm không bao giờ âm tồn.' }}</p></section>
 
           <section v-if="preview" class="d-card d-demo-controls"><h2><AdminIcon name="flask" />Kịch bản kiểm thử · Dữ liệu mẫu</h2><label for="distribution-scenario">Thay đổi tại thời điểm xác nhận</label><select id="distribution-scenario" v-model="scenario" :disabled="saving || !!result"><option value="normal">Bình thường — kiểm tra lại tồn mẫu</option><option value="shortage">Thiếu tồn — mô phỏng nhân sự khác vừa xuất hàng</option><option value="conflict">Xung đột — phiên bản sổ kho mẫu vừa thay đổi</option></select><p>Thiếu tồn sẽ cập nhật tồn mẫu; xung đột yêu cầu đối chiếu và xác nhận lại. Tải lại trang để trở về dữ liệu ban đầu (áo khoác: 3 chiếc).</p></section>
-          <div v-if="submitError" class="d-alert" role="alert" data-testid="submit-error">{{ submitError }}</div>
+          <div v-if="submitError" class="d-alert" role="alert" data-testid="submit-error">{{ submitError }} <button v-if="confirmation" type="button" :disabled="saving" @click="submit">Kiểm tra lại lần gửi</button></div>
           <section v-if="!result" class="d-card d-actions"><p><AdminIcon name="shield" /><span><b>Chế độ khóa:</b> Cần vật phẩm hợp lệ, số lượng ≤ tồn khả dụng, người thụ hưởng và xác nhận bàn giao thực tế.</span></p><button type="button" class="d-secondary" :disabled="saving" @click="resetForm">Hủy</button><button type="submit" form="distribution-form" class="d-primary" :disabled="!valid || saving"><AdminIcon name="play" :size="15" />{{ preview ? 'Xác nhận phân phối' : 'Xác nhận xuất kho' }}</button></section>
         </div>
 

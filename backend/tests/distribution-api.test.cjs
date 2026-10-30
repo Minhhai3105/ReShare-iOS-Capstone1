@@ -169,6 +169,7 @@ test('RC1D-83: AC1 & AC4: partial distribution (stock 3 -> export 2 -> stock 1) 
     handedOver: true,
     note: 'Hỗ trợ hộ khó khăn',
     expectedVersion: 1,
+    idempotencyKey: 'req-partial-001',
   };
 
   const res = await api.handle('POST', '/v1/admin/distribution', { authorization: 'Bearer hc-token' }, draft);
@@ -220,6 +221,7 @@ test('RC1D-83: US13 stock intake item (quantityAvailable, itemName, unitId) can 
     quantity: 2,
     handedOver: true,
     expectedVersion: 1,
+    idempotencyKey: 'req-us13-001',
   });
 
   assert.equal(res.status, 201);
@@ -242,6 +244,7 @@ test('RC1D-83: AC2: subsequent distribution exceeding remaining stock is rejecte
     quantity: 2,
     handedOver: true,
     expectedVersion: 1,
+    idempotencyKey: 'req-shortage-first',
   });
 
   // Second export attempts to take 2 from remaining 1 -> should fail
@@ -253,6 +256,7 @@ test('RC1D-83: AC2: subsequent distribution exceeding remaining stock is rejecte
       quantity: 2,
       handedOver: true,
       expectedVersion: 2,
+      idempotencyKey: 'req-shortage-second',
     }),
     (err) => {
       assert.equal(err.status, 409);
@@ -273,6 +277,7 @@ test('RC1D-83: AC3: stale version conflict is rejected with STOCK_CONFLICT', asy
       quantity: 1,
       handedOver: true,
       expectedVersion: 999, // Stale version
+      idempotencyKey: 'req-stale-version',
     }),
     (err) => {
       assert.equal(err.status, 409);
@@ -293,6 +298,8 @@ test('RC1D-83: unapproved beneficiary or cross-warehouse beneficiary is rejected
       beneficiaryId: 'ben-pending',
       quantity: 1,
       handedOver: true,
+      expectedVersion: 1,
+      idempotencyKey: 'req-ben-pending',
     }),
     { status: 400, code: 'VALIDATION' }
   );
@@ -305,8 +312,60 @@ test('RC1D-83: unapproved beneficiary or cross-warehouse beneficiary is rejected
       beneficiaryId: 'ben-son-tra',
       quantity: 1,
       handedOver: true,
+      expectedVersion: 1,
+      idempotencyKey: 'req-ben-cross-warehouse',
     }),
     { status: 400, code: 'VALIDATION' }
   );
+});
+
+test('RC1D-83: retry after a lost response returns the same voucher without deducting stock again', async () => {
+  const { api, documents } = setup();
+  const draft = {
+    warehouseId: 'hai-chau', itemId: 'item-1', beneficiaryId: 'ben-1',
+    quantity: 1, handedOver: true, expectedVersion: 1, idempotencyKey: 'req-retry-same-handover',
+  };
+  const first = await api.handle('POST', '/v1/admin/distribution', { authorization: 'Bearer hc-token' }, draft);
+  const replay = await api.handle('POST', '/v1/admin/distribution', { authorization: 'Bearer hc-token' }, draft);
+  assert.equal(first.status, 201);
+  assert.equal(replay.status, 200);
+  assert.equal(replay.body.idempotentReplay, true);
+  assert.equal(replay.body.voucher.id, first.body.voucher.id);
+  assert.equal(documents.get('inventory/item-1').quantityAvailable ?? documents.get('inventory/item-1').available, 2);
+  assert.equal([...documents.keys()].filter(key => key.startsWith('distribution_vouchers/')).length, 1);
+  assert.equal([...documents.keys()].filter(key => key.startsWith('inventory_movements/')).length, 1);
+
+  await assert.rejects(
+    () => api.handle('POST', '/v1/admin/distribution', { authorization: 'Bearer hc-token' }, { ...draft, quantity: 2, expectedVersion: 2 }),
+    { status: 409, code: 'IDEMPOTENCY_CONFLICT' }
+  );
+  await assert.rejects(
+    () => api.handle('POST', '/v1/admin/distribution', { authorization: 'Bearer hc-token' }, { ...draft, expectedVersion: 2 }),
+    { status: 409, code: 'IDEMPOTENCY_CONFLICT' }
+  );
+});
+
+test('RC1D-83: an inactive warehouse cannot distribute even with an old assignment', async () => {
+  const { api, documents } = setup();
+  documents.set('warehouses/hai-chau', { name: 'Kho Hải Châu', status: 'inactive' });
+  await assert.rejects(
+    () => api.handle('POST', '/v1/admin/distribution', { authorization: 'Bearer hc-token' }, {
+      warehouseId: 'hai-chau', itemId: 'item-1', beneficiaryId: 'ben-1',
+      quantity: 1, handedOver: true, expectedVersion: 1, idempotencyKey: 'req-inactive-warehouse',
+    }),
+    { status: 409, code: 'WAREHOUSE_INACTIVE' }
+  );
+  assert.equal(documents.get('inventory/item-1').available, 3);
+});
+
+test('RC1D-83: a new distribution requires a version and stable request key', async () => {
+  const { api } = setup();
+  const draft = {
+    warehouseId: 'hai-chau', itemId: 'item-1', beneficiaryId: 'ben-1', quantity: 1, handedOver: true,
+  };
+  await assert.rejects(() => api.handle('POST', '/v1/admin/distribution', { authorization: 'Bearer hc-token' }, draft),
+    { status: 400, code: 'VALIDATION' });
+  await assert.rejects(() => api.handle('POST', '/v1/admin/distribution', { authorization: 'Bearer hc-token' }, { ...draft, expectedVersion: 1 }),
+    { status: 400, code: 'VALIDATION' });
 });
 

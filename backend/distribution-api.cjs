@@ -1,4 +1,5 @@
 const { ApiError } = require('./image-api.cjs');
+const { createHash } = require('node:crypto');
 
 function createDistributionApi({ db, verifyToken, serverTimestamp }) {
   if (!db || !verifyToken) throw new Error('Distribution API configuration is incomplete');
@@ -147,16 +148,64 @@ function createDistributionApi({ db, verifyToken, serverTimestamp }) {
       }
 
       const note = typeof body?.note === 'string' ? body.note.trim().slice(0, 500) : '';
-      const expectedVersion = typeof body?.expectedVersion === 'number' ? body.expectedVersion : undefined;
+      const expectedVersion = body?.expectedVersion;
+      if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) {
+        throw new ApiError(400, 'expectedVersion is required', 'VALIDATION');
+      }
+      const idempotencyKey = body?.idempotencyKey;
+      if (typeof idempotencyKey !== 'string' || !/^[A-Za-z0-9_-]{8,128}$/.test(idempotencyKey)) {
+        throw new ApiError(400, 'idempotencyKey is required', 'VALIDATION');
+      }
+      const suffix = createHash('sha256').update(`${staff.uid}:${idempotencyKey}`).digest('hex').slice(0, 32).toUpperCase();
+      const voucherId = `PX-${suffix}`;
+      const movementId = `MOV-${suffix}`;
+      const requestFingerprint = createHash('sha256').update(JSON.stringify({
+        actorUid: staff.uid, warehouseId, itemId, beneficiaryId, quantity, note, expectedVersion,
+      })).digest('hex');
 
+      const warehouseRef = db.collection('warehouses').doc(warehouseId);
       const inventoryRef = db.collection('inventory').doc(itemId);
       const beneficiaryRef = db.collection('beneficiaries').doc(beneficiaryId);
+      const voucherRef = db.collection('distribution_vouchers').doc(voucherId);
+      const movementRef = db.collection('inventory_movements').doc(movementId);
 
       const result = await db.runTransaction(async (transaction) => {
-        const [inventoryDoc, beneficiaryDoc] = await Promise.all([
+        const [voucherDoc, movementDoc] = await Promise.all([
+          transaction.get(voucherRef), transaction.get(movementRef),
+        ]);
+        if (voucherDoc.exists || movementDoc.exists) {
+          if (!voucherDoc.exists || !movementDoc.exists || voucherDoc.data().requestFingerprint !== requestFingerprint) {
+            throw new ApiError(409, 'Khóa gửi đã được dùng cho một phiếu khác.', 'IDEMPOTENCY_CONFLICT');
+          }
+          const itemDoc = await transaction.get(inventoryRef);
+          const itemData = itemDoc.exists ? itemDoc.data() : null;
+          return {
+            voucher: voucherDoc.data(), movement: movementDoc.data(),
+            item: itemData ? {
+              id: itemId,
+              name: itemData.itemName || itemData.name || '',
+              warehouseId: itemData.warehouseId || '',
+              categoryId: itemData.category || itemData.categoryId || 'other',
+              available: itemData.quantityAvailable ?? itemData.available ?? 0,
+              quantityAvailable: itemData.quantityAvailable ?? itemData.available ?? 0,
+              unit: itemData.unitId || itemData.unit || 'chiếc',
+              unitId: itemData.unitId || itemData.unit || 'chiếc',
+              location: itemData.location || '',
+              sourceReceipt: itemData.sourceReceipt || itemData.receiptId || '',
+              version: typeof itemData.version === 'number' ? itemData.version : 1,
+            } : null,
+            idempotentReplay: true,
+          };
+        }
+
+        const [warehouseDoc, inventoryDoc, beneficiaryDoc] = await Promise.all([
+          transaction.get(warehouseRef),
           transaction.get(inventoryRef),
           transaction.get(beneficiaryRef),
         ]);
+        if (!warehouseDoc.exists || warehouseDoc.data().status !== 'active') {
+          throw new ApiError(409, 'Kho đã ngừng hoạt động. Không thể xuất hàng.', 'WAREHOUSE_INACTIVE');
+        }
 
         if (!inventoryDoc.exists) {
           throw new ApiError(404, 'Vật phẩm không thuộc kho đang thao tác.', 'NOT_FOUND');
@@ -203,7 +252,7 @@ function createDistributionApi({ db, verifyToken, serverTimestamp }) {
           version: currentVersion,
         };
 
-        if (expectedVersion !== undefined && expectedVersion !== currentVersion) {
+        if (expectedVersion !== currentVersion) {
           throw new ApiError(
             409,
             `Sổ kho vừa thay đổi. Tồn mới: ${currentAvailable} ${unit}. Vui lòng kiểm tra và xác nhận lại.`,
@@ -225,9 +274,6 @@ function createDistributionApi({ db, verifyToken, serverTimestamp }) {
         const after = before - quantity;
         const newVersion = currentVersion + 1;
 
-        const voucherSuffix = Date.now() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
-        const voucherId = `PX-${voucherSuffix}`;
-        const movementId = `MOV-${voucherSuffix}`;
         const timestamp = new Date().toISOString();
         const serverNow = now();
 
@@ -248,6 +294,7 @@ function createDistributionApi({ db, verifyToken, serverTimestamp }) {
           timestamp,
           note,
           handedOver: true,
+          requestFingerprint,
           // FE compatibility fields:
           movementId,
           itemId,
@@ -291,8 +338,8 @@ function createDistributionApi({ db, verifyToken, serverTimestamp }) {
           updatedAt: serverNow,
         });
 
-        transaction.set(db.collection('distribution_vouchers').doc(voucherId), voucherData);
-        transaction.set(db.collection('inventory_movements').doc(movementId), movementData);
+        transaction.set(voucherRef, voucherData);
+        transaction.set(movementRef, movementData);
 
         return {
           voucher: voucherData,
@@ -307,7 +354,7 @@ function createDistributionApi({ db, verifyToken, serverTimestamp }) {
       });
 
       return {
-        status: 201,
+        status: result.idempotentReplay ? 200 : 201,
         body: {
           success: true,
           ...result,

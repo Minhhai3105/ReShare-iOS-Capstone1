@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createDemoDistributionRepository, validateDistribution } from '../src/admin/distribution/distribution.repository.js'
+import { createDemoDistributionRepository, createLiveDistributionRepository, validateDistribution } from '../src/admin/distribution/distribution.repository.js'
 import { distributionFixtures, previewActor, previewAssignment } from '../src/admin/distribution/distribution.mock.js'
 
 function setup() {
@@ -125,4 +125,33 @@ test('FE validation reports stock and prevents negative preview', () => {
   const errors = validateDistribution({ quantity: '4', beneficiaryId: 'DEMO-BEN-001', handedOver: true }, item, distributionFixtures.beneficiaries)
   assert.match(errors.quantity, /Chỉ còn 3 chiếc/)
   assert.equal(validateDistribution({ quantity: '2', beneficiaryId: 'DEMO-BEN-001', handedOver: true }, item, distributionFixtures.beneficiaries).quantity, undefined)
+})
+
+test('live distribution sends token, stock version and retry key to backend', async () => {
+  const originalFetch = globalThis.fetch
+  let request
+  globalThis.fetch = async (url, options) => {
+    request = { url, ...options }
+    return { ok: true, json: async () => ({ success: true }) }
+  }
+  try {
+    const repository = createLiveDistributionRepository({
+      apiBase: 'https://api.example.test',
+      authInstance: { currentUser: { getIdToken: async () => 'test-token' } },
+    })
+    await repository.createVoucher({
+      warehouseId: 'wh_dn_01', itemId: 'item-1', beneficiaryId: 'ben-1',
+      quantity: 2, handedOver: true, note: '', expectedVersion: 3,
+      idempotencyKey: 'retry-key-123',
+    })
+    assert.equal(request.url, 'https://api.example.test/v1/admin/distribution')
+    assert.equal(request.headers.Authorization, 'Bearer test-token')
+    assert.deepEqual(JSON.parse(request.body), {
+      warehouseId: 'wh_dn_01', itemId: 'item-1', beneficiaryId: 'ben-1',
+      quantity: 2, handedOver: true, note: '', expectedVersion: 3,
+      idempotencyKey: 'retry-key-123',
+    })
+  } finally {
+    globalThis.fetch = originalFetch
+  }
 })

@@ -176,6 +176,25 @@ test('RC1D-95: invalid date filters are rejected with 400', async () => {
     () => api.handle('GET', '/v1/admin/reports?from=not-a-date&to=2025-05-01', { authorization: 'Bearer admin-token' }),
     { status: 400 }
   );
+  await assert.rejects(
+    () => api.handle('GET', '/v1/admin/reports?from=2025-02-30&to=2025-05-01', { authorization: 'Bearer admin-token' }),
+    { status: 400 }
+  );
+});
+
+test('RC1D-95: System Admin sees unassigned donations but warehouse staff and warehouse filters do not', async () => {
+  const { api, documents } = setup();
+  documents.set('donations/don-unassigned', {
+    title: 'Áo chưa phân kho', category: 'clothing', quantity: 1,
+    status: 'pending', createdAt: new Date('2025-05-04T02:00:00Z'),
+  });
+  const path = '/v1/admin/reports?from=2025-05-01&to=2025-05-31';
+  const admin = await api.handle('GET', path, { authorization: 'Bearer admin-token' });
+  assert.ok(admin.body.sources.some(row => row.id === 'don-unassigned' && row.type === 'donation' && row.warehouseId === ''));
+  const staff = await api.handle('GET', path, { authorization: 'Bearer hc-token' });
+  assert.ok(!staff.body.sources.some(row => row.id === 'don-unassigned'));
+  const filtered = await api.handle('GET', `${path}&warehouseId=hai-chau`, { authorization: 'Bearer admin-token' });
+  assert.ok(!filtered.body.sources.some(row => row.id === 'don-unassigned'));
 });
 
 test('RC1D-95: system admin sees all warehouses; warehouse admin sees only assigned warehouse', async () => {

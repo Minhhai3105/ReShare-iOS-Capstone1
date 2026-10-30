@@ -14,7 +14,7 @@ export function buildReportsCsv(data, filters, assignment, customNotice = null) 
   const notice = customNotice || (isLive ? 'Dữ liệu chính thức' : REPORT_CSV_NOTICE)
   const lines = report.rows.map((row) => [
     notice, row.id, REPORT_TYPES.find((type) => type.id === row.type).label,
-    row.timestamp, reportDay(row.timestamp), data.warehouses.find((entry) => entry.id === row.warehouseId)?.name,
+    row.timestamp, reportDay(row.timestamp), row.warehouseId ? data.warehouses.find((entry) => entry.id === row.warehouseId)?.name : 'Chưa phân kho',
     data.categories.find((entry) => entry.id === row.categoryId)?.name, row.item, row.quantity, row.unit,
     row.reference, filters.from, filters.to,
   ])

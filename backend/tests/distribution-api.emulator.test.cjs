@@ -73,6 +73,7 @@ test('US16: Concurrent distribution requests in Firestore Emulator never result 
         quantity: 2,
         handedOver: true,
         expectedVersion: 1,
+        idempotencyKey: 'req-emu-staff-one',
       }
     );
 
@@ -87,6 +88,7 @@ test('US16: Concurrent distribution requests in Firestore Emulator never result 
         quantity: 2,
         handedOver: true,
         expectedVersion: 1,
+        idempotencyKey: 'req-emu-staff-two',
       }
     );
 
@@ -116,6 +118,19 @@ test('US16: Concurrent distribution requests in Firestore Emulator never result 
     const itemData = itemDoc.data();
     assert.equal(itemData.quantityAvailable, 1, 'Tồn kho còn lại đúng bằng 1');
     assert.equal(itemData.version, 2, 'Version được tăng lên 2');
+
+    const winner = fulfilled[0].value.body.voucher.createdByUid;
+    const replay = await api.handle('POST', '/v1/admin/distribution', {
+      authorization: `Bearer ${winner === 'staff-hc-1' ? 'staff-1-token' : 'staff-2-token'}`,
+    }, {
+      warehouseId, itemId, beneficiaryId, quantity: 2, handedOver: true,
+      expectedVersion: 1,
+      idempotencyKey: winner === 'staff-hc-1' ? 'req-emu-staff-one' : 'req-emu-staff-two',
+    });
+    assert.equal(replay.status, 200);
+    assert.equal(replay.body.idempotentReplay, true);
+    assert.equal(replay.body.voucher.id, fulfilled[0].value.body.voucher.id);
+    assert.equal((await db.doc(`inventory/${itemId}`).get()).data().quantityAvailable, 1);
 
     // Verify US17 compatibility: vouchers and movements match
     const voucherId = fulfilled[0].value.body.voucher.id;

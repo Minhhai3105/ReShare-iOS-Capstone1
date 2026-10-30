@@ -65,7 +65,9 @@ function createReportsApi({ db, verifyToken, serverTimestamp }) {
 
     const from = url.searchParams.get('from') || '2025-01-01';
     const to = url.searchParams.get('to') || '2030-12-31';
-    const isDate = (val) => /^\d{4}-\d{2}-\d{2}$/.test(val) && Number.isFinite(Date.parse(`${val}T00:00:00Z`));
+    const isDate = (val) => /^\d{4}-\d{2}-\d{2}$/.test(val) &&
+      Number.isFinite(Date.parse(`${val}T00:00:00Z`)) &&
+      new Date(`${val}T00:00:00Z`).toISOString().slice(0, 10) === val;
     if (!isDate(from) || !isDate(to) || from > to) {
       throw new ApiError(400, 'Hãy chọn khoảng thời gian hợp lệ (từ ngày ≤ đến ngày).', 'VALIDATION');
     }
@@ -107,7 +109,9 @@ function createReportsApi({ db, verifyToken, serverTimestamp }) {
     }
 
     const inScope = (row) => {
-      if (!allowedWarehouseIds.has(row.warehouseId)) return false;
+      if (!row.warehouseId) {
+        if (staff.role !== 'system_admin' || row.type !== 'donation' || queryWarehouseId) return false;
+      } else if (!allowedWarehouseIds.has(row.warehouseId)) return false;
       if (queryWarehouseId && row.warehouseId !== queryWarehouseId) return false;
       if (queryCategoryId && row.categoryId !== queryCategoryId) return false;
       return true;

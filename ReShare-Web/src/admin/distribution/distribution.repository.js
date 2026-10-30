@@ -156,6 +156,7 @@ export function createLiveDistributionRepository({
           handedOver: draft.handedOver,
           note: draft.note || '',
           expectedVersion: draft.expectedVersion,
+          idempotencyKey: draft.idempotencyKey,
         }),
       })
     } catch {
