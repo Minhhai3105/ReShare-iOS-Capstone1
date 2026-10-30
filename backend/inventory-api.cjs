@@ -4,6 +4,9 @@ const dateString = value => value?.toDate?.().toISOString() ||
   (value instanceof Date ? value.toISOString() : value || null);
 const normalizeSearch = value => String(value).toLocaleLowerCase('vi')
   .normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/đ/g, 'd');
+// Firestore .offset(n) tính phí đủ n document read. Hạ trần để một request không
+// bill tới 10000 read; cách sửa thật là phân trang bằng cursor (startAfter).
+const MAX_OFFSET = 2000;
 const integer = (value, fallback, max) => {
   if (value === null) return fallback;
   const parsed = Number(value);
@@ -50,7 +53,7 @@ function createInventoryApi({ db, verifyToken }) {
     const stock = url.searchParams.get('stock') || 'all';
     const search = normalizeSearch((url.searchParams.get('search') || '').trim());
     const limit = integer(url.searchParams.get('limit'), 25, 50);
-    let offset = integer(url.searchParams.get('offset'), 0, 10000);
+    let offset = integer(url.searchParams.get('offset'), 0, MAX_OFFSET);
     if (limit < 1 || search.length > 80 ||
         (warehouseId && !/^[A-Za-z0-9_-]{1,64}$/.test(warehouseId)) ||
         (category && !['clothing', 'books', 'household'].includes(category)) ||
@@ -60,6 +63,11 @@ function createInventoryApi({ db, verifyToken }) {
     }
     if (warehouseId && !canRead(staff, warehouseId)) throw new ApiError(403, 'Warehouse access denied');
     if (staff.role === 'warehouse_admin' && !staff.warehouseIds.length) throw new ApiError(403, 'Warehouse assignment required');
+    // Firestore chỉ nhận tối đa 30 giá trị cho toán tử 'in'. Không chặn trước thì
+    // Firestore ném lỗi thô và server trả 500 không rõ nguyên nhân.
+    if (!warehouseId && staff.role === 'warehouse_admin' && staff.warehouseIds.length > 30) {
+      throw new ApiError(400, 'Too many assigned warehouses; filter by warehouseId');
+    }
 
     let query = db.collection('inventory');
     if (warehouseId) query = query.where('warehouseId', '==', warehouseId);
@@ -90,13 +98,15 @@ function createInventoryApi({ db, verifyToken }) {
   }
 
   async function detail(itemId, url, staff) {
-    if (!/^inv_rcp_[A-Za-z0-9_-]{1,120}$/.test(itemId)) throw new ApiError(400, 'Invalid inventory ID');
+    // Không khoá theo tiền tố inv_rcp_: list() trả về mọi ID trong collection, nên
+    // detail() chặt hơn sẽ làm FE mở được dòng trong danh sách lại nhận 400.
+    if (!/^[A-Za-z0-9_-]{1,120}$/.test(itemId)) throw new ApiError(400, 'Invalid inventory ID');
     const doc = await db.collection('inventory').doc(itemId).get();
     if (!doc.exists) throw new ApiError(404, 'Inventory item not found');
     const item = itemFrom(doc);
     if (!canRead(staff, item.warehouseId)) throw new ApiError(403, 'Warehouse access denied');
     const limit = integer(url.searchParams.get('limit'), 25, 50);
-    const offset = integer(url.searchParams.get('offset'), 0, 10000);
+    const offset = integer(url.searchParams.get('offset'), 0, MAX_OFFSET);
     if (limit < 1) throw new ApiError(400, 'Invalid pagination');
     const snapshot = await db.collection('inventory_movements')
       .where('inventoryItemId', '==', itemId).orderBy('createdAt', 'desc')
