@@ -53,7 +53,10 @@ const server = http.createServer(async (request, response) => {
     /^\/v1\/admin\/stock-entries\/[^/]+$/.test(pathname);
   const isInventoryPath = pathname === '/v1/admin/inventory' ||
     /^\/v1\/admin\/inventory\/[^/]+$/.test(pathname);
-  const isDistributionPath = pathname === '/v1/admin/distributions' ||
+  // Đặt tên theo đúng handler: US17 đọc lịch sử ở /distributions (số nhiều), còn
+  // US16 ghi phiếu ở /distribution (số ít, PR #49). Hai thứ khác nhau nên không
+  // dùng chung tên isDistributionPath, tránh resolve conflict sai khi gộp.
+  const isDistributionHistoryPath = pathname === '/v1/admin/distributions' ||
     /^\/v1\/admin\/distributions\/[^/]+$/.test(pathname);
   const isAdminImageRead = pathname === '/v1/images/read-access';
   const isContactPath = pathname === '/v1/contact';
@@ -95,7 +98,7 @@ const server = http.createServer(async (request, response) => {
       try { body = JSON.parse(raw); }
       catch { throw new ApiError(400, 'Invalid JSON body'); }
     }
-    const handler = isContactPath ? contactApi : isReceiptPath ? receiptApi : isStockIntakePath ? stockIntakeApi : isInventoryPath ? inventoryApi : isDistributionPath ? distributionHistoryApi : isDonationAdminPath ? donationReviewApi : isAdminApi ? staffApi : api;
+    const handler = isContactPath ? contactApi : isReceiptPath ? receiptApi : isStockIntakePath ? stockIntakeApi : isInventoryPath ? inventoryApi : isDistributionHistoryPath ? distributionHistoryApi : isDonationAdminPath ? donationReviewApi : isAdminApi ? staffApi : api;
     const result = await handler.handle(request.method, pathname, request.headers, body, request.url);
     response.writeHead(result.status, responseHeaders);
     response.end(JSON.stringify(result.body));
