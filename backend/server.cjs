@@ -47,8 +47,11 @@ const server = http.createServer(async (request, response) => {
   const isAdminApi = pathname.startsWith('/v1/admin/');
   const isDonationAdminPath = pathname.startsWith('/v1/admin/donations');
   const isReceiptPath = /^\/v1\/admin\/donations\/[^/]+\/receipt$/.test(pathname);
-  const isDistributionPath = pathname.startsWith('/v1/admin/distribution');
-  const isReportsPath = pathname.startsWith('/v1/admin/reports');
+  // Neo chính xác, KHÔNG dùng startsWith: '/v1/admin/distribution' là tiền tố của
+  // '/v1/admin/distributions' (US17), nên startsWith sẽ nuốt route đó và trả 404.
+  const isDistributionPath = pathname === '/v1/admin/distribution' ||
+    pathname === '/v1/admin/distribution/options';
+  const isReportsPath = pathname === '/v1/admin/reports' || pathname === '/v1/admin/reports/';
   const isAdminImageRead = pathname === '/v1/images/read-access';
   const isContactPath = pathname === '/v1/contact';
   const origin = request.headers.origin;
@@ -96,7 +99,7 @@ const server = http.createServer(async (request, response) => {
       : isReportsPath ? reportsApi
       : isAdminApi ? staffApi
       : api;
-    const result = await handler.handle(request.method, request.url, request.headers, body);
+    const result = await handler.handle(request.method, pathname, request.headers, body, request.url);
     response.writeHead(result.status, responseHeaders);
     response.end(JSON.stringify(result.body));
   } catch (error) {

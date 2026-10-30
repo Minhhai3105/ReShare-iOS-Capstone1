@@ -45,8 +45,10 @@ function createDistributionApi({ db, verifyToken, serverTimestamp }) {
     return staff.warehouseIds.includes(warehouseId);
   }
 
-  async function handle(method, path, headers, body) {
-    const url = new URL(path, 'http://localhost');
+  // Contract dùng chung cho mọi module: path là pathname, query ở tham số thứ 5.
+  // new URL(requestUrl || path) chịu được cả hai dạng nên không vỡ nếu ai gọi kiểu cũ.
+  async function handle(method, path, headers, body, requestUrl = '') {
+    const url = new URL(requestUrl || path, 'http://localhost');
     const pathname = url.pathname;
     const isOptions = method === 'GET' && (pathname === '/v1/admin/distribution/options' || pathname === '/v1/admin/distribution');
     const isPostDistribution = method === 'POST' && pathname === '/v1/admin/distribution';

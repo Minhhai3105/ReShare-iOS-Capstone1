@@ -54,8 +54,9 @@ function createReportsApi({ db, verifyToken, serverTimestamp }) {
     };
   }
 
-  async function handle(method, path, headers) {
-    const url = new URL(path, 'http://localhost');
+  // Contract dùng chung cho mọi module: path là pathname, query ở tham số thứ 5.
+  async function handle(method, path, headers, _body, requestUrl = '') {
+    const url = new URL(requestUrl || path, 'http://localhost');
     const pathname = url.pathname;
     const isReports = method === 'GET' && (pathname === '/v1/admin/reports' || pathname === '/v1/admin/reports/');
 

@@ -232,6 +232,15 @@ test('RC1D-95: category filtering correctly isolates real schema items (e.g. boo
   assert.equal(bookStock.unit, 'bộ');
 });
 
+test('RC1D-95: query đọc từ tham số thứ 5 giống cách server.cjs gọi', async () => {
+  const { api } = setup();
+  await assert.rejects(
+    () => api.handle('GET', '/v1/admin/reports', { authorization: 'Bearer hc-token' },
+      null, '/v1/admin/reports?from=2026-13-40&to=2026-12-31'),
+    { status: 400 }
+  );
+});
+
 test('RC1D-95: strict PII removal protects donor and beneficiary data', async () => {
   const { api } = setup();
   const res = await api.handle('GET', '/v1/admin/reports?from=2025-05-01&to=2025-05-31', { authorization: 'Bearer admin-token' });

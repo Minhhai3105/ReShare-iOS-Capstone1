@@ -147,6 +147,22 @@ test('RC1D-83: warehouse admin cannot access unassigned warehouse options', asyn
   );
 });
 
+// server.cjs truyền pathname ở tham số 2 và URL đầy đủ ở tham số 5. Nếu module bỏ qua
+// tham số 5 thì query bị mất ÂM THẦM: filter kho không áp dụng và endpoint trả về mọi
+// kho mà nhân sự được phép, không có lỗi nào bật ra.
+test('RC1D-83: query đọc từ tham số thứ 5 giống cách server.cjs gọi', async () => {
+  const { api } = setup();
+  await assert.rejects(
+    () => api.handle('GET', '/v1/admin/distribution/options', { authorization: 'Bearer hc-token' },
+      null, '/v1/admin/distribution/options?warehouseId=son-tra'),
+    { status: 403 }
+  );
+  const scoped = await api.handle('GET', '/v1/admin/distribution/options',
+    { authorization: 'Bearer hc-token' }, null, '/v1/admin/distribution/options?warehouseId=hai-chau');
+  assert.deepEqual([...new Set(scoped.body.inventory.map(i => i.warehouseId))], ['hai-chau']);
+  assert.deepEqual(scoped.body.warehouses.map(w => w.id), ['hai-chau']);
+});
+
 test('RC1D-83: options endpoint lists only scoped inventory and approved beneficiaries', async () => {
   const { api } = setup();
   const res = await api.handle('GET', '/v1/admin/distribution/options', { authorization: 'Bearer hc-token' });
