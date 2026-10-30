@@ -5,6 +5,9 @@ import logoUrl from '../auth/assets/reshare-logo.png'
 import { currentUser, staffAssignment } from '../auth/auth.store'
 import { ADMIN_ROUTE, USER_ROLE, USER_ROLE_LABEL } from '../auth/auth.constants'
 
+// Nhãn demo (Sandbox, Demo, Xem thử, Prototype) chỉ hiện khi chạy dữ liệu mẫu ở dev, không hiện trên bản production.
+const IS_SAMPLE_DATA = import.meta.env.DEV
+
 const props = defineProps({
   warehouses: { type: Array, default: () => [] },
   selectedWarehouseId: { type: String, default: '' },
@@ -40,7 +43,7 @@ const currentYear = new Date().getFullYear()
       <div class="inv-workplace">
         <div class="inv-workplace__top">
           <span><AuthIcon name="warehouse" :size="15" />Kho làm việc</span>
-          <span class="inv-chip inv-chip--green">Demo</span>
+          <span v-if="IS_SAMPLE_DATA" class="inv-chip inv-chip--green">Demo</span>
         </div>
         <select
           v-if="warehouses.length > 1"
@@ -72,7 +75,7 @@ const currentYear = new Date().getFullYear()
         <span class="inv-nav is-disabled"><AuthIcon name="settings" :size="19" />Cấu hình chung</span>
       </nav>
 
-      <div class="inv-station"><span><AuthIcon name="terminal" :size="15" />WH-SGN-02</span><span class="inv-chip">Xem thử</span></div>
+      <div v-if="IS_SAMPLE_DATA" class="inv-station"><span><AuthIcon name="terminal" :size="15" />WH-SGN-02</span><span class="inv-chip">Xem thử</span></div>
     </aside>
 
     <div class="inv-main">
@@ -89,7 +92,7 @@ const currentYear = new Date().getFullYear()
       <main class="inv-content"><slot /></main>
 
       <footer class="inv-footer">
-        <span>Bản xem thử – chưa kết nối máy chủ kho</span>
+        <span v-if="IS_SAMPLE_DATA">Bản xem thử – chưa kết nối máy chủ kho</span>
         <span>© {{ currentYear }} ReShare Circular Fashion Hub. Hệ thống điều phối nội bộ.</span>
         <span>Trung tâm trợ giúp vận hành</span>
         <span>Chính sách an toàn kho</span>
