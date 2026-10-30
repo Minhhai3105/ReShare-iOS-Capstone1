@@ -57,11 +57,13 @@ async function load() {
   const requestId = ++latestRequestId
   isLoading.value = true
   errorStatus.value = null
+  // Đổi phiếu hoặc phân công thì không giữ phiếu và người thụ hưởng của lần xem trước.
+  data.value = null
+  selectedIndex.value = 0
   try {
     const nextData = await fetchDistributionVoucher(access.value, route.params.voucherId)
     if (requestId !== latestRequestId) return
     data.value = nextData
-    selectedIndex.value = 0
     loadedAt.value = new Date()
   } catch (error) {
     if (requestId !== latestRequestId) return
