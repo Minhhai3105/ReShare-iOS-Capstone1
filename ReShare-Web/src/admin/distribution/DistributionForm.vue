@@ -3,6 +3,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import AdminIcon from '../AdminIcon.vue'
 import brandLogo from '../auth/assets/reshare-logo.png'
 import { canDistribute, createDemoDistributionRepository, newRequestKey, validateDistribution } from './distribution.repository.js'
+import { mapLqError } from '../lq-errors.js'
 
 const props = defineProps({
   assignment: Object,
@@ -117,14 +118,22 @@ async function submit() {
     await nextTick()
     resultPanel.value?.focus()
   } catch (error) {
-    const uncertainResult = error.code === 'NETWORK_ERROR'
+    // RC1D-114: phân loại lỗi để biết nên giữ khóa gửi lại hay dọn biểu mẫu.
+    // Chỉ nhóm unknown + replayable mới được giữ confirmation (và cùng đó là
+    // idempotencyKey) để nút "Kiểm tra lại lần gửi" dùng lại đúng khóa.
+    const mapped = mapLqError(error, { write: true })
+    const uncertainResult = mapped.kind === 'unknown' && mapped.replayable === true
     if (!uncertainResult) {
       const listRes = await Promise.resolve(activeRepo.value.list()).catch(() => null)
       if (listRes) options.value = listRes
     }
-    submitError.value = uncertainResult
-      ? 'Chưa rõ máy chủ đã ghi phiếu hay chưa. Bấm kiểm tra lại lần gửi; hệ thống sẽ không trừ tồn hai lần.'
-      : error.message || 'Không thể tạo phiếu. Vui lòng thử lại.'
+    submitError.value = `${mapped.title}. ${mapped.message}`
+    // Mất quyền hoặc hết phiên: phải ẩn dữ liệu đang hiển thị, không để nhân sự
+    // tiếp tục đọc tồn kho của kho mình không còn được xem.
+    if (['permission', 'session'].includes(mapped.kind)) {
+      options.value = { warehouses: [], inventory: [], beneficiaries: [] }
+      result.value = null
+    }
     if (!uncertainResult) {
       pendingRequestKey.value = null
       handedOver.value = false

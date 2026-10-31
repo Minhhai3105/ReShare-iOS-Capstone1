@@ -6,6 +6,7 @@ import { calculateReviewMetrics } from './reviewMetrics'
 import { calculateReports, REPORT_TYPES, reportDay, validateReportFilters } from './reports/reports.model.js'
 import { createMockReportsRepository } from './reports/reports.repository.js'
 import { buildReportsCsv } from './reports/reports.csv.js'
+import { mapLqError } from './lq-errors.js'
 
 const props = defineProps({
   items: { type: Array, default: () => [] }, role: { type: String, default: 'system_admin' },
@@ -77,7 +78,13 @@ async function load() {
     filters.warehouseId = applied.value.warehouseId
     data.value = response
   } catch (error) {
-    if (id === requestId && error.name !== 'AbortError') loadError.value = error.message || 'Không thể tải báo cáo.'
+    if (id === requestId && error.name !== 'AbortError') {
+      // RC1D-114: phân loại lỗi thay vì in error.message trần. Kịch bản preview ném
+      // mockError(scenario) nên message chính là mã lỗi — hiện ra sẽ thành "FORBIDDEN".
+      // report computed trả null khi có loadError, nên dữ liệu cũ đã được ẩn sẵn.
+      const mapped = mapLqError(error)
+      loadError.value = `${mapped.title}. ${mapped.message}`
+    }
   } finally { if (id === requestId) loading.value = false }
 }
 watch([assignment, scenario, () => props.repository], load, { immediate: true, deep: true })

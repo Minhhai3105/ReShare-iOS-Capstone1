@@ -1,4 +1,5 @@
 import { distributionFixtures } from './distribution.mock.js'
+import { mockError } from '../lq-errors.js'
 
 const clone = (value) => structuredClone(value)
 const fail = (code, message, details = {}) => Object.assign(new Error(message), { code, ...details })
@@ -66,13 +67,14 @@ export function createDemoDistributionRepository({ getAssignment, getActor }) {
 
   async function createVoucher(draft, scenario = 'normal') {
     // Let two simultaneous requests reach the commit boundary with the same version.
-    await Promise.resolve()
+    await new Promise((resolve) => setTimeout(resolve, 220))
     checkAccess(draft.warehouseId)
+    if (['FORBIDDEN', 'UNAUTHENTICATED', 'NOT_SENT', 'STALE_DATA', 'TIMEOUT'].includes(scenario)) throw mockError(scenario)
     const actor = getActor()
     if (!actor?.id) throw fail('UNAUTHENTICATED', 'Không xác định được nhân sự thực hiện.')
     const item = data.inventory.find((entry) => entry.id === draft.itemId && entry.warehouseId === draft.warehouseId)
     if (!item) throw fail('NOT_FOUND', 'Vật phẩm không thuộc kho đang thao tác.')
-    if (!['normal', 'shortage', 'conflict'].includes(scenario)) throw fail('INVALID_SCENARIO', 'Kịch bản mẫu không hợp lệ.')
+    if (!['normal', 'shortage', 'conflict', 'TIMEOUT_AFTER_COMMIT'].includes(scenario)) throw fail('INVALID_SCENARIO', 'Kịch bản mẫu không hợp lệ.')
     draft = { ...draft, note: draft.note === undefined ? '' : draft.note }
     const fieldErrors = validateDistribution(draft, { ...item, available: Number.MAX_SAFE_INTEGER }, data.beneficiaries)
     if (Object.keys(fieldErrors).length) throw fail('VALIDATION', Object.values(fieldErrors)[0], { errors: fieldErrors })
@@ -96,7 +98,7 @@ export function createDemoDistributionRepository({ getAssignment, getActor }) {
     const voucher = {
       id: `DEMO-PX-${suffix}`, movementId: `DEMO-MOV-${suffix}`, itemId: item.id, itemName: item.name,
       quantity, unit: item.unit, warehouseId: item.warehouseId, beneficiaryId: draft.beneficiaryId,
-      actor: clone(actor), timestamp, note: draft.note.trim(), before, after: before - quantity, demo: true,
+      actor: { id: actor.id, displayName: actor.displayName, email: actor.email }, timestamp, note: draft.note.trim(), before, after: before - quantity, demo: true,
     }
     const movement = {
       id: voucher.movementId, voucherId: voucher.id, itemId: item.id, warehouseId: item.warehouseId,
@@ -106,6 +108,7 @@ export function createDemoDistributionRepository({ getAssignment, getActor }) {
     item.version += 1
     vouchers.push(voucher)
     movements.push(movement)
+    if (scenario === 'TIMEOUT_AFTER_COMMIT') throw mockError('TIMEOUT')
     return clone({ voucher, movement, item })
   }
 
