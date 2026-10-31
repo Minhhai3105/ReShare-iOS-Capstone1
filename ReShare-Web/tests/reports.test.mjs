@@ -3,7 +3,8 @@ import assert from 'node:assert/strict'
 import { reportFixtures } from '../src/admin/reports/reports.mock.js'
 import { calculateReports, reportDay, validateReportFilters, REPORT_TYPES } from '../src/admin/reports/reports.model.js'
 import { buildReportsCsv, csvCell, REPORT_CSV_NOTICE } from '../src/admin/reports/reports.csv.js'
-import { createMockReportsRepository } from '../src/admin/reports/reports.repository.js'
+import { createLiveReportsRepository, createMockReportsRepository } from '../src/admin/reports/reports.repository.js'
+import { mapLqError } from '../src/admin/lq-errors.js'
 
 const admin = { active: true, role: 'system_admin', warehouseIds: [] }
 const staff = { active: true, role: 'warehouse_admin', warehouseIds: ['hai-chau'] }
@@ -178,4 +179,23 @@ test('empty, failed and aborted requests do not provide fallback data', async ()
   const data = await createMockReportsRepository({ delayMs: 0 }).load({ assignment: admin })
   data.sources[0].quantity = 999
   assert.deepEqual(reportFixtures, original)
+})
+
+test('Live repository giữ mã lỗi để màn báo cáo hiện đúng lý do, không quy hết về lỗi kết nối', async (t) => {
+  const authInstance = { currentUser: { getIdToken: async () => 'token' } }
+  const repository = createLiveReportsRepository({ apiBase: 'https://api.test', authInstance })
+  const respond = (status, body) => { globalThis.fetch = async () => ({ ok: false, status, json: async () => body }) }
+  const original = globalThis.fetch
+  t.after(() => { globalThis.fetch = original })
+
+  respond(422, { message: 'Khoảng thời gian có quá nhiều bản ghi để tổng hợp trong một lần. Hãy thu hẹp khoảng ngày.', code: 'VALIDATION' })
+  const tooLarge = await repository.load({ filters }).catch((error) => error)
+  assert.equal(mapLqError(tooLarge).kind, 'validation')
+  assert.match(mapLqError(tooLarge).message, /thu hẹp khoảng ngày/)
+
+  respond(403, { message: 'Bạn không có quyền xem kho đã chọn.', code: 'FORBIDDEN' })
+  assert.equal(mapLqError(await repository.load({ filters }).catch((error) => error)).kind, 'permission')
+
+  respond(401, { message: 'Invalid session' })
+  assert.equal(mapLqError(await repository.load({ filters }).catch((error) => error)).kind, 'session')
 })

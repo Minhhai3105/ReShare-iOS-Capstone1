@@ -8,6 +8,17 @@
 import Foundation
 import FirebaseFirestore
 
+/// Một trang Kho đồ 0đ. Con trỏ giữ document cuối của trang để tải trang kế,
+/// không để kiểu Firestore lọt ra tầng View.
+struct CatalogPage {
+    let items: [CatalogItem]
+    let nextCursor: CatalogPageCursor?
+}
+
+struct CatalogPageCursor {
+    fileprivate let lastDocument: DocumentSnapshot
+}
+
 /// Giao thức trừu tượng hóa dịch vụ Firestore
 protocol FirestoreServiceProtocol {
     func createUserProfile(_ profile: UserProfile) async throws
@@ -21,7 +32,7 @@ protocol FirestoreServiceProtocol {
 
     // MARK: - Kênh 1: Kho đồ 0đ Cộng đồng (P2P Catalog)
     func publishCatalogItem(_ item: CatalogItem) async throws
-    func fetchCatalogItems() async throws -> [CatalogItem]
+    func fetchCatalogItems(pageSize: Int, after cursor: CatalogPageCursor?) async throws -> CatalogPage
     func reserveCatalogItem(
         chatId: String,
         itemId: String,
@@ -243,15 +254,24 @@ final class FirestoreService: FirestoreServiceProtocol {
         }
     }
 
-    /// Lấy danh sách toàn bộ món đồ 0đ đang được chia sẻ tại Đà Nẵng
-    func fetchCatalogItems() async throws -> [CatalogItem] {
-        let snapshot = try await db.collection(Constants.FirestoreCollections.catalogItems)
+    /// Lấy một trang món đồ 0đ mới nhất tại Đà Nẵng; truyền `cursor` của trang trước để tải tiếp
+    func fetchCatalogItems(pageSize: Int = 30, after cursor: CatalogPageCursor? = nil) async throws -> CatalogPage {
+        var query = db.collection(Constants.FirestoreCollections.catalogItems)
             .order(by: "createdAt", descending: true)
-            .getDocuments()
+            .limit(to: pageSize)
+        if let cursor {
+            query = query.start(afterDocument: cursor.lastDocument)
+        }
+        let snapshot = try await query.getDocuments()
 
-        return snapshot.documents.compactMap { doc in
+        let items = snapshot.documents.compactMap { doc in
             try? doc.data(as: CatalogItem.self)
         }
+        // Trang đầy thì có thể còn trang sau; trang thiếu nghĩa là đã tải hết.
+        let nextCursor = snapshot.documents.count == pageSize
+            ? snapshot.documents.last.map { CatalogPageCursor(lastDocument: $0) }
+            : nil
+        return CatalogPage(items: items, nextCursor: nextCursor)
     }
 
     /// Chốt lịch hẹn / Giữ đồ nguyên tử (Atomic Transaction) chống Race Condition

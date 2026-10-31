@@ -75,7 +75,11 @@ export function createLiveReportsRepository({
 
       const result = await response.json().catch(() => ({}))
       if (!response.ok) {
-        throw new Error(result.message || 'Không thể tải báo cáo từ máy chủ.')
+        // Giữ mã lỗi và HTTP status để mapLqError phân loại đúng (hết phiên, mất quyền,
+        // khoảng ngày quá rộng) thay vì xếp mọi lỗi vào "kiểm tra kết nối".
+        throw Object.assign(new Error(result.message || 'Không thể tải báo cáo từ máy chủ.'), {
+          code: result.code, status: response.status,
+        })
       }
       return result
     },
