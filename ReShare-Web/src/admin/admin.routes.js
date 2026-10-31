@@ -106,6 +106,12 @@ export const adminRoutes = [
     component: () => import('./inventory/views/InventoryDetail.vue'),
     meta: { requiresAuth: true, roles: ADMIN_ROLES },
   },
+  {
+    path: '/admin/inventory/distributions/:voucherId',
+    name: ADMIN_ROUTE.distributionDetail,
+    component: () => import('./inventory/views/DistributionDetail.vue'),
+    meta: { requiresAuth: true, roles: ADMIN_ROLES },
+  },
   { path: '/admin/:pathMatch(.*)*', redirect: () => ({ name: ADMIN_ROUTE.home, params: {} }) },
 ]
 

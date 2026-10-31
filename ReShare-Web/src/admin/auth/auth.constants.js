@@ -29,6 +29,7 @@ export const ADMIN_ROUTE = Object.freeze({
   donationQueue: 'admin-donation-queue',
   inventory: 'admin-inventory',
   inventoryDetail: 'admin-inventory-detail',
+  distributionDetail: 'admin-distribution-detail',
 })
 
 export const AUTH_ERROR = Object.freeze({

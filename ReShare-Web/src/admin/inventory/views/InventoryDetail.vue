@@ -59,7 +59,7 @@ const accessLabel = computed(() => {
 })
 const donationParams = computed(() => ({ donationId: item.value?.donationId }))
 const sources = computed(() => getItemSources(item.value))
-const unitLabel = computed(() => (item.value ? UNIT_LABEL[item.value.unitId] ?? item.value.unitId : '—'))
+const unitLabel = computed(() => (item.value ? UNIT_LABEL[item.value.unitId] || item.value.unitId || '—' : '—'))
 
 async function load() {
   const requestId = ++latestRequestId
@@ -173,6 +173,7 @@ onBeforeUnmount(() => { latestRequestId += 1 })
                   <td class="detail-nowrap">
                     <span class="mono">{{ formatCode(movement.voucherId) }}</span>
                     <RouterLink v-if="movement.type === 'stock_in'" :to="{ name: DONATION_DETAIL_ROUTE, params: donationParams }" class="detail-voucher-link">Xem đơn nguồn</RouterLink>
+                    <RouterLink v-else-if="movement.type === 'distribution'" :to="{ name: ADMIN_ROUTE.distributionDetail, params: { voucherId: movement.voucherId } }" class="detail-voucher-link">Xem phiếu xuất</RouterLink>
                     <small v-else class="detail-voucher-note">Chưa hỗ trợ xem phiếu</small>
                   </td>
                   <td>{{ movement.note }}</td>
@@ -207,7 +208,7 @@ onBeforeUnmount(() => { latestRequestId += 1 })
               <em>{{ source.code ? source.linked : source.empty }}</em>
             </span>
           </div>
-          <p class="detail-source-note">Bấm mã yêu cầu quyên góp để mở màn chi tiết. Biên bản thực nhận và phiếu nhập/xuất/điều chỉnh chưa có màn xem.</p>
+          <p class="detail-source-note">Bấm mã yêu cầu quyên góp để mở màn chi tiết. Phiếu xuất mở từ lịch sử biến động; biên bản thực nhận và phiếu nhập/điều chỉnh chưa có màn xem.</p>
           <p class="detail-hint is-green"><AuthIcon name="check-circle" :size="15" />Cam kết truy xuất nguồn gốc ReShare</p>
         </section>
 
