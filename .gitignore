@@ -6,14 +6,17 @@ ai_instructions.md
 Document/
 
 # Local Firestore Rules test dependencies
-node_modules/
+# Không có dấu / ở cuối: pattern 'node_modules/' chỉ khớp thư mục, nên một symlink
+# tên node_modules (hay dùng khi chạy test trong git worktree) sẽ lọt qua và bị
+# git add -A commit vào repo.
+node_modules
 firestore-debug.log
 
 # OS metadata
 .DS_Store
 
 # Image API local files and credentials
-backend/node_modules/
+backend/node_modules
 backend/.env
 backend/.env.*
 !backend/.env.example
