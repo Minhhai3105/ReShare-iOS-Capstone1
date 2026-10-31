@@ -1,5 +1,6 @@
 const { ApiError } = require('./image-api.cjs');
 const { runTransaction } = require('./firestore-transaction.cjs');
+const { assertCurrentStaffAccess } = require('./staff-access.cjs');
 
 function createReceiptApi({ db, verifyToken, serverTimestamp }) {
   if (!db || !verifyToken) throw new Error('Receipt API configuration is incomplete');
@@ -92,6 +93,8 @@ function createReceiptApi({ db, verifyToken, serverTimestamp }) {
           throw new ApiError(409, 'Đơn quyên góp chưa được phân đúng kho thực nhận');
         }
         assertWarehouseAccess(staff, donationData.warehouseId);
+        // Đứng trước nhánh gửi lại: người vừa bị thu hồi quyền không được thực nhận, kể cả replay.
+        await assertCurrentStaffAccess(transaction, db, staff.uid, { warehouseId: donationData.warehouseId });
 
         // Idempotency check: if receipt document already exists
         const existingReceipt = await transaction.get(receiptRef);

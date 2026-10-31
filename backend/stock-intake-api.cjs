@@ -1,5 +1,6 @@
 const { ApiError } = require('./image-api.cjs');
 const { runTransaction } = require('./firestore-transaction.cjs');
+const { assertCurrentStaffAccess } = require('./staff-access.cjs');
 const dateString = value => value?.toDate?.().toISOString() ||
   (value instanceof Date ? value.toISOString() : value || null);
 
@@ -72,6 +73,8 @@ function createStockIntakeApi({ db, verifyToken, serverTimestamp }) {
       const receipt = receiptDoc.data();
       const warehouseId = receipt.warehouseId;
       assertWarehouse(staff, warehouseId);
+      // Đứng trước cả nhánh gửi lại: người vừa bị thu hồi quyền không được nhập kho, kể cả replay.
+      await assertCurrentStaffAccess(tx, db, staff.uid, { warehouseId });
       const donation = donationDoc.data();
       if (receipt.id !== receiptId || receipt.donationId !== donationId ||
           donation.actualReceiptId !== receiptId || donation.warehouseId !== warehouseId ||
