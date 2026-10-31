@@ -1,11 +1,12 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import AuthIcon from '../auth/components/AuthIcon.vue'
 import { ADMIN_ROUTE } from '../auth/auth.constants'
 import { staffAssignment } from '../auth/auth.store'
 import BeneficiaryShell from './BeneficiaryShell.vue'
-import { BENEFICIARY_ERROR, classifyBeneficiaryError, fetchBeneficiaries, resolveBeneficiaryAccess } from './beneficiary.service'
+import { BENEFICIARY_ERROR, classifyBeneficiaryError, resolveBeneficiaryAccess } from './beneficiary.service'
+import { beneficiaryRepository } from './beneficiary.repository'
 
 const router = useRouter()
 const access = computed(() => resolveBeneficiaryAccess(staffAssignment.value))
@@ -13,10 +14,17 @@ const search = ref('')
 const list = ref([])
 const isLoading = ref(true)
 const error = ref('')
+const nextCursor = ref(null)
+const pageCursors = ref([null])
+const pageIndex = ref(0)
+let loadRequestId = 0
+let searchTimer
 
-function loadList() {
+async function loadList() {
+  const requestId = ++loadRequestId
   if (!access.value) {
     list.value = []
+    nextCursor.value = null
     error.value = 'forbidden'
     isLoading.value = false
     return
@@ -26,16 +34,39 @@ function loadList() {
   error.value = ''
 
   try {
-    list.value = fetchBeneficiaries(staffAssignment.value, { search: search.value })
+    const result = await beneficiaryRepository.list({ search: search.value.trim(), cursor: pageCursors.value[pageIndex.value] })
+    if (requestId !== loadRequestId) return
+    list.value = result.beneficiaries
+    nextCursor.value = result.nextCursor
   } catch (loadError) {
+    if (requestId !== loadRequestId) return
     error.value = classifyBeneficiaryError(loadError)
     list.value = []
+    nextCursor.value = null
   } finally {
-    isLoading.value = false
+    if (requestId === loadRequestId) isLoading.value = false
   }
 }
 
-const visibleList = computed(() => list.value)
+function resetSearch() {
+  pageCursors.value = [null]
+  pageIndex.value = 0
+  loadList()
+}
+
+function nextPage() {
+  if (!nextCursor.value) return
+  pageCursors.value.push(nextCursor.value)
+  pageIndex.value += 1
+  loadList()
+}
+
+function previousPage() {
+  if (pageIndex.value < 1) return
+  pageIndex.value -= 1
+  pageCursors.value.pop()
+  loadList()
+}
 
 function goToCreate() {
   router.push({ name: ADMIN_ROUTE.beneficiaryNew })
@@ -46,8 +77,16 @@ function openEdit(beneficiaryId, event) {
   router.push({ name: ADMIN_ROUTE.beneficiaryEdit, params: { beneficiaryId } })
 }
 
-onMounted(loadList)
-watch([access, search], loadList)
+watch(access, () => {
+  pageCursors.value = [null]
+  pageIndex.value = 0
+  loadList()
+}, { immediate: true })
+watch(search, () => {
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(resetSearch, 300)
+})
+onBeforeUnmount(() => clearTimeout(searchTimer))
 </script>
 
 <template>
@@ -57,7 +96,7 @@ watch([access, search], loadList)
         <div>
           <h1 id="beneficiary-list-title">Người thụ hưởng</h1>
           <p class="beneficiary-list__subtitle">Quản lý hồ sơ người thụ hưởng theo phạm vi kho đang chọn.</p>
-          <p class="beneficiary-list__demo-label"><AuthIcon name="info" :size="16" /> Bản xem thử: dữ liệu hồ sơ chỉ nằm trong bộ nhớ trình duyệt, chưa kết nối hồ sơ vận hành.</p>
+          <p class="beneficiary-list__demo-label"><AuthIcon name="info" :size="16" /> Hồ sơ mới cần System Admin duyệt trước khi xuất kho.</p>
         </div>
         <button v-if="access" type="button" class="auth-btn auth-btn--primary" @click="goToCreate">
           <AuthIcon name="users" :size="18" />Thêm người thụ hưởng mới
@@ -69,7 +108,7 @@ watch([access, search], loadList)
           <AuthIcon name="search" :size="16" />
           <input v-model="search" type="search" placeholder="Tìm theo tên hoặc mã hồ sơ..." aria-label="Tìm theo tên hoặc mã hồ sơ" />
         </label>
-        <button type="button" class="beneficiary-list__time-filter" disabled title="Bộ lọc thời gian chưa được hỗ trợ trong bản xem thử">
+        <button type="button" class="beneficiary-list__time-filter" disabled title="Bộ lọc thời gian chưa được hỗ trợ">
           <AuthIcon name="calendar" :size="16" /> Lọc thời gian (chưa khả dụng)
         </button>
         <button type="button" class="beneficiary-list__clear" :disabled="!search" @click="search = ''">Xóa bộ lọc</button>
@@ -99,10 +138,10 @@ watch([access, search], loadList)
         <p>Vui lòng liên hệ quản trị viên để được cấp quyền và phạm vi kho tương ứng.</p>
       </div>
 
-      <div v-else-if="visibleList.length === 0" class="beneficiary-list__state">
+      <div v-else-if="list.length === 0" class="beneficiary-list__state">
         <span class="beneficiary-list__empty-icon"><AuthIcon name="users" :size="30" /></span>
-        <h2>{{ search ? 'Không tìm thấy hồ sơ phù hợp' : 'Chưa có hồ sơ minh họa trong phạm vi này' }}</h2>
-        <p>{{ search ? 'Thử tìm theo tên hiển thị hoặc mã hồ sơ khác.' : 'Danh sách bản xem thử hiện chưa có dữ liệu hồ sơ.' }}</p>
+        <h2>{{ search ? 'Không tìm thấy hồ sơ phù hợp' : 'Chưa có hồ sơ trong phạm vi này' }}</h2>
+        <p>{{ search ? 'Thử tìm theo tên hiển thị hoặc mã hồ sơ khác.' : 'Chưa có hồ sơ người thụ hưởng trong kho được phân quyền.' }}</p>
         <button v-if="!search" type="button" class="auth-btn auth-btn--primary" @click="goToCreate">
           <AuthIcon name="users" :size="17" />Thêm người thụ hưởng mới
         </button>
@@ -114,13 +153,13 @@ watch([access, search], loadList)
             <tr>
               <th>Mã hồ sơ</th>
               <th>Tên hiển thị</th>
-              <th>Số lần hỗ trợ tại kho</th>
-              <th>Lần hỗ trợ gần nhất</th>
+              <th>Lịch sử hỗ trợ</th>
+              <th>Trạng thái xác minh</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="beneficiary in visibleList" :key="beneficiary.id" class="beneficiary-list__row">
+            <tr v-for="beneficiary in list" :key="beneficiary.id" class="beneficiary-list__row">
               <td>
                 <RouterLink
                   class="beneficiary-list__detail-link"
@@ -130,8 +169,8 @@ watch([access, search], loadList)
                 </RouterLink>
               </td>
               <td><strong>{{ beneficiary.name }}</strong></td>
-              <td title="Chưa kết nối distribution records">—</td>
-              <td title="Chưa kết nối distribution records">—</td>
+              <td><RouterLink :to="{ name: ADMIN_ROUTE.beneficiaryDetail, params: { beneficiaryId: beneficiary.id } }">Xem lịch sử</RouterLink></td>
+              <td>{{ beneficiary.status === 'approved' ? 'Đã duyệt' : beneficiary.status === 'rejected' ? 'Từ chối' : 'Chờ duyệt' }}</td>
               <td class="beneficiary-list__actions">
                 <button type="button" class="auth-btn auth-btn--soft" @click="openEdit(beneficiary.id, $event)">Sửa</button>
               </td>
@@ -140,8 +179,10 @@ watch([access, search], loadList)
         </table>
       </div>
       <footer v-if="access && !isLoading && !error" class="beneficiary-list__count">
-        Tổng số hồ sơ: <strong>{{ visibleList.length }} bản ghi minh họa</strong>
-        <span>Lịch sử hỗ trợ chưa kết nối distribution records.</span>
+        Trang {{ pageIndex + 1 }}: <strong>{{ list.length }} hồ sơ</strong>
+        <span>Lịch sử hỗ trợ được đọc từ phiếu xuất đã xác nhận trong trang chi tiết.</span>
+        <button type="button" :disabled="pageIndex === 0" @click="previousPage">Trang trước</button>
+        <button type="button" :disabled="!nextCursor" @click="nextPage">Trang sau</button>
       </footer>
 
       <section v-if="access && !error" class="beneficiary-list__principles" aria-label="Nguyên tắc dữ liệu">
@@ -155,7 +196,7 @@ watch([access, search], loadList)
         </article>
         <article>
           <AuthIcon name="history" :size="20" />
-          <div><h2>Bảo toàn dữ liệu phân phối</h2><p>Số lần và lần hỗ trợ gần nhất chỉ hiển thị sau khi tích hợp chứng từ phân phối thật.</p></div>
+          <div><h2>Bảo toàn dữ liệu phân phối</h2><p>Số lần và lần hỗ trợ gần nhất lấy từ chứng từ phân phối thật trong trang chi tiết.</p></div>
         </article>
       </section>
     </section>

@@ -3,7 +3,8 @@ const { FieldPath } = require('firebase-admin/firestore');
 const { cursorFor, readCursor, warehouseQueries, compareBy, mergedPage } = require('./scoped-pagination.cjs');
 
 const VALID_ID = /^[A-Za-z0-9_-]{1,128}$/;
-const PROFILE_FIELDS = ['name', 'phone', 'notes', 'supportNeeds'];
+const PROFILE_FIELDS = ['name', 'phone', 'notes', 'needs'];
+const NEEDS = new Set(['clothing', 'books', 'household']);
 
 function dateString(value) {
   return value?.toDate?.().toISOString() || (value instanceof Date ? value.toISOString() : value || null);
@@ -23,9 +24,11 @@ function profileFrom(doc, includePrivate = false) {
   if (includePrivate) {
     Object.assign(profile, {
       phone: data.phone || '', notes: data.notes || '', supportNeeds: data.supportNeeds || '',
+      needs: Array.isArray(data.needs) ? data.needs : [],
       createdByUid: data.createdByUid || '', verifiedByUid: data.verifiedByUid || '',
       verifiedAt: dateString(data.verifiedAt), unverifiedByUid: data.unverifiedByUid || '',
-      unverifiedAt: dateString(data.unverifiedAt),
+      unverifiedAt: dateString(data.unverifiedAt), rejectedByUid: data.rejectedByUid || '',
+      rejectedAt: dateString(data.rejectedAt), reviewReason: data.reviewReason || '',
     });
   }
   return profile;
@@ -43,10 +46,20 @@ function validateFields(body, allowed) {
     }
     if (!Object.hasOwn(body, key)) continue;
     const value = body[key];
+    if (key === 'needs') {
+      if (!Array.isArray(value) || !value.length || value.length > NEEDS.size ||
+          new Set(value).size !== value.length || value.some(need => !NEEDS.has(need))) {
+        throw new ApiError(400, 'Invalid needs');
+      }
+      fields.needs = value;
+      continue;
+    }
     const max = key === 'name' ? 120 : key === 'phone' ? 32 : 500;
     if (typeof value !== 'string' || value.trim().length > max ||
         (key === 'name' && !value.trim()) ||
-        (key === 'phone' && value.trim() && !/^\+?[0-9().\s-]+$/.test(value.trim()))) {
+        (key === 'phone' && value.trim() &&
+          (!/^\+?[0-9().\s-]+$/.test(value.trim()) ||
+            !/^\+?\d{9,15}$/.test(value.trim().replace(/[\s().-]/g, ''))))) {
       throw new ApiError(400, `Invalid ${key}`);
     }
     fields[key] = value.trim();
@@ -83,6 +96,16 @@ function createBeneficiariesApi({ db, verifyToken, serverTimestamp }) {
 
   function canAccess(staff, warehouseId) {
     return staff.role === 'system_admin' || staff.warehouseIds.includes(warehouseId);
+  }
+
+  async function assertCurrentAssignment(tx, staff, warehouseId, systemOnly = false) {
+    const doc = await tx.get(db.collection('staff_assignments').doc(staff.uid));
+    const data = doc.exists ? doc.data() : null;
+    if (data?.active !== true || !['system_admin', 'warehouse_admin'].includes(data.role) ||
+        (systemOnly && data.role !== 'system_admin') ||
+        (data.role !== 'system_admin' && !(Array.isArray(data.warehouseIds) && data.warehouseIds.includes(warehouseId)))) {
+      throw new ApiError(403, 'Staff access changed; reload session');
+    }
   }
 
   function scopedQueries(staff, warehouseId) {
@@ -189,12 +212,14 @@ function createBeneficiariesApi({ db, verifyToken, serverTimestamp }) {
       throw new ApiError(400, 'Valid warehouseId is required');
     }
     if (!canAccess(staff, warehouseId)) throw new ApiError(403, 'Warehouse access denied');
+    if (!fields.needs) throw new ApiError(400, 'Support needs are required');
     const ref = db.collection('beneficiaries').doc();
     await db.runTransaction(async tx => {
       const warehouse = await tx.get(db.collection('warehouses').doc(warehouseId));
       if (!warehouse.exists || warehouse.data().status !== 'active') {
         throw new ApiError(409, 'Warehouse is inactive or missing');
       }
+      await assertCurrentAssignment(tx, staff, warehouseId);
       const timestamp = now();
       tx.set(ref, {
         ...fields, nameSearch: searchName(fields.name), warehouseId,
@@ -216,8 +241,10 @@ function createBeneficiariesApi({ db, verifyToken, serverTimestamp }) {
       throw new ApiError(400, 'expectedVersion is required');
     }
     const fields = verify ? {} : validateFields(body, [...PROFILE_FIELDS, 'expectedVersion']);
-    if (verify && (!body || Object.keys(body).some(key => !['expectedVersion', 'status'].includes(key)) ||
-        !['approved', 'unverified'].includes(body.status))) {
+    if (verify && (!body || Object.keys(body).some(key => !['expectedVersion', 'status', 'reason'].includes(key)) ||
+        !['approved', 'unverified', 'rejected'].includes(body.status) ||
+        (body.reason !== undefined && (typeof body.reason !== 'string' || body.reason.trim().length > 500)) ||
+        (body.status === 'rejected' && !body.reason?.trim()))) {
       throw new ApiError(400, 'Invalid verification status');
     }
     if (!verify && !Object.keys(fields).length) throw new ApiError(400, 'No profile fields to update');
@@ -226,31 +253,40 @@ function createBeneficiariesApi({ db, verifyToken, serverTimestamp }) {
       const doc = await tx.get(ref);
       if (!doc.exists) throw new ApiError(404, 'Beneficiary not found');
       if (!canAccess(staff, doc.data().warehouseId)) throw new ApiError(403, 'Warehouse access denied');
+      await assertCurrentAssignment(tx, staff, doc.data().warehouseId, verify);
       if ((doc.data().version || 1) !== expectedVersion) throw new ApiError(409, 'Beneficiary changed; reload first');
-      if (verify && staff.role !== 'system_admin' &&
-          (!doc.data().createdByUid || doc.data().createdByUid === staff.uid)) {
-        throw new ApiError(403, 'Verifier must differ from profile creator');
+      if (verify && staff.role !== 'system_admin') throw new ApiError(403, 'System Admin approval required');
+      if (verify && body.status === 'approved' &&
+          (!Array.isArray(doc.data().needs) || !doc.data().needs.length)) {
+        throw new ApiError(400, 'Support needs must be selected before approval');
       }
       if (verify && doc.data().status === body.status) throw new ApiError(409, 'Status is unchanged');
       const timestamp = now();
-      const changedFields = verify ? ['status'] : Object.keys(fields).filter(key => doc.data()[key] !== fields[key]);
+      const changedFields = verify ? ['status'] : Object.keys(fields).filter(key =>
+        JSON.stringify(doc.data()[key]) !== JSON.stringify(fields[key]));
       if (!changedFields.length) throw new ApiError(409, 'Profile is unchanged');
-      const action = verify ? (body.status === 'approved' ? 'approved' : 'unverified') : 'updated';
+      const resetReview = !verify && ['approved', 'rejected'].includes(doc.data().status);
+      if (resetReview) changedFields.push('status');
+      const action = verify ? body.status : 'updated';
       tx.update(ref, verify ? {
         status: body.status,
         ...(body.status === 'approved'
           ? { verifiedByUid: staff.uid, verifiedAt: timestamp }
-          : { unverifiedByUid: staff.uid, unverifiedAt: timestamp }),
+          : body.status === 'rejected'
+            ? { rejectedByUid: staff.uid, rejectedAt: timestamp, reviewReason: body.reason.trim() }
+            : { unverifiedByUid: staff.uid, unverifiedAt: timestamp }),
         version: expectedVersion + 1, updatedAt: timestamp,
       } : {
         ...fields, ...(fields.name ? { nameSearch: searchName(fields.name) } : {}),
+        ...(resetReview ? { status: 'unverified', unverifiedByUid: staff.uid, unverifiedAt: timestamp } : {}),
         version: expectedVersion + 1, updatedByUid: staff.uid, updatedAt: timestamp,
       });
       tx.create(db.collection('beneficiary_audit').doc(`${id}_v${expectedVersion + 1}`), {
         beneficiaryId: id, warehouseId: doc.data().warehouseId, action, actorUid: staff.uid,
         version: expectedVersion + 1, changedFields,
         changes: Object.fromEntries(changedFields.map(key => [key, {
-          before: doc.data()[key] ?? null, after: verify ? body.status : fields[key],
+          before: doc.data()[key] ?? null,
+          after: verify ? body.status : key === 'status' ? 'unverified' : fields[key],
         }])),
         createdAt: timestamp,
       });

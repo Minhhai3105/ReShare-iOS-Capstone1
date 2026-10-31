@@ -3,10 +3,11 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AuthIcon from '../auth/components/AuthIcon.vue'
 import { ADMIN_ROUTE } from '../auth/auth.constants'
-import { currentUser, staffAssignment } from '../auth/auth.store'
+import { staffAssignment } from '../auth/auth.store'
 import { fetchQueueWarehouses, resolveQueueAccess } from '../donations/donation.service'
 import BeneficiaryShell from './BeneficiaryShell.vue'
-import { BENEFICIARY_ERROR, classifyBeneficiaryError, fetchBeneficiary, resolveBeneficiaryAccess, saveBeneficiary } from './beneficiary.service'
+import { BENEFICIARY_ERROR, classifyBeneficiaryError, resolveBeneficiaryAccess } from './beneficiary.service'
+import { beneficiaryRepository } from './beneficiary.repository'
 import { validateBeneficiaryForm } from './beneficiary.validation'
 
 const route = useRoute()
@@ -27,6 +28,7 @@ const form = ref({
   name: '',
   phone: '',
   warehouseId: '',
+  needs: [],
   notes: '',
   createdBy: '',
   createdAt: '',
@@ -37,7 +39,7 @@ let loadRequestId = 0
 
 const canAssignWarehouse = computed(() => warehouseOptions.value.length > 0)
 const createdAtText = computed(() => {
-  if (!form.value.createdAt) return 'Sẽ được tạo khi lưu bản xem thử'
+  if (!form.value.createdAt) return 'Sẽ được tạo khi lưu hồ sơ'
   const date = new Date(form.value.createdAt)
   return Number.isNaN(date.valueOf()) ? 'Chưa có dữ liệu' : new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeStyle: 'short' }).format(date)
 })
@@ -48,6 +50,7 @@ function resetForm() {
     name: '',
     phone: '',
     warehouseId: '',
+    needs: [],
     notes: '',
     createdBy: '',
     createdAt: '',
@@ -70,7 +73,8 @@ async function loadForm() {
     }
 
     if (isEditMode.value) {
-      const beneficiary = fetchBeneficiary(staffAssignment.value, beneficiaryId.value)
+      const { beneficiary } = await beneficiaryRepository.get(beneficiaryId.value)
+      if (requestId !== loadRequestId) return
       if (!beneficiary) {
         loadError.value = 'not_found'
         return
@@ -99,7 +103,7 @@ async function loadForm() {
     if (!canAssignWarehouse.value) loadError.value = 'scope_required'
   } catch (error) {
     if (requestId !== loadRequestId) return
-    loadError.value = classifyBeneficiaryError(error)
+    loadError.value = error?.status === 404 ? 'not_found' : classifyBeneficiaryError(error)
   } finally {
     if (requestId === loadRequestId) isLoading.value = false
   }
@@ -119,24 +123,23 @@ async function onSubmit() {
   isSaving.value = true
 
   try {
-    const now = new Date().toISOString()
     const payload = {
-      ...form.value,
-      id: form.value.id || `B-MOCK-${Date.now()}`,
+      warehouseId: form.value.warehouseId,
       name: form.value.name.trim(),
-      phone: form.value.phone.replace(/\s/g, ''),
+      needs: form.value.needs,
+      phone: form.value.phone,
       notes: form.value.notes?.trim() || '',
-      createdBy: form.value.createdBy || currentUser.value?.displayName || 'Nhân sự được phân quyền',
-      createdAt: form.value.createdAt || now,
-      updatedAt: now,
     }
 
-    saveBeneficiary(staffAssignment.value, payload)
-    router.push({ name: ADMIN_ROUTE.beneficiaryDetail, params: { beneficiaryId: payload.id } })
+    const result = isEditMode.value
+      ? await beneficiaryRepository.update(beneficiaryId.value, { ...payload, expectedVersion: form.value.version })
+      : await beneficiaryRepository.create(payload)
+    router.push({ name: ADMIN_ROUTE.beneficiaryDetail, params: { beneficiaryId: result.beneficiary.id } })
   } catch (error) {
-    submitError.value = error?.code === BENEFICIARY_ERROR.forbidden
-      ? BENEFICIARY_ERROR.forbidden
-      : BENEFICIARY_ERROR.unavailable
+    if (error?.details?.errors) errors.value = error.details.errors
+    submitError.value = error?.status === 403 ? BENEFICIARY_ERROR.forbidden
+      : error?.status === 409 ? (isEditMode.value ? 'conflict' : 'warehouse_unavailable')
+        : error?.code === 'UNCERTAIN' ? 'uncertain' : BENEFICIARY_ERROR.unavailable
   } finally {
     isSaving.value = false
   }
@@ -201,7 +204,7 @@ function formatDate(value) {
         <div>
           <h1 id="beneficiary-form-title">{{ isEditMode ? 'Chỉnh sửa người thụ hưởng' : 'Thêm người thụ hưởng' }}</h1>
           <p class="beneficiary-form__subtitle">{{ isEditMode ? 'Cập nhật thông tin hồ sơ trong phạm vi được phân quyền.' : 'Tạo hồ sơ người thụ hưởng cho kho đang làm việc.' }}</p>
-          <p class="beneficiary-form__demo-label"><AuthIcon name="info" :size="16" /> Bản xem thử: thao tác chỉ cập nhật bộ nhớ trình duyệt, chưa lưu dữ liệu vận hành.</p>
+          <p class="beneficiary-form__demo-label"><AuthIcon name="info" :size="16" /> Hồ sơ mới hoặc vừa sửa sẽ chờ System Admin duyệt trước khi được dùng để xuất kho.</p>
         </div>
         <button type="button" class="auth-btn auth-btn--soft" @click="goBack">
           <AuthIcon name="arrow-left" :size="18" />Quay lại
@@ -211,11 +214,11 @@ function formatDate(value) {
       <div class="beneficiary-form__layout">
         <div class="beneficiary-form__main">
           <section class="beneficiary-form__identity">
-            <header><AuthIcon name="lock" :size="18" /><div><strong>Thông tin định danh cố định</strong><small>Dữ liệu tham chiếu cục bộ được bảo vệ</small></div><span>Hệ thống quản lý / Bất biến</span></header>
+            <header><AuthIcon name="lock" :size="18" /><div><strong>Thông tin định danh cố định</strong><small>Dữ liệu được lưu qua máy chủ</small></div><span>Hệ thống quản lý / Bất biến</span></header>
             <div class="beneficiary-form__metadata">
-              <article><small>MÃ HỒ SƠ</small><strong>{{ form.id || '—' }}</strong><span>{{ form.id ? 'Mã xem thử' : 'Được sinh tự động khi lưu' }}</span></article>
+              <article><small>MÃ HỒ SƠ</small><strong>{{ form.id || '—' }}</strong><span>{{ form.id ? 'Mã hồ sơ' : 'Được sinh tự động khi lưu' }}</span></article>
               <article><small>KHO ĐANG LÀM VIỆC</small><strong>{{ warehouseLabel }}</strong><span>Phạm vi theo phân công hiện tại</span></article>
-              <article><small>NGƯỜI TẠO BAN ĐẦU</small><strong>{{ form.createdBy || '—' }}</strong><span>{{ form.createdBy ? 'Thông tin bản xem thử' : 'Ghi nhận khi lưu bản xem thử' }}</span></article>
+              <article><small>NGƯỜI TẠO BAN ĐẦU</small><strong>{{ form.createdByUid || '—' }}</strong><span>Ghi nhận bởi máy chủ</span></article>
               <article><small>THỜI GIAN TẠO HỒ SƠ</small><strong>{{ form.createdAt ? formatDate(form.createdAt) : '—' }}</strong><span>{{ createdAtText }}</span></article>
             </div>
             <div class="beneficiary-form__immutable"><AuthIcon name="shield" :size="17" /><p><strong>Nguyên tắc bất biến</strong><br />Mã hồ sơ và phạm vi kho được kiểm soát theo quyền truy cập. Không nhập CCCD/CMND, VNeID hoặc địa chỉ nhà riêng.</p></div>
@@ -224,9 +227,9 @@ function formatDate(value) {
           <form class="beneficiary-form__card" @submit.prevent="onSubmit">
             <header class="beneficiary-form__section-title">
               <div><AuthIcon name="check" :size="18" /><span><strong>Thông tin hồ sơ cần cập nhật</strong><small>Chỉ chỉnh sửa các trường được phép</small></span></div>
-              <span>3 trường quản lý</span>
+              <span>Thông tin tối thiểu</span>
             </header>
-            <p class="beneficiary-form__scope-note"><AuthIcon name="info" :size="16" /> Khi mở bản ghi thực tế được cấp quyền, các giá trị hiện hành sẽ được điền sẵn vào biểu mẫu.</p>
+            <p class="beneficiary-form__scope-note"><AuthIcon name="info" :size="16" /> Chỉ lưu thông tin cần thiết cho việc phân phối; hệ thống kiểm tra lại quyền theo kho khi lưu.</p>
 
             <label v-if="warehouseOptions.length > 1 && !isEditMode" class="beneficiary-form__field">
               <span>Kho đang làm việc</span>
@@ -236,6 +239,7 @@ function formatDate(value) {
               </select>
               <small v-if="errors.warehouseId" class="beneficiary-form__validation" role="alert">{{ errors.warehouseId }}</small>
             </label>
+
             <div v-else class="beneficiary-form__current-warehouse">
               <AuthIcon name="warehouse" :size="18" />
               <div><strong>Kho đang làm việc</strong><span>{{ warehouseLabel }}</span></div>
@@ -257,6 +261,18 @@ function formatDate(value) {
               <small v-else id="beneficiary-name-help">Tên xưng hô hoặc định danh hiển thị trên phiếu xuất và danh sách đối chiếu vật phẩm.</small>
             </label>
 
+            <fieldset class="beneficiary-form__field">
+              <legend>Nhu cầu hỗ trợ cơ bản <em>*</em></legend>
+              <label v-for="need in [
+                { id: 'clothing', label: 'Quần áo' },
+                { id: 'books', label: 'Sách' },
+                { id: 'household', label: 'Đồ gia dụng' },
+              ]" :key="need.id">
+                <input type="checkbox" :value="need.id" v-model="form.needs" /> {{ need.label }}
+              </label>
+              <small v-if="errors.needs" class="beneficiary-form__validation" role="alert">{{ errors.needs }}</small>
+            </fieldset>
+
             <label class="beneficiary-form__field">
               <span>Số điện thoại liên hệ <small>(Tùy chọn)</small></span>
               <input
@@ -268,7 +284,7 @@ function formatDate(value) {
                 :aria-describedby="errors.phone ? 'beneficiary-phone-error' : 'beneficiary-phone-help'"
               />
               <small v-if="errors.phone" id="beneficiary-phone-error" class="beneficiary-form__validation" role="alert">{{ errors.phone }}</small>
-              <small v-else id="beneficiary-phone-help">Chỉ nhân sự được cấp quyền truy cập mới xem hoặc chỉnh sửa. Định dạng liên hệ sẽ theo quy ước được xác nhận.</small>
+              <small v-else id="beneficiary-phone-help">Chỉ nhân sự có quyền theo kho mới xem hoặc chỉnh sửa.</small>
             </label>
 
             <label class="beneficiary-form__field">
@@ -290,13 +306,16 @@ function formatDate(value) {
             </div>
 
             <p v-if="submitError === BENEFICIARY_ERROR.forbidden" class="beneficiary-form__error" role="alert">Không có quyền lưu hồ sơ trong phạm vi đã chọn.</p>
-            <p v-else-if="submitError === BENEFICIARY_ERROR.unavailable" class="beneficiary-form__error" role="alert">Không thể lưu dữ liệu xem thử. Vui lòng thử lại.</p>
+            <p v-else-if="submitError === 'conflict'" class="beneficiary-form__error" role="alert">Hồ sơ đã thay đổi. Tải lại trước khi sửa tiếp.</p>
+            <p v-else-if="submitError === 'warehouse_unavailable'" class="beneficiary-form__error" role="alert">Kho đã ngừng hoạt động hoặc không còn khả dụng. Chọn kho khác rồi thử lại.</p>
+            <p v-else-if="submitError === 'uncertain'" class="beneficiary-form__error" role="alert">Chưa rõ hồ sơ đã được lưu hay chưa. Kiểm tra danh sách trước khi gửi lại để tránh tạo trùng.</p>
+            <p v-else-if="submitError === BENEFICIARY_ERROR.unavailable" class="beneficiary-form__error" role="alert">Không thể lưu hồ sơ. Kiểm tra kết nối hoặc tải lại nếu dữ liệu vừa thay đổi.</p>
 
             <div class="beneficiary-form__actions">
               <button type="button" class="auth-btn auth-btn--soft" @click="goBack">Hủy</button>
               <button type="submit" class="auth-btn auth-btn--primary" :disabled="isSaving">
                 <AuthIcon :name="isSaving ? 'loader' : 'check'" :size="18" :class="{ 'auth-spin': isSaving }" />
-                {{ isSaving ? 'Đang lưu bản xem thử...' : (isEditMode ? 'Cập nhật bản xem thử' : 'Lưu hồ sơ xem thử') }}
+                {{ isSaving ? 'Đang lưu hồ sơ...' : (isEditMode ? 'Cập nhật hồ sơ' : 'Tạo hồ sơ') }}
               </button>
             </div>
           </form>
@@ -305,7 +324,7 @@ function formatDate(value) {
         <aside class="beneficiary-form__guidance">
           <article><h2>Kiểm soát quyền &amp; phạm vi kho</h2><p>Thông tin hồ sơ chỉ được xem/chỉnh sửa trong phạm vi kho được phân công. Kiểm tra ở giao diện không thay thế bảo vệ phía máy chủ.</p></article>
           <article><h2>Bảo vệ thông tin liên hệ</h2><p>Số điện thoại là tùy chọn và chỉ dành cho nhân sự có quyền truy cập hồ sơ. Không hiển thị địa chỉ riêng hoặc giấy tờ định danh.</p></article>
-          <article><h2>Dữ liệu phân phối</h2><p>Lịch sử, số lần và thời gian hỗ trợ chỉ được lấy từ chứng từ phân phối; hiện chưa có nguồn dữ liệu thật để hiển thị.</p></article>
+          <article><h2>Dữ liệu phân phối</h2><p>Lịch sử, số lần và thời gian hỗ trợ chỉ được lấy từ chứng từ phân phối đã xác nhận.</p></article>
         </aside>
       </div>
     </section>
@@ -377,6 +396,23 @@ function formatDate(value) {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+fieldset.beneficiary-form__field {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid #d8e0e4;
+  border-radius: 10px;
+}
+
+fieldset.beneficiary-form__field label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+fieldset.beneficiary-form__field input[type='checkbox'] {
+  width: auto;
 }
 
 .beneficiary-form__field--full {

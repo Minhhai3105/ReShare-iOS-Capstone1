@@ -97,7 +97,7 @@ const displayName = props.actorName || props.accountName;
 
       <div class="ac-station">
         <div>
-          Bản xem thử
+          {{ props.screen === 'B' ? 'Dữ liệu vận hành' : 'Bản xem thử' }}
           {{
             props.reportsPage
               ? 'RC1D-94'
@@ -106,7 +106,7 @@ const displayName = props.actorName || props.accountName;
                 : 'RC1D-59'
           }}
         </div>
-        <small>Không kết nối dữ liệu vận hành</small>
+        <small>{{ props.screen === 'B' ? 'Theo kho được phân quyền' : 'Không kết nối dữ liệu vận hành' }}</small>
       </div>
     </aside>
 
@@ -128,13 +128,13 @@ const displayName = props.actorName || props.accountName;
         <div class="ac-warehouse">
           <b>
             {{ props.warehouseLabel }}
-            <em>DEMO</em>
+            <em v-if="props.screen !== 'B'">DEMO</em>
           </b>
-          <small>Phạm vi mô phỏng</small>
+          <small>{{ props.screen === 'B' ? 'Phạm vi theo phân quyền' : 'Phạm vi mô phỏng' }}</small>
         </div>
 
         <div class="ac-search">
-          Dữ liệu mẫu trong trình duyệt
+          {{ props.screen === 'B' ? 'Hồ sơ người thụ hưởng' : 'Dữ liệu mẫu trong trình duyệt' }}
         </div>
 
         <div class="ac-user">

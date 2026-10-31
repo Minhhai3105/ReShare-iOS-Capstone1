@@ -103,24 +103,26 @@ describe('beneficiary mock service and form validation', { concurrency: false },
     assert.equal(fetchBeneficiary(warehouseAdmin, created.id).name, 'Đã cập nhật')
   })
 
-  test('beneficiary validation requires a display name and an assigned warehouse', () => {
+  test('beneficiary validation requires a display name, need and assigned warehouse', () => {
     const allowedWarehouseIds = ['wh-hai-chau']
     assert.deepEqual(
-      validateBeneficiaryForm({ name: '', phone: '', notes: '', warehouseId: 'wh-hai-chau' }, allowedWarehouseIds),
-      { name: 'Tên hiển thị là bắt buộc.' },
+      validateBeneficiaryForm({ name: '', needs: [], phone: '', notes: '', warehouseId: 'wh-hai-chau' }, allowedWarehouseIds),
+      { name: 'Tên hiển thị phải có 1–120 ký tự.', needs: 'Chọn ít nhất một nhu cầu hỗ trợ.' },
     )
     assert.deepEqual(
       validateBeneficiaryForm({
         name: '  Lan  ',
+        needs: ['clothing'],
         phone: '+1 415 555 0123',
-        notes: 'Ghi chú'.repeat(100),
+        notes: 'Ghi chú',
         warehouseId: 'wh-hai-chau',
       }, allowedWarehouseIds),
       {},
     )
     assert.deepEqual(
-      validateBeneficiaryForm({ name: 'Lan', warehouseId: 'wh-other' }, allowedWarehouseIds),
+      validateBeneficiaryForm({ name: 'Lan', needs: ['books'], warehouseId: 'wh-other' }, allowedWarehouseIds),
       { warehouseId: 'Chưa có kho hợp lệ trong phạm vi được cấp.' },
     )
+    assert.equal(validateBeneficiaryForm({ name: 'Lan', needs: ['books'], phone: 'abc', warehouseId: 'wh-hai-chau' }, allowedWarehouseIds).phone, 'Số liên hệ phải có 9–15 chữ số.')
   })
 })

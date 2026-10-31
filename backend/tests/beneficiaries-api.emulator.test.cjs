@@ -49,24 +49,26 @@ test('US15: trusted profile, warehouse privacy, verification and support history
       { name: 'Minh', warehouseId: warehouseA, cccd: 'private' }), { status: 400 });
     await assert.rejects(call('POST', '/v1/admin/beneficiaries', workerA,
       { name: ' ', warehouseId: warehouseA }), { status: 400 });
+    await assert.rejects(call('POST', '/v1/admin/beneficiaries', workerA,
+      { name: 'Minh', warehouseId: warehouseA, supportNeeds: 'Tự do' }), { status: 400 });
 
     const created = await call('POST', '/v1/admin/beneficiaries', workerA, {
       name: 'Nguyễn Minh', warehouseId: warehouseA, phone: '0901234567',
-      notes: 'Liên hệ trước khi bàn giao', supportNeeds: 'Áo ấm',
+      notes: 'Liên hệ trước khi bàn giao', needs: ['clothing'],
     });
     const id = created.body.beneficiary.id;
     paths.push(`beneficiaries/${id}`);
-    for (let version = 1; version <= 5; version += 1) paths.push(`beneficiary_audit/${id}_v${version}`);
+    for (let version = 1; version <= 7; version += 1) paths.push(`beneficiary_audit/${id}_v${version}`);
     assert.equal(created.status, 201);
     assert.equal(created.body.beneficiary.status, 'unverified');
     assert.equal(created.body.beneficiary.version, 1);
     assert.equal((await db.doc(`beneficiaries/${id}`).get()).data().nameSearch, 'nguyen minh');
     const second = await call('POST', '/v1/admin/beneficiaries', workerA,
-      { name: 'Nguyễn Mai', warehouseId: warehouseA });
+      { name: 'Nguyễn Mai', warehouseId: warehouseA, needs: ['books'] });
     paths.push(`beneficiaries/${second.body.beneficiary.id}`,
       `beneficiary_audit/${second.body.beneficiary.id}_v1`);
     const third = await call('POST', '/v1/admin/beneficiaries', workerA,
-      { name: 'Trần X', warehouseId: warehouseExtra });
+      { name: 'Trần X', warehouseId: warehouseExtra, needs: ['household'] });
     paths.push(`beneficiaries/${third.body.beneficiary.id}`,
       `beneficiary_audit/${third.body.beneficiary.id}_v1`);
     const firstPage = await call('GET', '/v1/admin/beneficiaries', workerA, null,
@@ -102,14 +104,16 @@ test('US15: trusted profile, warehouse privacy, verification and support history
     assert.equal(updated.body.beneficiary.version, 2);
     await assert.rejects(call('POST', `/v1/admin/beneficiaries/${id}/update`, workerA,
       { expectedVersion: 1, notes: 'Ghi đè' }), { status: 409 });
-    const verified = await call('POST', `/v1/admin/beneficiaries/${id}/verify`, reviewerA,
+    await assert.rejects(call('POST', `/v1/admin/beneficiaries/${id}/verify`, reviewerA,
+      { expectedVersion: 2, status: 'approved' }), { status: 403 });
+    const verified = await call('POST', `/v1/admin/beneficiaries/${id}/verify`, admin,
       { expectedVersion: 2, status: 'approved' });
     assert.equal(verified.body.beneficiary.status, 'approved');
     assert.equal(verified.body.beneficiary.version, 3);
-    const unverified = await call('POST', `/v1/admin/beneficiaries/${id}/verify`, reviewerA,
+    const unverified = await call('POST', `/v1/admin/beneficiaries/${id}/verify`, admin,
       { expectedVersion: 3, status: 'unverified' });
-    assert.equal(unverified.body.beneficiary.verifiedByUid, reviewerA);
-    assert.equal(unverified.body.beneficiary.unverifiedByUid, reviewerA);
+    assert.equal(unverified.body.beneficiary.verifiedByUid, admin);
+    assert.equal(unverified.body.beneficiary.unverifiedByUid, admin);
     assert.ok(unverified.body.beneficiary.unverifiedAt);
     const reapproved = await call('POST', `/v1/admin/beneficiaries/${id}/verify`, admin,
       { expectedVersion: 4, status: 'approved' });
@@ -127,6 +131,19 @@ test('US15: trusted profile, warehouse privacy, verification and support history
     const auditSecond = await call('GET', `/v1/admin/beneficiaries/${id}/audit`, reviewerA, null,
       `/v1/admin/beneficiaries/${id}/audit?limit=1&cursor=${encodeURIComponent(auditFirst.body.nextCursor)}`);
     assert.equal(auditSecond.body.items[0].action, 'unverified');
+
+    const editedAfterApproval = await call('POST', `/v1/admin/beneficiaries/${id}/update`, workerA,
+      { expectedVersion: 5, needs: ['clothing', 'books'] });
+    assert.equal(editedAfterApproval.body.beneficiary.status, 'unverified');
+    assert.deepEqual(editedAfterApproval.body.beneficiary.needs, ['clothing', 'books']);
+    await assert.rejects(call('POST', `/v1/admin/beneficiaries/${id}/verify`, reviewerA,
+      { expectedVersion: 6, status: 'rejected', reason: 'Thiếu thông tin' }), { status: 403 });
+    await assert.rejects(call('POST', `/v1/admin/beneficiaries/${id}/verify`, admin,
+      { expectedVersion: 6, status: 'rejected' }), { status: 400 });
+    const rejected = await call('POST', `/v1/admin/beneficiaries/${id}/verify`, admin,
+      { expectedVersion: 6, status: 'rejected', reason: 'Thiếu thông tin' });
+    assert.equal(rejected.body.beneficiary.status, 'rejected');
+    assert.equal(rejected.body.beneficiary.reviewReason, 'Thiếu thông tin');
 
     const voucherA = `b81-voucher-a-${suffix}`;
     const voucherA2 = `b81-voucher-a2-${suffix}`;

@@ -2,17 +2,25 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AuthIcon from '../auth/components/AuthIcon.vue'
-import { ADMIN_ROUTE } from '../auth/auth.constants'
+import { ADMIN_ROUTE, USER_ROLE } from '../auth/auth.constants'
 import { staffAssignment } from '../auth/auth.store'
 import BeneficiaryShell from './BeneficiaryShell.vue'
-import { BENEFICIARY_ERROR, classifyBeneficiaryError, fetchBeneficiary } from './beneficiary.service'
+import { BENEFICIARY_ERROR, classifyBeneficiaryError } from './beneficiary.service'
+import { beneficiaryRepository } from './beneficiary.repository'
 
 const route = useRoute()
 const router = useRouter()
 const beneficiaryId = computed(() => route.params.beneficiaryId)
 const beneficiary = ref(null)
+const history = ref(null)
 const isLoading = ref(true)
 const error = ref('')
+const decisionSaving = ref(false)
+const decisionError = ref('')
+const rejectionReason = ref('')
+const isLoadingMore = ref(false)
+const historyError = ref('')
+const canReview = computed(() => staffAssignment.value?.role === USER_ROLE.systemAdmin && beneficiary.value?.status === 'unverified')
 const createdAtText = computed(() => {
   if (!beneficiary.value?.createdAt) return '—'
   const date = new Date(beneficiary.value.createdAt)
@@ -20,17 +28,24 @@ const createdAtText = computed(() => {
 })
 const warehouseLabel = computed(() => beneficiary.value?.warehouseName || beneficiary.value?.warehouseId || '—')
 
-function loadBeneficiary() {
+let loadRequestId = 0
+async function loadBeneficiary() {
+  const requestId = ++loadRequestId
   isLoading.value = true
   error.value = ''
   beneficiary.value = null
+  history.value = null
 
   try {
-    beneficiary.value = fetchBeneficiary(staffAssignment.value, route.params.beneficiaryId)
+    const result = await beneficiaryRepository.get(route.params.beneficiaryId)
+    if (requestId !== loadRequestId) return
+    beneficiary.value = result.beneficiary
+    history.value = result.history
   } catch (loadError) {
-    error.value = classifyBeneficiaryError(loadError)
+    if (requestId !== loadRequestId) return
+    error.value = loadError?.status === 404 ? 'not_found' : classifyBeneficiaryError(loadError)
   } finally {
-    isLoading.value = false
+    if (requestId === loadRequestId) isLoading.value = false
   }
 }
 
@@ -43,6 +58,49 @@ function goBack() {
 function goEdit() {
   router.push({ name: ADMIN_ROUTE.beneficiaryEdit, params: { beneficiaryId: beneficiaryId.value } })
 }
+
+async function decide(decision) {
+  if (!canReview.value || decisionSaving.value) return
+  decisionError.value = ''
+  if (decision === 'rejected' && !rejectionReason.value.trim()) {
+    decisionError.value = 'Nhập lý do từ chối.'
+    return
+  }
+  decisionSaving.value = true
+  try {
+    await beneficiaryRepository.decide(beneficiaryId.value, decision, rejectionReason.value.trim(), beneficiary.value.version)
+    await loadBeneficiary()
+  } catch (reviewError) {
+    decisionError.value = reviewError.status === 409
+      ? 'Hồ sơ đã thay đổi. Tải lại trước khi duyệt.'
+      : reviewError.status === 403 ? 'Bạn không có quyền duyệt hồ sơ.'
+        : reviewError.code === 'UNCERTAIN' ? 'Chưa rõ quyết định đã được lưu hay chưa. Tải lại hồ sơ trước khi thao tác tiếp.'
+          : 'Không thể lưu quyết định. Vui lòng thử lại.'
+  } finally {
+    decisionSaving.value = false
+  }
+}
+
+async function loadMoreHistory() {
+  if (!history.value?.nextCursor || isLoadingMore.value) return
+  isLoadingMore.value = true
+  historyError.value = ''
+  const requestId = loadRequestId
+  try {
+    const result = await beneficiaryRepository.get(beneficiaryId.value, { cursor: history.value.nextCursor })
+    if (requestId !== loadRequestId) return
+    history.value = {
+      ...result.history,
+      vouchers: [...history.value.vouchers, ...result.history.vouchers],
+    }
+  } catch {
+    historyError.value = 'Không thể tải thêm lịch sử. Vui lòng thử lại.'
+  } finally {
+    isLoadingMore.value = false
+  }
+}
+
+const formatTime = value => value ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value)) : '—'
 </script>
 
 <template>
@@ -83,7 +141,7 @@ function goEdit() {
             <span class="beneficiary-detail__title-icon"><AuthIcon name="users" :size="20" /></span>
             <div><h1 id="beneficiary-detail-title">Thông tin hồ sơ người thụ hưởng</h1><p>{{ beneficiary.name }}</p></div>
           </div>
-          <p class="beneficiary-detail__demo-label"><AuthIcon name="info" :size="16" /> Bản xem thử: hồ sơ lưu trong bộ nhớ trình duyệt, không phải hồ sơ vận hành.</p>
+          <p class="beneficiary-detail__demo-label"><AuthIcon name="info" :size="16" /> Trạng thái: {{ beneficiary.status === 'approved' ? 'Đã duyệt' : beneficiary.status === 'rejected' ? 'Từ chối' : 'Chờ duyệt' }} · Chỉ hồ sơ đã duyệt được dùng để xuất kho.</p>
         </div>
         <div class="beneficiary-detail__actions">
           <button type="button" class="auth-btn auth-btn--primary" @click="goEdit">
@@ -97,7 +155,7 @@ function goEdit() {
           <article class="beneficiary-detail__card">
             <header class="beneficiary-detail__card-heading">
               <div><AuthIcon name="users" :size="19" /><h2>Thông tin hồ sơ người thụ hưởng</h2></div>
-              <span>Hồ sơ cục bộ</span>
+              <span>Hồ sơ theo kho</span>
             </header>
             <div class="beneficiary-detail__privacy-note">
               <AuthIcon name="shield" :size="17" />
@@ -106,9 +164,10 @@ function goEdit() {
             <dl class="beneficiary-detail__meta">
               <div><dt>Mã hồ sơ</dt><dd>{{ beneficiary.id }}</dd></div>
               <div><dt>Tên hiển thị</dt><dd>{{ beneficiary.name || '—' }}</dd></div>
+              <div><dt>Nhu cầu cơ bản</dt><dd>{{ beneficiary.needs?.map(need => ({ clothing: 'Quần áo', books: 'Sách', household: 'Đồ gia dụng' }[need] || need)).join(', ') || '—' }}</dd></div>
               <div class="beneficiary-detail__meta-wide"><dt>Số điện thoại liên hệ</dt><dd>{{ beneficiary.phone || '—' }}</dd></div>
               <div class="beneficiary-detail__meta-wide"><dt>Ghi chú phục vụ hỗ trợ</dt><dd>{{ beneficiary.notes || '—' }}</dd></div>
-              <div><dt>Người tạo</dt><dd>{{ beneficiary.createdBy || '—' }}</dd></div>
+              <div><dt>Người tạo</dt><dd>{{ beneficiary.createdByUid || '—' }}</dd></div>
               <div><dt>Ngày tạo</dt><dd>{{ createdAtText }}</dd></div>
             </dl>
           </article>
@@ -116,15 +175,27 @@ function goEdit() {
           <article class="beneficiary-detail__card beneficiary-detail__history">
             <header class="beneficiary-detail__card-heading">
               <div><AuthIcon name="history" :size="19" /><h2>Lịch sử nhận hỗ trợ tại kho</h2></div>
-              <span><AuthIcon name="info" :size="13" /> Chưa kết nối nguồn dữ liệu</span>
+              <span>{{ history?.supportCount || 0 }} lần hỗ trợ</span>
             </header>
             <div class="beneficiary-detail__history-table">
               <div class="beneficiary-detail__history-head"><span>Thời gian bàn giao</span><span>Vật phẩm</span><span>Số lượng</span><span>Đơn vị</span><span>Phiếu xuất</span><span>Thao tác</span></div>
-              <div class="beneficiary-detail__history-empty">
+              <div v-for="voucher in history?.vouchers || []" :key="voucher.id" class="beneficiary-detail__history-head beneficiary-detail__history-row">
+                <span>{{ formatTime(voucher.confirmedAt) }}</span>
+                <span>{{ voucher.lines.map(line => line.itemName || line.inventoryItemId).join(', ') }}</span>
+                <span>{{ voucher.lines.map(line => line.quantity).join(', ') }}</span>
+                <span>{{ voucher.lines.map(line => line.unitId).join(', ') }}</span>
+                <span>{{ voucher.id }}</span>
+                <span>Đã bàn giao</span>
+              </div>
+              <div v-if="!history?.vouchers?.length" class="beneficiary-detail__history-empty">
                 <AuthIcon name="history" :size="24" />
                 <strong>Chưa có dữ liệu chứng từ phân phối</strong>
-                <p>Lịch sử chỉ hiển thị khi được truy vấn từ distribution records đã xác nhận. Hiện FE chưa có hợp đồng dữ liệu để tải lịch sử thật.</p>
+                <p>Chưa có phiếu xuất đã xác nhận cho hồ sơ này.</p>
               </div>
+              <button v-if="history?.nextCursor" type="button" class="auth-btn auth-btn--soft" :disabled="isLoadingMore" @click="loadMoreHistory">
+                {{ isLoadingMore ? 'Đang tải...' : 'Xem thêm lịch sử' }}
+              </button>
+              <p v-if="historyError" role="alert">{{ historyError }}</p>
             </div>
           </article>
         </div>
@@ -143,8 +214,12 @@ function goEdit() {
               <li>Không suy diễn lần hỗ trợ từ dữ liệu nhập tay.</li>
             </ul>
           </article>
-          <article class="beneficiary-detail__card beneficiary-detail__connection">
-            <AuthIcon name="info" :size="18" /><div><strong>Nguồn lịch sử chưa kết nối</strong><p>Chờ BE cung cấp hợp đồng đọc chứng từ phân phối.</p></div>
+          <article v-if="canReview" class="beneficiary-detail__card beneficiary-detail__connection">
+            <div><strong>System Admin duyệt hồ sơ</strong><p>Kiểm tra thông tin trước khi cho phép xuất kho.</p></div>
+            <button type="button" class="auth-btn auth-btn--primary" :disabled="decisionSaving" @click="decide('approved')">Duyệt hồ sơ</button>
+            <label>Lý do từ chối <input v-model="rejectionReason" maxlength="500" /></label>
+            <button type="button" class="auth-btn auth-btn--soft" :disabled="decisionSaving" @click="decide('rejected')">Từ chối</button>
+            <p v-if="decisionError" role="alert">{{ decisionError }}</p>
           </article>
         </aside>
       </div>
@@ -510,6 +585,16 @@ function goEdit() {
   text-transform: uppercase;
 }
 
+.beneficiary-detail__history-row {
+  background: #fff;
+  border-top: 1px solid #e4e9f2;
+  color: #24394a;
+  font-size: 12px;
+  font-weight: 400;
+  text-transform: none;
+  overflow-wrap: anywhere;
+}
+
 .beneficiary-detail__history-empty {
   display: grid;
   justify-items: center;
@@ -567,6 +652,7 @@ function goEdit() {
 
 .beneficiary-detail__connection {
   display: flex;
+  flex-direction: column;
   align-items: flex-start;
   gap: 10px;
   color: #8a5a00;
