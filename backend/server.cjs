@@ -9,6 +9,7 @@ const { ApiError: ContactApiError, createContactApi } = require('./contact-api.c
 const { createDonationReviewApi } = require('./donation-review-api.cjs');
 const { createReceiptApi } = require('./receipt-api.cjs');
 const { createStockIntakeApi } = require('./stock-intake-api.cjs');
+const { createInventoryApi } = require('./inventory-api.cjs');
 const { createDistributionApi } = require('./distribution-api.cjs');
 const { createReportsApi } = require('./reports-api.cjs');
 
@@ -39,6 +40,7 @@ const contactApi = createContactApi({ db, verifyToken, serverTimestamp: () => Fi
 const donationReviewApi = createDonationReviewApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const receiptApi = createReceiptApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const stockIntakeApi = createStockIntakeApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
+const inventoryApi = createInventoryApi({ db, verifyToken });
 const distributionApi = createDistributionApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const reportsApi = createReportsApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const adminWebOrigins = new Set((process.env.ADMIN_WEB_ORIGINS || '')
@@ -51,6 +53,8 @@ const server = http.createServer(async (request, response) => {
   const isReceiptPath = /^\/v1\/admin\/donations\/[^/]+\/receipt$/.test(pathname);
   const isStockIntakePath = /^\/v1\/admin\/donations\/[^/]+\/stock-in$/.test(pathname) ||
     /^\/v1\/admin\/stock-entries\/[^/]+$/.test(pathname);
+  const isInventoryPath = pathname === '/v1/admin/inventory' ||
+    /^\/v1\/admin\/inventory\/[^/]+$/.test(pathname);
   // Neo chính xác, KHÔNG dùng startsWith: '/v1/admin/distribution' là tiền tố của
   // '/v1/admin/distributions' (US17), nên startsWith sẽ nuốt route đó và trả 404.
   const isDistributionPath = pathname === '/v1/admin/distribution' ||
@@ -101,6 +105,7 @@ const server = http.createServer(async (request, response) => {
     const handler = isContactPath ? contactApi
       : isReceiptPath ? receiptApi
       : isStockIntakePath ? stockIntakeApi
+      : isInventoryPath ? inventoryApi
       : isDistributionPath ? distributionApi
       : isReportsPath ? reportsApi
       : isDonationAdminPath ? donationReviewApi
