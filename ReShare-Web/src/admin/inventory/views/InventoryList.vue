@@ -11,6 +11,7 @@ import {
   CONDITION_LABEL,
   INVENTORY_ERROR,
   STOCK_FILTER,
+  UNIT_LABEL,
   fetchInventory,
   formatDateTime,
   getAccessibleWarehouses,
@@ -183,11 +184,11 @@ onBeforeUnmount(() => {
           </thead>
           <tbody v-if="viewState === 'ready'" :class="{ 'is-refreshing': isLoading }">
             <tr v-for="item in result.items" :key="item.id">
-              <td><strong>{{ item.name }}</strong><small class="mono">{{ item.id.toUpperCase() }} · {{ DONATION_CATEGORY_LABEL[item.category] }}</small></td>
-              <td class="mono inventory-qty" :class="{ 'is-out': item.remainingQuantity === 0 }">{{ item.remainingQuantity }}</td>
-              <td>{{ item.unit }}</td>
+              <td><strong>{{ item.itemName }}</strong><small class="mono">{{ item.id.toUpperCase() }} · {{ DONATION_CATEGORY_LABEL[item.category] }}</small></td>
+              <td class="mono inventory-qty" :class="{ 'is-out': item.quantityAvailable === 0 }">{{ item.quantityAvailable }}</td>
+              <td>{{ UNIT_LABEL[item.unitId] ?? item.unitId }}</td>
               <td><span class="mono">{{ item.location }}</span><small>{{ item.warehouse.name }}</small></td>
-              <td><span class="mono">{{ item.stockInVoucherId.toUpperCase() }}</span><small class="mono">{{ item.donationId.toUpperCase() }}</small></td>
+              <td><span class="mono">{{ item.stockEntryId.toUpperCase() }}</span><small class="mono">{{ item.donationId.toUpperCase() }}</small></td>
               <td class="inventory-nowrap">{{ formatDateTime(item.updatedAt) }}</td>
               <td><RouterLink :to="{ name: ADMIN_ROUTE.inventoryDetail, params: { itemId: item.id } }" class="inventory-link">Xem chi tiết</RouterLink></td>
             </tr>

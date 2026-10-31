@@ -8,6 +8,7 @@ import { ADMIN_ROUTE, USER_ROLE } from '../../auth/auth.constants'
 import { resolveQueueAccess } from '../../donations/donation.service'
 import {
   INVENTORY_ERROR,
+  UNIT_LABEL,
   VOUCHER_STATUS_LABEL,
   fetchDistributionVoucher,
   formatDateTime,
@@ -75,6 +76,7 @@ async function load() {
 }
 
 const formatCode = (code) => (code ? code.toUpperCase() : '—')
+const unitName = (unitId) => UNIT_LABEL[unitId] || unitId || '—'
 const formatTime = (value) => (value ? formatDateTime(value) : '—')
 
 watch([() => route.params.voucherId, staffAssignment], load, { immediate: true })
@@ -162,11 +164,11 @@ onBeforeUnmount(() => { latestRequestId += 1 })
             <table class="inv-table">
               <thead><tr><th>Vật phẩm</th><th>Số lượng xuất</th><th>Đơn vị</th><th>Phiếu nhập nguồn</th><th>Thao tác</th></tr></thead>
               <tbody v-if="lines.length">
-                <tr v-for="(line, index) in lines" :key="line.itemId" :class="{ 'is-selected': index === selectedIndex }">
-                  <td><b>{{ line.name }}</b><small class="mono">{{ formatCode(line.itemId) }}</small></td>
+                <tr v-for="(line, index) in lines" :key="line.inventoryItemId" :class="{ 'is-selected': index === selectedIndex }">
+                  <td><b>{{ line.itemName }}</b><small class="mono">{{ formatCode(line.inventoryItemId) }}</small></td>
                   <td class="mono"><b>{{ line.quantity }}</b></td>
-                  <td>{{ line.unit }}</td>
-                  <td class="mono">{{ formatCode(line.stockInVoucherId) }}</td>
+                  <td>{{ unitName(line.unitId) }}</td>
+                  <td class="mono">{{ formatCode(line.stockEntryId) }}</td>
                   <td><button type="button" class="px-link" :aria-pressed="index === selectedIndex" @click="selectedIndex = index">Xem biến động</button></td>
                 </tr>
               </tbody>
@@ -188,11 +190,11 @@ onBeforeUnmount(() => { latestRequestId += 1 })
             <span class="inv-chip inv-chip--green">Snapshot giao dịch</span>
           </div>
           <div class="px-stock">
-            <div><span>Tồn trước</span><b class="mono">{{ selectedLine?.stockBefore ?? '—' }}</b><small>{{ selectedLine?.unit ?? 'Đơn vị' }}</small></div>
+            <div><span>Tồn trước</span><b class="mono">{{ selectedLine?.stockBefore ?? '—' }}</b><small>{{ selectedLine ? unitName(selectedLine.unitId) : 'Đơn vị' }}</small></div>
             <div class="is-green"><span>SL xuất</span><b class="mono">{{ selectedLine?.quantity ?? '—' }}</b><small>Khấu trừ</small></div>
             <div><span>Tồn sau</span><b class="mono">{{ selectedLine?.stockAfter ?? '—' }}</b><small>Khả dụng</small></div>
           </div>
-          <p class="px-hint"><AuthIcon name="clock" :size="16" />Số tồn {{ selectedLine ? `của ${selectedLine.name} ` : '' }}được ghi nhận tại thời điểm xác nhận phiếu xuất.</p>
+          <p class="px-hint"><AuthIcon name="clock" :size="16" />Số tồn {{ selectedLine ? `của ${selectedLine.itemName} ` : '' }}được ghi nhận tại thời điểm xác nhận phiếu xuất.</p>
           <p class="px-note"><span><b>Lưu ý:</b> "Tồn sau xuất" là ảnh chụp dữ liệu tại thời điểm lập phiếu, không phản ánh tồn kho khả dụng hiện tại của vật phẩm.</span></p>
         </section>
 
@@ -204,12 +206,12 @@ onBeforeUnmount(() => { latestRequestId += 1 })
           </div>
           <div class="px-related">
             <AuthIcon name="archive" :size="18" />
-            <div><p class="px-label">Vật phẩm trong kho</p><b class="mono">{{ formatCode(selectedLine?.itemId) }}</b></div>
-            <RouterLink v-if="selectedLine" :to="{ name: ADMIN_ROUTE.inventoryDetail, params: { itemId: selectedLine.itemId } }" class="inv-btn px-small">Xem chi tiết</RouterLink>
+            <div><p class="px-label">Vật phẩm trong kho</p><b class="mono">{{ formatCode(selectedLine?.inventoryItemId) }}</b></div>
+            <RouterLink v-if="selectedLine" :to="{ name: ADMIN_ROUTE.inventoryDetail, params: { itemId: selectedLine.inventoryItemId } }" class="inv-btn px-small">Xem chi tiết</RouterLink>
           </div>
           <div class="px-related">
             <AuthIcon name="download" :size="18" />
-            <div><p class="px-label">Phiếu nhập nguồn</p><b class="mono">{{ formatCode(selectedLine?.stockInVoucherId) }}</b></div>
+            <div><p class="px-label">Phiếu nhập nguồn</p><b class="mono">{{ formatCode(selectedLine?.stockEntryId) }}</b></div>
             <span class="px-unsupported">Chưa hỗ trợ</span>
           </div>
           <div class="px-related">

@@ -11,6 +11,7 @@ import {
   DONATION_DETAIL_ROUTE,
   INVENTORY_ERROR,
   MOVEMENT_TYPE_LABEL,
+  UNIT_LABEL,
   fetchInventoryItem,
   formatDateTime,
   getAccessibleWarehouses,
@@ -58,6 +59,7 @@ const accessLabel = computed(() => {
 })
 const donationParams = computed(() => ({ donationId: item.value?.donationId }))
 const sources = computed(() => getItemSources(item.value))
+const unitLabel = computed(() => (item.value ? UNIT_LABEL[item.value.unitId] || item.value.unitId || '—' : '—'))
 
 async function load() {
   const requestId = ++latestRequestId
@@ -134,12 +136,12 @@ onBeforeUnmount(() => { latestRequestId += 1 })
           <div class="detail-core">
             <div>
               <p class="detail-label"><AuthIcon name="scale" :size="18" />Chỉ số cốt lõi: Số lượng còn</p>
-              <p><strong class="detail-qty mono">{{ item?.remainingQuantity ?? '—' }}</strong> Đơn vị: {{ item?.unit ?? '—' }}</p>
+              <p><strong class="detail-qty mono">{{ item?.quantityAvailable ?? '—' }}</strong> Đơn vị: {{ unitLabel }}</p>
             </div>
             <div class="detail-core__status">
               <span>Tình trạng tồn:
-                <span class="inv-chip" :class="item ? (item.remainingQuantity > 0 ? 'inv-chip--green' : 'inv-chip--danger') : ''">
-                  <i />{{ item ? (item.remainingQuantity > 0 ? 'Còn hàng' : 'Hết hàng') : '—' }}
+                <span class="inv-chip" :class="item ? (item.quantityAvailable > 0 ? 'inv-chip--green' : 'inv-chip--danger') : ''">
+                  <i />{{ item ? (item.quantityAvailable > 0 ? 'Còn hàng' : 'Hết hàng') : '—' }}
                 </span>
               </span>
               <small>Hệ thống tự động kích hoạt "Còn hàng" (&gt;0) hoặc "Hết hàng" (=0) từ số dư tức thời.</small>
@@ -148,8 +150,8 @@ onBeforeUnmount(() => { latestRequestId += 1 })
           <div class="detail-facts">
             <div><AuthIcon name="warehouse" :size="20" /><div><p class="detail-label">Kho lưu vật lý</p><strong>{{ item?.warehouse.name ?? '—' }} <AuthIcon v-if="item" name="check-circle" :size="16" class="is-green" /></strong><small>{{ item?.warehouse.area }}</small></div></div>
             <div><AuthIcon name="shelves" :size="20" /><div><p class="detail-label">Vị trí kệ / Ô lưu</p><strong class="mono">{{ item?.location ?? '—' }}</strong><small>{{ item ? 'Dãy - Kệ - Ô lưu' : 'Định dạng gợi ý: Chưa gán vị trí lưu kho' }}</small></div></div>
-            <div><AuthIcon name="download" :size="20" /><div><p class="detail-label">Số lượng đã nhập ban đầu</p><strong class="mono">{{ item ? `${item.initialQuantity} ${item.unit}` : '—' }}</strong><small>Ghi nhận cố định qua Biên bản thực nhận</small></div></div>
-            <div><AuthIcon name="list-check" :size="20" /><div><p class="detail-label">Tình trạng thực tế (kiểm định)</p><strong>{{ CONDITION_LABEL[item?.condition] ?? '—' }}</strong><small>Theo biên bản phân loại &amp; thẩm định chất lượng</small></div></div>
+            <div><AuthIcon name="download" :size="20" /><div><p class="detail-label">Số lượng đã nhập ban đầu</p><strong class="mono">{{ item ? `${item.quantityReceived} ${unitLabel}` : '—' }}</strong><small>Ghi nhận cố định qua Biên bản thực nhận</small></div></div>
+            <div><AuthIcon name="list-check" :size="20" /><div><p class="detail-label">Tình trạng thực tế (kiểm định)</p><strong>{{ CONDITION_LABEL[item?.conditionId] ?? '—' }}</strong><small>Theo biên bản phân loại &amp; thẩm định chất lượng</small></div></div>
           </div>
           <p class="detail-lock"><AuthIcon name="lock" :size="18" />Bảo toàn dữ liệu: Màn hình chỉ đọc. Nghiêm cấm chỉnh sửa thủ công số lượng hoặc trạng thái. Mọi biến động phải sinh giao dịch kiểm toán.</p>
         </section>

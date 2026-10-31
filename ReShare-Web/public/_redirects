@@ -1,0 +1,4 @@
+# Cloudflare Pages mặc định phục vụ SPA khi không có 404.html ở gốc.
+# Giữ rewrite tường minh chỉ cho route Admin; không bắt /assets/*, favicon hoặc ảnh.
+/admin  /index.html  200
+/admin/*  /index.html  200
