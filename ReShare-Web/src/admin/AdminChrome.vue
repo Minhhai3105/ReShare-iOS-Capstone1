@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import AdminIcon from './AdminIcon.vue';
 import brandLogo from './auth/assets/reshare-logo.png';
-defineProps<{ screen: 'E' | 'F' | 'Q'; role: 'system_admin' | 'warehouse_admin' | 'viewer' }>();
+withDefaults(defineProps<{ screen: 'E' | 'F' | 'Q'; role: 'system_admin' | 'warehouse_admin' | 'viewer'; warehouseLabel?: string; actorName?: string; lockRole?: boolean; reportsPage?: boolean }>(), { warehouseLabel: 'Kho demo Hải Châu', actorName: 'Nguyễn Văn An', lockRole: false, reportsPage: false });
 const emit = defineEmits<{ navigate: [screen: 'E' | 'F' | 'Q']; role: [role: 'system_admin' | 'warehouse_admin' | 'viewer'] }>();
 const menu = [
   { label: 'Tổng quan', icon: 'grid' }, { label: 'Yêu cầu quyên góp', icon: 'donation', screen: 'E' as const },
@@ -11,7 +11,7 @@ const menu = [
 </script>
 
 <template>
-  <div class="admin-chrome">
+  <div class="admin-chrome" :class="{ 'ac-reports': reportsPage }">
     <aside class="ac-sidebar">
       <div class="ac-brand"><img :src="brandLogo" alt="" width="34" height="34" style="filter: drop-shadow(0 2px 4px rgba(20, 67, 45, 0.12));" /><strong>ReShare</strong><small>PORTAL</small></div>
       <nav aria-label="Điều hướng quản trị">
@@ -21,16 +21,16 @@ const menu = [
         <button class="ac-nav-item" disabled><AdminIcon name="shield" :size="19" />Nhân sự &amp; Phân quyền</button>
         <button class="ac-nav-item" disabled><AdminIcon name="settings" :size="19" />Cấu hình chung</button>
       </nav>
-      <div class="ac-station"><div>Bản xem thử RC1D-59</div><small>Không kết nối dữ liệu vận hành</small></div>
+      <div class="ac-station"><div>Bản xem thử {{ reportsPage ? 'RC1D-94' : 'RC1D-59' }}</div><small>Không kết nối dữ liệu vận hành</small></div>
     </aside>
     <div class="ac-main">
       <header class="ac-topbar">
         <div class="ac-topbrand"><b>ReShare {{ screen === 'Q' ? 'Ops' : 'Portal' }}</b><small>{{ screen === 'Q' ? 'Cổng vận hành nội bộ' : 'Hệ thống điều phối vận hành' }}</small></div>
-        <div class="ac-warehouse"><b>Kho demo Hải Châu <em>DEMO</em></b><small>Phạm vi mô phỏng</small></div>
+        <div class="ac-warehouse"><b>{{ warehouseLabel }} <em>DEMO</em></b><small>Phạm vi mô phỏng</small></div>
         <div class="ac-search">Dữ liệu mẫu trong trình duyệt</div>
-        <div class="ac-user"><span>Nguyễn Văn An<small>{{ role === 'warehouse_admin' ? 'Warehouse Admin' : role === 'viewer' ? 'Người xem' : 'System Admin' }}</small></span><span class="ac-avatar"><AdminIcon name="user" :size="17" /></span></div>
+        <div class="ac-user"><span>{{ actorName }}<small>{{ role === 'warehouse_admin' ? 'Warehouse Admin' : role === 'viewer' ? 'Người xem' : 'System Admin' }}</small></span><span class="ac-avatar"><AdminIcon name="user" :size="17" /></span></div>
       </header>
-      <main class="ac-content"><slot /><div class="ac-preview"><span>RC1D-59 · Preview dữ liệu mock</span><button @click="emit('navigate', 'E')">E · Chờ duyệt</button><button @click="emit('navigate', 'F')">F · Đã duyệt</button><button @click="emit('navigate', 'Q')">Q · Báo cáo</button><label>Vai trò: <select :value="role" @change="emit('role', ($event.target as HTMLSelectElement).value as 'system_admin' | 'warehouse_admin' | 'viewer')"><option value="system_admin">System Admin</option><option value="warehouse_admin">Warehouse Admin · Hải Châu</option><option value="viewer">Người xem</option></select></label></div></main>
+      <main class="ac-content"><slot /><div class="ac-preview"><span>{{ reportsPage ? 'RC1D-94' : 'RC1D-59' }} · Preview dữ liệu mock</span><template v-if="!reportsPage"><button @click="emit('navigate', 'E')">E · Chờ duyệt</button><button @click="emit('navigate', 'F')">F · Đã duyệt</button><button @click="emit('navigate', 'Q')">Q · Báo cáo</button></template><label v-if="!lockRole">Vai trò demo: <select :value="role" @change="emit('role', ($event.target as HTMLSelectElement).value as 'system_admin' | 'warehouse_admin' | 'viewer')"><option value="system_admin">System Admin</option><option value="warehouse_admin">Warehouse Admin · Hải Châu</option><option value="viewer">Người xem</option></select></label></div></main>
     </div>
   </div>
 </template>
@@ -57,4 +57,12 @@ const menu = [
 .ac-content {padding:0 32px 20px;min-width:0}.ac-preview {display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:28px 0;color:#687267;font-size:12px}.ac-preview button {border:1px solid #bfd5bf;border-radius:7px;background:#fff;color:#185a22;padding:7px 9px;cursor:pointer}.ac-preview select {padding:6px;border:1px solid #b8c9b8;border-radius:7px}
 @media(max-width:1100px){.admin-chrome{grid-template-columns:220px minmax(0,1fr)}.ac-content{padding:0 20px}.ac-topbar{left:136px;gap:8px}.ac-search{display:none}.ac-warehouse{min-width:210px}}
 @media(max-width:760px){.admin-chrome{grid-template-columns:1fr}.ac-sidebar{min-height:auto}.ac-station{margin-top:15px}.ac-main{padding-top:0}.ac-topbar{position:static;height:auto;flex-wrap:wrap;padding:12px}.ac-content{padding:0 16px}}
+.ac-reports .ac-topbar { left:256px; gap:14px; }
+.ac-reports .ac-topbrand { width:110px; }
+.ac-reports .ac-warehouse { min-width:180px; max-width:310px; }
+.ac-reports .ac-sidebar { min-height:100vh; }
+.ac-reports .ac-station { margin-top:260px; }
+.ac-reports .ac-content { padding:0 24px 20px; }
+@media(max-width:1100px){.ac-reports .ac-topbar{left:220px}.ac-reports .ac-warehouse{min-width:150px}.ac-reports .ac-topbrand{display:none}}
+@media(max-width:760px){.ac-reports .ac-sidebar{min-height:0}.ac-reports .ac-sidebar nav,.ac-reports .ac-station{display:none}.ac-reports .ac-brand{height:44px}.ac-reports .ac-topbar{gap:10px}.ac-reports .ac-content{padding:0 14px 20px}.ac-reports .ac-user{margin-left:auto}}
 </style>
