@@ -1,5 +1,6 @@
 const { ApiError } = require('./image-api.cjs');
 const { FieldValue } = require('firebase-admin/firestore');
+const { runTransaction } = require('./firestore-transaction.cjs');
 
 function publicHistory(history) {
   if (!Array.isArray(history)) return [];
@@ -49,7 +50,7 @@ function createDonationReviewApi({ db, verifyToken, serverTimestamp }) {
     const donationRef = db.collection('donations').doc(donationId);
     const warehouseRef = db.collection('warehouses').doc(warehouseId);
     const reviewRef = db.collection('donation_reviews').doc(donationId);
-    await db.runTransaction(async transaction => {
+    await runTransaction(db, async transaction => {
       const [donationDoc, warehouseDoc, reviewDoc] = await Promise.all([
         transaction.get(donationRef), transaction.get(warehouseRef), transaction.get(reviewRef),
       ]);
@@ -113,7 +114,7 @@ function createDonationReviewApi({ db, verifyToken, serverTimestamp }) {
     const donationRef = db.collection('donations').doc(donationId);
     const reviewRef = db.collection('donation_reviews').doc(donationId);
 
-    const result = await db.runTransaction(async (transaction) => {
+    const result = await runTransaction(db, async (transaction) => {
       const doc = await transaction.get(donationRef);
       if (!doc.exists) {
         throw new ApiError(404, 'Donation not found');
@@ -210,7 +211,7 @@ function createDonationReviewApi({ db, verifyToken, serverTimestamp }) {
 
     const donationRef = db.collection('donations').doc(donationId);
     const reviewRef = db.collection('donation_reviews').doc(donationId);
-    await db.runTransaction(async transaction => {
+    await runTransaction(db, async transaction => {
       const donationDoc = await transaction.get(donationRef);
       if (!donationDoc.exists) throw new ApiError(404, 'Donation not found');
       const donation = donationDoc.data();

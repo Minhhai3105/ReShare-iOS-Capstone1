@@ -1,4 +1,5 @@
 const { createHash, randomUUID } = require('node:crypto');
+const { runTransaction } = require('./firestore-transaction.cjs');
 
 const MAX_NAME_LENGTH = 100;
 const MAX_EMAIL_LENGTH = 254;
@@ -47,7 +48,7 @@ function createContactApi({ db, verifyToken, serverTimestamp, now = Date.now }) 
     const rateRef = db.collection('contact_rate_limits').doc(rateKey);
     const contactRef = db.collection('contacts').doc(randomUUID());
 
-    await db.runTransaction(async transaction => {
+    await runTransaction(db, async transaction => {
       const rateSnapshot = await transaction.get(rateRef);
       const recentSubmissions = (rateSnapshot.exists ? rateSnapshot.data().timestampsMs : [])
         .filter(timestamp => Number.isSafeInteger(timestamp) && timestamp > currentTime - RATE_LIMIT_WINDOW_MS)
