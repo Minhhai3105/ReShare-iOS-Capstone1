@@ -91,7 +91,9 @@ iOS còn mock: `DonationCampaign.mockCampaigns` hardcode trong Swift và danh s�
 
 ## Quy trình Git
 
-Theo `CONTRIBUTING.md`: nhánh từ `dev`, đặt tên `feat/…` hoặc `story/…`, PR về `dev`. **Cấm tự merge** — Hải review và gộp. Agent không commit/push/merge nếu người dùng không yêu cầu rõ. `main` là nhánh mặc định của repo nhưng `dev` là nhánh tích hợp.
+Nhánh từ `dev`, đặt tên `feat/…` hoặc `story/…`, PR về `dev`. Agent không commit/push/merge nếu người dùng không yêu cầu rõ — nhưng khi đã được yêu cầu thì **merge luôn, không chờ ai review** (Hải bỏ quy tắc "cấm tự merge" ngày 31/10/2026). Vẫn phải nói rõ mức bằng chứng đang có trước khi merge. `main` là nhánh mặc định của repo nhưng `dev` là nhánh tích hợp.
+
+`CONTRIBUTING.md:18` vẫn ghi "cấm tự ý merge" — dòng đó dành cho thành viên team, chưa sửa.
 
 ## Quy tắc làm việc
 
