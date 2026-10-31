@@ -11,6 +11,8 @@ const { createReceiptApi } = require('./receipt-api.cjs');
 const { createStockIntakeApi } = require('./stock-intake-api.cjs');
 const { createInventoryApi } = require('./inventory-api.cjs');
 const { createDistributionHistoryApi } = require('./distribution-history-api.cjs');
+const { createDistributionApi } = require('./distribution-api.cjs');
+const { createReportsApi } = require('./reports-api.cjs');
 
 const {
   CLOUDINARY_CLOUD_NAME,
@@ -41,6 +43,8 @@ const receiptApi = createReceiptApi({ db, verifyToken, serverTimestamp: () => Fi
 const stockIntakeApi = createStockIntakeApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const inventoryApi = createInventoryApi({ db, verifyToken });
 const distributionHistoryApi = createDistributionHistoryApi({ db, verifyToken });
+const distributionApi = createDistributionApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
+const reportsApi = createReportsApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const adminWebOrigins = new Set((process.env.ADMIN_WEB_ORIGINS || '')
   .split(',').map(origin => origin.trim()).filter(Boolean));
 
@@ -58,6 +62,11 @@ const server = http.createServer(async (request, response) => {
   // dùng chung tên isDistributionPath, tránh resolve conflict sai khi gộp.
   const isDistributionHistoryPath = pathname === '/v1/admin/distributions' ||
     /^\/v1\/admin\/distributions\/[^/]+$/.test(pathname);
+  // Neo chính xác, KHÔNG dùng startsWith: '/v1/admin/distribution' là tiền tố của
+  // '/v1/admin/distributions' (US17), nên startsWith sẽ nuốt route đó và trả 404.
+  const isDistributionPath = pathname === '/v1/admin/distribution' ||
+    pathname === '/v1/admin/distribution/options';
+  const isReportsPath = pathname === '/v1/admin/reports' || pathname === '/v1/admin/reports/';
   const isAdminImageRead = pathname === '/v1/images/read-access';
   const isContactPath = pathname === '/v1/contact';
   const origin = request.headers.origin;
@@ -98,7 +107,18 @@ const server = http.createServer(async (request, response) => {
       try { body = JSON.parse(raw); }
       catch { throw new ApiError(400, 'Invalid JSON body'); }
     }
-    const handler = isContactPath ? contactApi : isReceiptPath ? receiptApi : isStockIntakePath ? stockIntakeApi : isInventoryPath ? inventoryApi : isDistributionHistoryPath ? distributionHistoryApi : isDonationAdminPath ? donationReviewApi : isAdminApi ? staffApi : api;
+    // Thứ tự quan trọng: receipt và stock-in là path con của /v1/admin/donations nên
+    // phải đứng trước isDonationAdminPath; isAdminApi là nhánh bắt tất cả cuối cùng.
+    const handler = isContactPath ? contactApi
+      : isReceiptPath ? receiptApi
+      : isStockIntakePath ? stockIntakeApi
+      : isInventoryPath ? inventoryApi
+      : isDistributionHistoryPath ? distributionHistoryApi
+      : isDistributionPath ? distributionApi
+      : isReportsPath ? reportsApi
+      : isDonationAdminPath ? donationReviewApi
+      : isAdminApi ? staffApi
+      : api;
     const result = await handler.handle(request.method, pathname, request.headers, body, request.url);
     response.writeHead(result.status, responseHeaders);
     response.end(JSON.stringify(result.body));
@@ -106,7 +126,10 @@ const server = http.createServer(async (request, response) => {
     const status = error instanceof ApiError || error instanceof ContactApiError ? error.status : 500;
     if (status === 500) console.error('ReShare API failure:', error);
     response.writeHead(status, responseHeaders);
-    response.end(JSON.stringify({ message: status === 500 ? 'Internal server error' : error.message }));
+    const errBody = { message: status === 500 ? 'Internal server error' : error.message };
+    if (error.code) errBody.code = error.code;
+    if (error.details) errBody.details = error.details;
+    response.end(JSON.stringify(errBody));
   }
 });
 

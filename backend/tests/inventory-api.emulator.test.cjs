@@ -12,7 +12,8 @@ test('US14: read inventory by assigned warehouse, filter, paginate and trace rec
   try {
     const db = getFirestore(app);
     const assignments = [
-      ['inventory-admin', 'system_admin', []], ['inventory-worker-a', 'warehouse_admin', ['kho-a']],
+      ['inventory-admin', 'system_admin', []],
+      ['inventory-worker-a', 'warehouse_admin', ['kho-a', ...Array.from({ length: 30 }, (_, i) => `kho-extra-${i}`)]],
       ['inventory-worker-b', 'warehouse_admin', ['kho-b']],
     ];
     await Promise.all(assignments.map(([uid, role, warehouseIds]) =>
@@ -34,20 +35,29 @@ test('US14: read inventory by assigned warehouse, filter, paginate and trace rec
         { authorization: 'Bearer inventory-admin' },
         { receiptId, location: 'Kệ A1', note: '', idempotencyKey: `stk_${receiptId}` });
     }
+    await db.doc('inventory/extra-warehouse-item').set({
+      warehouseId: 'kho-extra-29', itemName: 'Thùng mở rộng', category: 'household',
+      conditionId: 'good', quantityAvailable: 1, unitId: 'box',
+      createdAt: new Date('2026-10-01T00:00:00Z'),
+    });
     const get = (path, uid = 'inventory-admin') => inventory.handle('GET', path.split('?')[0],
       { authorization: `Bearer ${uid}` }, null, path);
     const pageA = (await get('/v1/admin/inventory', 'inventory-worker-a')).body;
-    assert.equal(pageA.items.length, 2);
-    assert.ok(pageA.items.every(item => item.warehouseId === 'kho-a'));
-    assert.equal((await get('/v1/admin/inventory', 'inventory-admin')).body.items.length, 3);
+    assert.equal(pageA.items.length, 3);
+    assert.ok(pageA.items.every(item => ['kho-a', 'kho-extra-29'].includes(item.warehouseId)));
+    assert.equal((await get('/v1/admin/inventory', 'inventory-admin')).body.items.length, 4);
     assert.equal((await get('/v1/admin/inventory?category=books&search=Sách', 'inventory-worker-a')).body.items.length, 1);
     assert.equal((await get('/v1/admin/inventory?category=books&search=sach', 'inventory-worker-a')).body.items.length, 1);
     const firstPage = (await get('/v1/admin/inventory?limit=1', 'inventory-worker-a')).body;
     assert.equal(firstPage.items.length, 1);
-    assert.ok(firstPage.nextOffset > 0);
-    const secondPage = (await get(`/v1/admin/inventory?limit=1&offset=${firstPage.nextOffset}`, 'inventory-worker-a')).body;
+    assert.ok(firstPage.nextCursor);
+    const secondPage = (await get(`/v1/admin/inventory?limit=1&cursor=${encodeURIComponent(firstPage.nextCursor)}`, 'inventory-worker-a')).body;
     assert.equal(secondPage.items.length, 1);
     assert.notEqual(firstPage.items[0].id, secondPage.items[0].id);
+    const thirdPage = (await get(`/v1/admin/inventory?limit=1&cursor=${encodeURIComponent(secondPage.nextCursor)}`, 'inventory-worker-a')).body;
+    assert.equal(thirdPage.items[0].id, 'extra-warehouse-item');
+    await assert.rejects(get('/v1/admin/inventory?limit=1&offset=1', 'inventory-worker-a'), { status: 400 });
+    await assert.rejects(get('/v1/admin/inventory?limit=1&cursor=invalid', 'inventory-worker-a'), { status: 400 });
     await assert.rejects(get('/v1/admin/inventory?warehouseId=kho-b', 'inventory-worker-a'), { status: 403 });
     await assert.rejects(get('/v1/admin/inventory/inv_rcp_item-c', 'inventory-worker-a'), { status: 403 });
     await assert.rejects(get('/v1/admin/inventory', 'donor'), { status: 403 });
@@ -68,7 +78,7 @@ test('US14: read inventory by assigned warehouse, filter, paginate and trace rec
     assert.equal(legacy.item.id, 'legacy-item');
     assert.deepEqual(legacy.movements, []);
     await assert.rejects(get('/v1/admin/inventory/khong@hop-le', 'inventory-worker-a'), { status: 400 });
-    // Trần offset chặn request bill quá nhiều document read.
+    // API không nhận offset để tránh tính phí đọc các document bị bỏ qua.
     await assert.rejects(get('/v1/admin/inventory?offset=999999', 'inventory-worker-a'), { status: 400 });
   } finally {
     await deleteApp(app);

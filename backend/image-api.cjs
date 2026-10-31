@@ -6,9 +6,11 @@ const RECORD_ID = /^(?:cat_)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-
 const IMAGE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 class ApiError extends Error {
-  constructor(status, message) {
+  constructor(status, message, code = undefined, details = undefined) {
     super(message);
     this.status = status;
+    if (code) this.code = code;
+    if (details) this.details = details;
   }
 }
 
