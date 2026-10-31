@@ -123,8 +123,9 @@ const currentYear = new Date().getFullYear()
 }
 
 .auth-shell__logo-mark {
-  width: 36px;
-  height: 36px;
+  width: 48px;
+  height: 48px;
+  filter: drop-shadow(0 3px 6px rgb(20 67 45 / 0.14));
 }
 
 .auth-shell__logo-tag {

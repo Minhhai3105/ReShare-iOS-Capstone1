@@ -1,0 +1,87 @@
+name: CI
+
+# Chạy cho MỌI pull request, không lọc theo nhánh đích: các PR stacked
+# (ví dụ #47 → #46, #42 → #34) nhắm vào nhánh story chứ không phải dev,
+# nếu lọc branches thì chúng sẽ không có check nào.
+on:
+  pull_request:
+  push:
+    branches: [dev, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Push thêm commit vào cùng PR thì huỷ run cũ cho đỡ tốn runner.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-unit:
+    name: Backend unit (không cần emulator)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci --prefix backend
+      # Các file *.emulator.test.cjs tự skip vì chưa có FIRESTORE_EMULATOR_HOST.
+      - run: npm --prefix backend test
+
+  emulator:
+    name: Rules + Backend trên Firestore Emulator
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            backend/package-lock.json
+      # Firestore Emulator chạy trên JVM nên phải có Java trước.
+      # firebase-tools 15 từ chối chạy với Java dưới 21 — đã thử Java 17 và nó
+      # fail ngay: "no longer supports Java version before 21".
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci
+      - run: npm ci --prefix backend
+      # firebase-tools là công cụ CI, cố tình không thêm vào package.json của project.
+      - run: npm i -g firebase-tools@15
+      # emulators:exec tự set FIRESTORE_EMULATOR_HOST nên nhóm *.emulator.test.cjs
+      # và toàn bộ tests/*.rules.test.cjs mới thực sự chạy ở job này.
+      - run: npm run test:all:emulator
+
+  web:
+    name: Web build + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ReShare-Web/package-lock.json
+      - run: npm ci --prefix ReShare-Web
+      - run: npm --prefix ReShare-Web run build
+      # Gọi node --test trực tiếp thay vì qua npm script: package.json hiện chỉ có
+      # test:queue trỏ donation.service.test.mjs, còn distribution.test.mjs và
+      # reports.test.mjs chưa được script nào gọi tới.
+      # Pattern đặt trong ngoặc kép để NODE tự glob, không phải shell: bash không bật
+      # globstar nên src/**/ sẽ chỉ khớp 1 cấp và bỏ sót test nằm sâu hơn
+      # (ví dụ src/admin/inventory/inventory.service.test.mjs).
+      - name: Chạy test trong ReShare-Web/tests và src
+        working-directory: ReShare-Web
+        run: node --test --test-concurrency=1 "tests/**/*.test.mjs" "src/**/*.test.mjs"
+      # verify-landing.mjs nằm ở gốc ReShare-Web (ngoài tests/) và cần dist/ từ bước
+      # build ở trên, nên phải gọi riêng — nếu không thì US24 không có check nào.
+      - name: Kiểm tra bản build landing (US24)
+        working-directory: ReShare-Web
+        run: node --test verify-landing.mjs

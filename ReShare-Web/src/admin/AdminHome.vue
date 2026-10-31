@@ -45,6 +45,9 @@ async function onSignOutClick() {
       <RouterLink :to="{ name: ADMIN_ROUTE.donationQueue }" class="auth-btn auth-btn--soft admin-home__sign-out">
         <AuthIcon name="inbox" />Hàng đợi yêu cầu quyên góp
       </RouterLink>
+      <RouterLink :to="{ name: ADMIN_ROUTE.inventory }" class="auth-btn auth-btn--soft admin-home__sign-out">
+        <AuthIcon name="warehouse" />Kho hàng
+      </RouterLink>
 
       <RouterLink :to="{ name: ADMIN_ROUTE.beneficiaryList }" class="auth-btn auth-btn--primary admin-home__staff-link">
         <AuthIcon name="users" />Người thụ hưởng
