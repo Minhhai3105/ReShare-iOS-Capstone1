@@ -350,6 +350,9 @@ onBeforeUnmount(() => {
           <RouterLink :to="{ name: ADMIN_ROUTE.inventory }" class="admin-ops__nav-link">
             <AuthIcon name="shelves" :size="17" />Kho hàng
           </RouterLink>
+          <RouterLink :to="{ name: ADMIN_ROUTE.beneficiaryList }" class="admin-ops__nav-link">
+            <AuthIcon name="users" :size="17" />Người thụ hưởng
+          </RouterLink>
           <RouterLink :to="{ name: 'admin-distribution' }" class="admin-ops__nav-link">
             <AuthIcon name="warehouse" :size="17" />Xuất kho & phân phối
           </RouterLink>
