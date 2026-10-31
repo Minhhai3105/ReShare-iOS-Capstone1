@@ -1,4 +1,5 @@
 const { ApiError } = require('./image-api.cjs');
+const { runTransaction } = require('./firestore-transaction.cjs');
 
 function createReceiptApi({ db, verifyToken, serverTimestamp }) {
   if (!db || !verifyToken) throw new Error('Receipt API configuration is incomplete');
@@ -80,7 +81,7 @@ function createReceiptApi({ db, verifyToken, serverTimestamp }) {
       const receiptRef = db.collection('receipts').doc(receiptId);
       const donationRef = db.collection('donations').doc(donationId);
 
-      const receiptData = await db.runTransaction(async (transaction) => {
+      const receiptData = await runTransaction(db, async (transaction) => {
         const donationDoc = await transaction.get(donationRef);
         if (!donationDoc.exists) {
           throw new ApiError(404, 'Không tìm thấy đơn quyên góp');

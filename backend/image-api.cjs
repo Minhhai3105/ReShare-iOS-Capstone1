@@ -1,4 +1,5 @@
 const { randomUUID } = require('node:crypto');
+const { runTransaction } = require('./firestore-transaction.cjs');
 
 const MAX_IMAGES_PER_RECORD = 6;
 const MAX_INTENTS_PER_USER_PER_DAY = 60;
@@ -62,7 +63,7 @@ function createImageApi({ db, verifyToken, cloudinary, cloudName, apiKey, apiSec
     const batchRef = batchReference(purpose, recordId);
     const today = new Date(now()).toISOString().slice(0, 10);
     const quotaRef = db.collection('image_upload_quotas').doc(`${uid}_${today}`);
-    const publicId = await db.runTransaction(async transaction => {
+    const publicId = await runTransaction(db, async transaction => {
       const [batchSnap, quotaSnap] = await Promise.all([
         transaction.get(batchRef), transaction.get(quotaRef)
       ]);

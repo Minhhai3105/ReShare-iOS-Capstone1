@@ -1,5 +1,6 @@
 const { ApiError } = require('./image-api.cjs');
 const { createHash } = require('node:crypto');
+const { runTransaction } = require('./firestore-transaction.cjs');
 
 function createDistributionApi({ db, verifyToken, serverTimestamp }) {
   if (!db || !verifyToken) throw new Error('Distribution API configuration is incomplete');
@@ -171,7 +172,7 @@ function createDistributionApi({ db, verifyToken, serverTimestamp }) {
       const voucherRef = db.collection('distribution_vouchers').doc(voucherId);
       const movementRef = db.collection('inventory_movements').doc(movementId);
 
-      const result = await db.runTransaction(async (transaction) => {
+      const result = await runTransaction(db, async (transaction) => {
         const [voucherDoc, movementDoc] = await Promise.all([
           transaction.get(voucherRef), transaction.get(movementRef),
         ]);

@@ -1,4 +1,5 @@
 const { ApiError } = require('./image-api.cjs');
+const { runTransaction } = require('./firestore-transaction.cjs');
 const dateString = value => value?.toDate?.().toISOString() ||
   (value instanceof Date ? value.toISOString() : value || null);
 
@@ -62,7 +63,7 @@ function createStockIntakeApi({ db, verifyToken, serverTimestamp }) {
     const entryRef = db.collection('stock_entries').doc(`ste_${receiptId}`);
     const inventoryRef = db.collection('inventory').doc(`inv_${receiptId}`);
     const movementRef = db.collection('inventory_movements').doc(`mov_in_${receiptId}`);
-    const replayed = await db.runTransaction(async tx => {
+    const replayed = await runTransaction(db, async tx => {
       const [receiptDoc, donationDoc, entryDoc, inventoryDoc, movementDoc] = await Promise.all([
         tx.get(receiptRef), tx.get(db.collection('donations').doc(donationId)),
         tx.get(entryRef), tx.get(inventoryRef), tx.get(movementRef),

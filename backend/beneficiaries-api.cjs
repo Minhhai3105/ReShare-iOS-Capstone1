@@ -1,6 +1,7 @@
 const { ApiError } = require('./image-api.cjs');
 const { FieldPath } = require('firebase-admin/firestore');
 const { cursorFor, readCursor, warehouseQueries, compareBy, mergedPage } = require('./scoped-pagination.cjs');
+const { runTransaction } = require('./firestore-transaction.cjs');
 
 const VALID_ID = /^[A-Za-z0-9_-]{1,128}$/;
 const PROFILE_FIELDS = ['name', 'phone', 'notes', 'needs'];
@@ -214,7 +215,7 @@ function createBeneficiariesApi({ db, verifyToken, serverTimestamp }) {
     if (!canAccess(staff, warehouseId)) throw new ApiError(403, 'Warehouse access denied');
     if (!fields.needs) throw new ApiError(400, 'Support needs are required');
     const ref = db.collection('beneficiaries').doc();
-    await db.runTransaction(async tx => {
+    await runTransaction(db, async tx => {
       const warehouse = await tx.get(db.collection('warehouses').doc(warehouseId));
       if (!warehouse.exists || warehouse.data().status !== 'active') {
         throw new ApiError(409, 'Warehouse is inactive or missing');
@@ -249,7 +250,7 @@ function createBeneficiariesApi({ db, verifyToken, serverTimestamp }) {
     }
     if (!verify && !Object.keys(fields).length) throw new ApiError(400, 'No profile fields to update');
     const ref = db.collection('beneficiaries').doc(id);
-    await db.runTransaction(async tx => {
+    await runTransaction(db, async tx => {
       const doc = await tx.get(ref);
       if (!doc.exists) throw new ApiError(404, 'Beneficiary not found');
       if (!canAccess(staff, doc.data().warehouseId)) throw new ApiError(403, 'Warehouse access denied');

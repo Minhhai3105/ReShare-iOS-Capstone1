@@ -1,5 +1,6 @@
 const { randomUUID } = require('node:crypto');
 const { FieldValue } = require('firebase-admin/firestore');
+const { runTransaction } = require('./firestore-transaction.cjs');
 
 const STAFF_ROLES = new Set(['system_admin', 'warehouse_admin']);
 const WAREHOUSE_ID = /^[a-z0-9][a-z0-9_-]{0,63}$/;
@@ -38,7 +39,7 @@ async function setStaffAssignment({ db, auth, actorUid, targetUid, role, warehou
   const warehouseRefs = warehouseIds.map(id => db.collection('warehouses').doc(id));
   const auditRef = db.collection('staff_assignment_audit').doc(randomUUID());
 
-  await db.runTransaction(async transaction => {
+  await runTransaction(db, async transaction => {
     const [target, actor, marker, ...warehouses] = await Promise.all([
       transaction.get(targetRef),
       actorRef ? transaction.get(actorRef) : Promise.resolve(null),
@@ -73,7 +74,7 @@ async function revokeStaffAssignment({ db, actorUid, targetUid }) {
   const targetRef = db.collection('staff_assignments').doc(targetUid);
   const auditRef = db.collection('staff_assignment_audit').doc(randomUUID());
 
-  await db.runTransaction(async transaction => {
+  await runTransaction(db, async transaction => {
     const [actor, target] = await Promise.all([transaction.get(actorRef), transaction.get(targetRef)]);
     if (!actor.exists || actor.data().active !== true || actor.data().role !== 'system_admin') {
       throw new StaffAssignmentError(403, 'Only an active System Admin may revoke staff access');
