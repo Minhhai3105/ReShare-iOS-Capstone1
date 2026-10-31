@@ -1,8 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createReportsApi } = require('../reports-api.cjs');
+const { createQuery, getAll } = require('./fake-query.cjs');
 
-function setup() {
+function setup({ maxDocs } = {}) {
   const documents = new Map([
     ['staff_assignments/admin', { uid: 'admin', email: 'admin@reshare.vn', role: 'system_admin', active: true, warehouseIds: [] }],
     ['staff_assignments/worker-hai-chau', { uid: 'worker-hai-chau', email: 'hc@reshare.vn', role: 'warehouse_admin', active: true, warehouseIds: ['hai-chau'] }],
@@ -108,9 +109,12 @@ function setup() {
     data: () => (data ? { ...data } : undefined),
   });
 
+  const reads = [];
   const db = {
+    getAll: getAll(reads),
     collection(name) {
       return {
+        ...createQuery(name, documents, snapshot, reads),
         doc(id) {
           const key = `${name}/${id}`;
           return {
@@ -118,16 +122,6 @@ function setup() {
             id,
             async get() { return snapshot(id, documents.get(key)); },
           };
-        },
-        async get() {
-          const docs = [];
-          for (const [key, val] of documents.entries()) {
-            if (key.startsWith(`${name}/`)) {
-              const id = key.slice(name.length + 1);
-              docs.push(snapshot(id, val));
-            }
-          }
-          return { docs, empty: docs.length === 0 };
         },
       };
     },
@@ -143,9 +137,10 @@ function setup() {
   const api = createReportsApi({
     db,
     verifyToken,
+    ...(maxDocs ? { maxDocs } : {}),
   });
 
-  return { api, documents };
+  return { api, documents, reads };
 }
 
 test('RC1D-95: unauthenticated request returns 401', async () => {
@@ -257,3 +252,79 @@ test('RC1D-95: strict PII removal protects donor and beneficiary data', async ()
   }
 });
 
+
+const MAY = '/v1/admin/reports?from=2025-05-01&to=2025-05-31';
+const ADMIN = { authorization: 'Bearer admin-token' };
+
+test('Giới hạn truy vấn: không quét cả lịch sử, chỉ đọc bản ghi trong kỳ và tồn còn hàng', async () => {
+  const { api, documents, reads } = setup();
+  for (let i = 0; i < 40; i += 1) {
+    documents.set(`donations/old-${i}`, { title: 'Cũ', warehouseId: 'hai-chau', category: 'clothing', quantity: 1, createdAt: new Date('2024-03-01T02:00:00Z') });
+    documents.set(`receipts/old-${i}`, { warehouseId: 'hai-chau', quantity: 1, createdAt: new Date('2024-03-02T02:00:00Z') });
+    documents.set(`inventory/empty-${i}`, { warehouseId: 'hai-chau', category: 'clothing', itemName: 'Đã xuất hết', quantityAvailable: 0 });
+  }
+  documents.set('inventory/legacy-available', { warehouseId: 'son-tra', category: 'blankets', itemName: 'Chăn cũ', available: 4 });
+
+  const res = await api.handle('GET', MAY, ADMIN);
+
+  const scanned = reads.filter(read => read.kind === 'scan').map(read => read.collection);
+  assert.deepEqual(scanned.sort(), ['categories', 'warehouses'], 'chỉ bảng danh mục nhỏ mới được đọc toàn bộ');
+  const count = (collection, kind) => reads.filter(read => read.collection === collection && read.kind === kind)
+    .reduce((sum, read) => sum + read.count, 0);
+  assert.equal(count('donations', 'query'), 3, 'chỉ 3 đơn trong tháng 5');
+  assert.equal(count('receipts', 'query'), 1);
+  assert.equal(count('inventory', 'query'), 4, '3 mục còn hàng + 1 mục dữ liệu cũ dùng field available');
+  assert.ok(!res.body.inventory.some(item => item.id.startsWith('empty-')));
+  assert.equal(res.body.inventory.find(item => item.id === 'legacy-available')?.available, 4);
+});
+
+test('Giới hạn truy vấn: phiếu nhận trong kỳ trỏ tới đơn tạo trước kỳ vẫn lấy đúng danh mục, nhưng đơn đó không thành dòng', async () => {
+  const { api, documents, reads } = setup();
+  documents.set('donations/don-old', { title: 'Từ điển', warehouseId: 'hai-chau', category: 'books', unitId: 'bộ', createdAt: new Date('2025-04-20T02:00:00Z') });
+  documents.set('receipts/rcp_don-old', { donationId: 'don-old', warehouseId: 'hai-chau', quantity: 2, unitId: 'bộ', createdAt: new Date('2025-05-06T02:00:00Z') });
+
+  const res = await api.handle('GET', MAY, ADMIN);
+
+  const receipt = res.body.sources.find(row => row.id === 'rcp_don-old');
+  assert.equal(receipt.categoryId, 'books');
+  assert.equal(receipt.item, 'Từ điển');
+  assert.ok(!res.body.sources.some(row => row.id === 'don-old'), 'đơn tạo trước kỳ không được tính vào kỳ');
+  assert.ok(reads.some(read => read.collection === 'donations' && read.kind === 'lookup'), 'đọc riêng đúng đơn được tham chiếu');
+});
+
+test('Giới hạn truy vấn: movement trỏ tới mục tồn đã xuất hết vẫn lấy đúng tên và danh mục', async () => {
+  const { api, documents } = setup();
+  documents.set('inventory/inv-empty', { warehouseId: 'hai-chau', category: 'household', itemName: 'Nồi cơm', quantityAvailable: 0, unitId: 'chiếc' });
+  documents.set('inventory_movements/mov-empty', {
+    type: 'distribution', inventoryItemId: 'inv-empty', warehouseId: 'hai-chau', quantity: -1,
+    createdAt: new Date('2025-05-12T02:00:00Z'),
+  });
+
+  const res = await api.handle('GET', MAY, ADMIN);
+
+  const movement = res.body.sources.find(row => row.id === 'mov-empty');
+  assert.equal(movement.item, 'Nồi cơm');
+  assert.equal(movement.categoryId, 'household');
+  assert.ok(!res.body.inventory.some(item => item.id === 'inv-empty'), 'mục đã hết không nằm trong snapshot tồn');
+});
+
+test('Giới hạn truy vấn: biên ngày tính theo giờ Việt Nam', async () => {
+  const { api, documents } = setup();
+  const at = iso => ({ title: 'Biên', warehouseId: 'hai-chau', category: 'clothing', quantity: 1, createdAt: new Date(iso) });
+  documents.set('donations/edge-before', at('2025-04-30T16:59:59Z'));
+  documents.set('donations/edge-first', at('2025-04-30T17:00:00Z'));
+  documents.set('donations/edge-last', at('2025-05-31T16:59:59Z'));
+  documents.set('donations/edge-after', at('2025-05-31T17:00:00Z'));
+
+  const ids = (await api.handle('GET', MAY, ADMIN)).body.sources.map(row => row.id);
+
+  assert.ok(ids.includes('edge-first') && ids.includes('edge-last'));
+  assert.ok(!ids.includes('edge-before') && !ids.includes('edge-after'));
+});
+
+test('Giới hạn truy vấn: vượt trần thì từ chối rõ ràng, không cắt bớt âm thầm', async () => {
+  const { api, documents } = setup({ maxDocs: 3 });
+  assert.equal((await api.handle('GET', MAY, ADMIN)).status, 200, 'đúng bằng trần vẫn trả đủ');
+  documents.set('donations/don-extra', { title: 'Thêm', warehouseId: 'hai-chau', category: 'clothing', quantity: 1, createdAt: new Date('2025-05-20T02:00:00Z') });
+  await assert.rejects(() => api.handle('GET', MAY, ADMIN), { status: 422, code: 'VALIDATION' });
+});

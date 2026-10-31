@@ -1,4 +1,5 @@
 const { ApiError } = require('./image-api.cjs');
+const { DEFAULT_MAX_DOCS, readCapped, readInStock, getByIds } = require('./bounded-reads.cjs');
 
 const REPORT_TIMEZONE = 'Asia/Ho_Chi_Minh';
 const dayFormatter = new Intl.DateTimeFormat('en-CA', {
@@ -24,7 +25,7 @@ const DEFAULT_CATEGORIES = [
   { id: 'other', name: 'Khác' },
 ];
 
-function createReportsApi({ db, verifyToken, serverTimestamp }) {
+function createReportsApi({ db, verifyToken, serverTimestamp, maxDocs = DEFAULT_MAX_DOCS }) {
   if (!db || !verifyToken) throw new Error('Reports API configuration is incomplete');
 
   async function getStaffAssignment(headers) {
@@ -121,10 +122,41 @@ function createReportsApi({ db, verifyToken, serverTimestamp }) {
     // 3. Collect sources (donations, receipts, movements) - with strict PII removal
     const sources = [];
 
+    // Ngày báo cáo tính theo giờ Việt Nam (UTC+7, không đổi giờ), nên [from, to] ứng đúng với
+    // [from 00:00 +07:00, ngày sau to 00:00 +07:00) — lọc ngay trong truy vấn thay vì quét cả lịch sử.
+    // Chỉ khớp document có createdAt kiểu Timestamp; mọi luồng ghi hiện tại đều ghi đúng kiểu đó.
+    const rangeStart = new Date(`${from}T00:00:00+07:00`);
+    const rangeEnd = new Date(Date.parse(`${to}T00:00:00+07:00`) + 24 * 60 * 60 * 1000);
+    const inRange = name => readCapped(db.collection(name)
+      .where('createdAt', '>=', rangeStart).where('createdAt', '<', rangeEnd), maxDocs,
+      'Khoảng thời gian có quá nhiều bản ghi để tổng hợp trong một lần. Hãy thu hẹp khoảng ngày.');
+    const [donationDocs, receiptDocs, movementDocs, voucherDocs, inventoryDocs] = await Promise.all([
+      inRange('donations'), inRange('receipts'), inRange('inventory_movements'), inRange('distribution_vouchers'),
+      readInStock(db, maxDocs, 'Tồn kho hiện có quá nhiều mục để tổng hợp trong một báo cáo.'),
+    ]);
+
+    // Bảng tra chỉ gồm document được tham chiếu: phiếu nhận trong kỳ có thể trỏ tới đơn tạo trước kỳ,
+    // movement có thể trỏ tới mục tồn đã xuất hết — đọc thêm đúng các ID đó.
+    const inventoryById = new Map(inventoryDocs.map(doc => [doc.id, doc]));
+    const voucherItemId = d => (Array.isArray(d.lines) && d.lines[0] ? d.lines[0].inventoryItemId : '') || d.itemId;
+    const missingInventoryIds = [
+      ...movementDocs.map(doc => doc.data().inventoryItemId || doc.data().itemId),
+      ...voucherDocs.map(doc => voucherItemId(doc.data())),
+    ].filter(id => id && !inventoryById.has(id));
+    for (const doc of await getByIds(db, 'inventory', missingInventoryIds)) inventoryById.set(doc.id, doc);
+
+    const donationById = new Map(donationDocs.map(doc => [doc.id, doc]));
+    const missingDonationIds = [
+      ...receiptDocs.map(doc => doc.data().donationId),
+      ...movementDocs.map(doc => doc.data().donationId),
+      ...[...inventoryById.values()].map(doc => doc.data())
+        .filter(d => !(d.category || d.categoryId)).map(d => d.donationId),
+    ].filter(id => id && !donationById.has(id));
+    for (const doc of await getByIds(db, 'donations', missingDonationIds)) donationById.set(doc.id, doc);
+
     // Pre-load donation and inventory category lookups so receipts and movements inherit exact category
-    const donationsSnap = await db.collection('donations').get();
     const donationMeta = new Map();
-    for (const doc of donationsSnap.docs) {
+    for (const doc of donationById.values()) {
       const d = doc.data();
       const cat = d.category || d.categoryId || '';
       const unit = d.unitId || d.unitName || d.unit || 'chiếc';
@@ -132,9 +164,8 @@ function createReportsApi({ db, verifyToken, serverTimestamp }) {
       donationMeta.set(doc.id, { category: cat, unit, itemTitle });
     }
 
-    const inventorySnap = await db.collection('inventory').get();
     const inventoryMeta = new Map();
-    for (const doc of inventorySnap.docs) {
+    for (const doc of inventoryById.values()) {
       const d = doc.data();
       const cat = d.category || d.categoryId || (d.donationId ? donationMeta.get(d.donationId)?.category : '') || '';
       const unit = d.unitId || d.unit || 'chiếc';
@@ -143,7 +174,7 @@ function createReportsApi({ db, verifyToken, serverTimestamp }) {
     }
 
     // 3a. Donations
-    for (const doc of donationsSnap.docs) {
+    for (const doc of donationDocs) {
       const d = doc.data();
       const rawTs = d.createdAt?.toDate?.().toISOString() || d.createdAt || d.created_at || '';
       const day = reportDay(rawTs);
@@ -168,8 +199,7 @@ function createReportsApi({ db, verifyToken, serverTimestamp }) {
     }
 
     // 3b. Receipts
-    const receiptsSnap = await db.collection('receipts').get();
-    for (const doc of receiptsSnap.docs) {
+    for (const doc of receiptDocs) {
       const d = doc.data();
       const rawTs = d.createdAt?.toDate?.().toISOString() || d.createdAt || '';
       const day = reportDay(rawTs);
@@ -194,9 +224,8 @@ function createReportsApi({ db, verifyToken, serverTimestamp }) {
     }
 
     // 3c. Inventory movements (intake and distribution)
-    const movementsSnap = await db.collection('inventory_movements').get();
     const seenMovementIds = new Set();
-    for (const doc of movementsSnap.docs) {
+    for (const doc of movementDocs) {
       const d = doc.data();
       const rawTs = d.createdAt?.toDate?.().toISOString() || d.createdAt || d.timestamp || '';
       const day = reportDay(rawTs);
@@ -226,8 +255,7 @@ function createReportsApi({ db, verifyToken, serverTimestamp }) {
     }
 
     // Also include distribution vouchers if any were created without a movement
-    const vouchersSnap = await db.collection('distribution_vouchers').get();
-    for (const doc of vouchersSnap.docs) {
+    for (const doc of voucherDocs) {
       const d = doc.data();
       if (d.movementId && seenMovementIds.has(d.movementId)) continue;
       const rawTs = d.createdAt?.toDate?.().toISOString() || d.createdAt || d.timestamp || '';
@@ -258,7 +286,7 @@ function createReportsApi({ db, verifyToken, serverTimestamp }) {
     sources.sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp) || a.id.localeCompare(b.id));
 
     // 4. Inventory snapshot
-    const inventory = inventorySnap.docs.map(doc => {
+    const inventory = inventoryDocs.map(doc => {
       const d = doc.data();
       const invMeta = inventoryMeta.get(doc.id) || {};
       const currentAvailable = typeof d.quantityAvailable === 'number'

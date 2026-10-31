@@ -1,8 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createDistributionApi } = require('../distribution-api.cjs');
+const { createQuery } = require('./fake-query.cjs');
 
-function setup() {
+function setup({ maxDocs } = {}) {
   const documents = new Map([
     ['staff_assignments/admin', { uid: 'admin', email: 'admin@reshare.vn', role: 'system_admin', active: true, warehouseIds: [] }],
     ['staff_assignments/worker-hai-chau', { uid: 'worker-hai-chau', email: 'hc@reshare.vn', role: 'warehouse_admin', active: true, warehouseIds: ['hai-chau'] }],
@@ -74,9 +75,11 @@ function setup() {
     data: () => (data ? { ...data } : undefined),
   });
 
+  const reads = [];
   const db = {
     collection(name) {
       return {
+        ...createQuery(name, documents, snapshot, reads),
         doc(id) {
           const key = `${name}/${id}`;
           return {
@@ -84,16 +87,6 @@ function setup() {
             id,
             async get() { return snapshot(id, documents.get(key)); },
           };
-        },
-        async get() {
-          const docs = [];
-          for (const [key, val] of documents.entries()) {
-            if (key.startsWith(`${name}/`)) {
-              const id = key.slice(name.length + 1);
-              docs.push(snapshot(id, val));
-            }
-          }
-          return { docs, empty: docs.length === 0 };
         },
       };
     },
@@ -126,9 +119,10 @@ function setup() {
     db,
     verifyToken,
     serverTimestamp: () => new Date('2026-10-29T00:00:00Z'),
+    ...(maxDocs ? { maxDocs } : {}),
   });
 
-  return { api, documents };
+  return { api, documents, reads };
 }
 
 test('RC1D-83: unauthenticated request returns 401', async () => {
@@ -385,3 +379,28 @@ test('RC1D-83: a new distribution requires a version and stable request key', as
     { status: 400, code: 'VALIDATION' });
 });
 
+
+test('Giới hạn truy vấn: options chỉ đọc mục còn tồn và hồ sơ đã duyệt, không quét cả collection', async () => {
+  const { api, documents, reads } = setup();
+  for (let i = 0; i < 30; i += 1) {
+    documents.set(`inventory/empty-${i}`, { itemName: 'Đã xuất hết', warehouseId: 'hai-chau', quantityAvailable: 0, unitId: 'chiếc', version: 3 });
+    documents.set(`beneficiaries/unverified-${i}`, { name: 'Chưa duyệt', warehouseId: 'hai-chau', status: 'unverified' });
+  }
+  documents.set('beneficiaries/ben-approved-new', { name: 'Đã duyệt theo schema mới', warehouseId: 'hai-chau', status: 'approved' });
+
+  const res = await api.handle('GET', '/v1/admin/distribution/options', { authorization: 'Bearer hc-token' });
+
+  assert.deepEqual(reads.filter(read => read.kind === 'scan').map(read => read.collection), ['warehouses']);
+  const count = collection => reads.filter(read => read.collection === collection).reduce((sum, read) => sum + read.count, 0);
+  assert.equal(count('inventory'), 3, 'chỉ 3 mục còn tồn (gồm 2 mục dữ liệu cũ dùng field available)');
+  assert.ok(count('beneficiaries') <= 3, 'không đọc hồ sơ chưa duyệt');
+  assert.deepEqual(res.body.inventory.map(item => item.id), ['item-1', 'item-us13']);
+  assert.deepEqual(res.body.beneficiaries.map(entry => entry.id), ['ben-1', 'ben-approved-new']);
+});
+
+test('Giới hạn truy vấn: options vượt trần thì từ chối rõ ràng, không cắt bớt âm thầm', async () => {
+  const { api } = setup({ maxDocs: 2 });
+  await assert.rejects(
+    () => api.handle('GET', '/v1/admin/distribution/options', { authorization: 'Bearer hc-token' }),
+    { status: 422, code: 'VALIDATION' });
+});

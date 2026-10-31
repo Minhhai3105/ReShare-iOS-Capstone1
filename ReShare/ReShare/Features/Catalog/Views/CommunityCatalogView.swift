@@ -25,6 +25,9 @@ struct CommunityCatalogView: View {
 
     // Dữ liệu Kho đồ 0đ (100% Real Data nạp từ Cloud Firestore)
     @State private var catalogItems: [CatalogItem] = []
+    // Con trỏ trang kế; nil khi đã tải hết
+    @State private var nextCatalogCursor: CatalogPageCursor? = nil
+    @State private var isLoadingMore: Bool = false
 
     // Cột lưới 2 cột
     private let gridColumns = [
@@ -80,6 +83,11 @@ struct CommunityCatalogView: View {
                         .foregroundColor(.red)
                     }
                     itemsGridView
+
+                    // Phân trang: bộ lọc chỉ chạy trên các món đã tải, nên nói rõ khi còn trang sau
+                    if nextCatalogCursor != nil {
+                        loadMoreSection
+                    }
 
                     // 5. Banner tuần hoàn cộng đồng Đà Nẵng
                     circularEconomyBanner
@@ -139,14 +147,36 @@ struct CommunityCatalogView: View {
     // Tải danh sách đồ 0đ thật từ Cloud Firestore
     private func loadCatalog() async {
         do {
-            let liveItems = try await FirestoreService.shared.fetchCatalogItems()
+            let page = try await FirestoreService.shared.fetchCatalogItems()
             await MainActor.run {
-                self.catalogItems = liveItems
+                self.catalogItems = page.items
+                self.nextCatalogCursor = page.nextCursor
                 self.loadError = nil
             }
         } catch {
             await MainActor.run {
                 self.loadError = "Không thể tải Kho đồ 0đ: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    // Tải thêm trang cũ hơn; bỏ món đã có (vd. món vừa đăng được chèn sẵn ở đầu danh sách)
+    private func loadMoreCatalog() async {
+        guard let cursor = nextCatalogCursor, !isLoadingMore else { return }
+        await MainActor.run { self.isLoadingMore = true }
+        do {
+            let page = try await FirestoreService.shared.fetchCatalogItems(after: cursor)
+            await MainActor.run {
+                let knownIds = Set(self.catalogItems.map(\.id))
+                self.catalogItems.append(contentsOf: page.items.filter { !knownIds.contains($0.id) })
+                self.nextCatalogCursor = page.nextCursor
+                self.loadError = nil
+                self.isLoadingMore = false
+            }
+        } catch {
+            await MainActor.run {
+                self.loadError = "Không thể tải thêm Kho đồ 0đ: \(error.localizedDescription)"
+                self.isLoadingMore = false
             }
         }
     }
@@ -284,6 +314,33 @@ struct CommunityCatalogView: View {
                 }
             }
         }
+    }
+
+    // MARK: - 4b. Tải thêm (phân trang)
+    private var loadMoreSection: some View {
+        VStack(spacing: 6) {
+            Text("Đang hiển thị \(catalogItems.count) món mới nhất. Bộ lọc và tìm kiếm chỉ áp dụng trên các món đã tải.")
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+
+            Button(action: { Task { await loadMoreCatalog() } }) {
+                HStack(spacing: 6) {
+                    if isLoadingMore {
+                        ProgressView()
+                    }
+                    Text(isLoadingMore ? "Đang tải..." : "Xem thêm đồ cũ hơn")
+                        .font(.system(size: 13, weight: .bold))
+                }
+                .foregroundColor(Color(red: 0.11, green: 0.35, blue: 0.20))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(Color.green.opacity(0.12))
+                .clipShape(Capsule())
+            }
+            .disabled(isLoadingMore)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private func itemCardView(for item: CatalogItem) -> some View {

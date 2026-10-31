@@ -2,8 +2,9 @@ const { ApiError } = require('./image-api.cjs');
 const { createHash } = require('node:crypto');
 const { runTransaction } = require('./firestore-transaction.cjs');
 const { assertCurrentStaffAccess } = require('./staff-access.cjs');
+const { DEFAULT_MAX_DOCS, readUnion, readInStock } = require('./bounded-reads.cjs');
 
-function createDistributionApi({ db, verifyToken, serverTimestamp }) {
+function createDistributionApi({ db, verifyToken, serverTimestamp, maxDocs = DEFAULT_MAX_DOCS }) {
   if (!db || !verifyToken) throw new Error('Distribution API configuration is incomplete');
   const now = serverTimestamp || (() => new Date());
 
@@ -140,9 +141,10 @@ function createDistributionApi({ db, verifyToken, serverTimestamp }) {
 
       const allowedIds = new Set(queryWarehouseId ? [queryWarehouseId] : allWarehouses.map(w => w.id));
 
-      // 2. Fetch Inventory
-      const inventorySnap = await db.collection('inventory').get();
-      const inventory = inventorySnap.docs
+      // 2. Fetch Inventory — chỉ mục còn tồn: mục đã xuất hết không chọn để xuất được nữa,
+      // nên không cần quét cả lịch sử nhập kho mỗi lần mở biểu mẫu.
+      const inventoryDocs = await readInStock(db, maxDocs, 'Có quá nhiều mục tồn để hiển thị trong một biểu mẫu xuất kho.');
+      const inventory = inventoryDocs
         .map(doc => {
           const d = doc.data();
           const currentAvailable = typeof d.quantityAvailable === 'number'
@@ -167,9 +169,11 @@ function createDistributionApi({ db, verifyToken, serverTimestamp }) {
         })
         .filter(item => allowedIds.has(item.warehouseId));
 
-      // 3. Fetch Beneficiaries
-      const beneficiariesSnap = await db.collection('beneficiaries').get();
-      const beneficiaries = beneficiariesSnap.docs
+      // 3. Fetch Beneficiaries — chỉ hồ sơ đã duyệt (dữ liệu cũ đánh dấu bằng approved: true).
+      const beneficiaries = (await readUnion([
+        db.collection('beneficiaries').where('status', '==', 'approved'),
+        db.collection('beneficiaries').where('approved', '==', true),
+      ], maxDocs, 'Có quá nhiều người thụ hưởng đã duyệt để hiển thị trong một biểu mẫu xuất kho.'))
         .map(doc => {
           const d = doc.data();
           return {

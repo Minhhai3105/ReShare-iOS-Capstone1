@@ -153,6 +153,8 @@ function cancelConfirmation(event) {
 }
 
 function newDistribution() {
+  // Options chỉ trả mục còn tồn: mục vừa xuất hết đã rời danh sách thì chọn sang mục kế tiếp.
+  if (!item.value) itemId.value = inventory.value[0]?.id ?? ''
   resetForm()
   nextTick(() => document.getElementById('distribution-quantity')?.focus())
 }
