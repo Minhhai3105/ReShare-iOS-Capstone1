@@ -76,30 +76,30 @@ export const adminRoutes = [
     component: () => import('./donations/views/DonationQueue.vue'),
     meta: { requiresAuth: true, roles: ADMIN_ROLES },
   },
-  {
+  ...(import.meta.env.DEV ? [{
     path: '/admin/beneficiaries',
     name: ADMIN_ROUTE.beneficiaryList,
     component: () => import('./beneficiaries/BeneficiaryList.vue'),
-    meta: { requiresAuth: true, roles: ADMIN_ROLES },
+    meta: { requiresAuth: true, roles: ADMIN_ROLES, devPreview: true },
   },
   {
     path: '/admin/beneficiaries/new',
     name: ADMIN_ROUTE.beneficiaryNew,
     component: () => import('./beneficiaries/BeneficiaryForm.vue'),
-    meta: { requiresAuth: true, roles: ADMIN_ROLES },
+    meta: { requiresAuth: true, roles: ADMIN_ROLES, devPreview: true },
   },
   {
     path: '/admin/beneficiaries/:beneficiaryId',
     name: ADMIN_ROUTE.beneficiaryDetail,
     component: () => import('./beneficiaries/BeneficiaryDetail.vue'),
-    meta: { requiresAuth: true, roles: ADMIN_ROLES },
+    meta: { requiresAuth: true, roles: ADMIN_ROLES, devPreview: true },
   },
   {
     path: '/admin/beneficiaries/:beneficiaryId/edit',
     name: ADMIN_ROUTE.beneficiaryEdit,
     component: () => import('./beneficiaries/BeneficiaryForm.vue'),
-    meta: { requiresAuth: true, roles: ADMIN_ROLES },
-  },
+    meta: { requiresAuth: true, roles: ADMIN_ROLES, devPreview: true },
+  }] : []),
   ...(import.meta.env.DEV ? [{
     path: '/admin/receipt-preview',
     name: 'admin-donation-receipt-preview',

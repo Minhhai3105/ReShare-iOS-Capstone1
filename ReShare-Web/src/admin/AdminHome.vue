@@ -49,8 +49,8 @@ async function onSignOutClick() {
         <AuthIcon name="warehouse" />Kho hàng
       </RouterLink>
 
-      <RouterLink :to="{ name: ADMIN_ROUTE.beneficiaryList }" class="auth-btn auth-btn--primary admin-home__staff-link">
-        <AuthIcon name="users" />Người thụ hưởng
+      <RouterLink v-if="isDemoBuild" :to="{ name: ADMIN_ROUTE.beneficiaryList }" class="auth-btn auth-btn--primary admin-home__staff-link">
+        <AuthIcon name="users" />Người thụ hưởng (xem thử)
       </RouterLink>
 
       <RouterLink v-if="isDemoBuild && demoWarehouse" class="auth-btn auth-btn--primary"
