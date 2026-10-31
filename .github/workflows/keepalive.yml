@@ -1,0 +1,43 @@
+# Giữ backend Render khỏi spin-down.
+#
+# Render free tier ngủ sau ~15 phút không có request; đo thực tế cold start
+# mất 19–22 giây, đủ để làm hỏng nhịp demo trước Hội đồng.
+#
+# Chạy mỗi 5 phút (khoảng ngắn nhất GitHub cho phép). GitHub hay trễ lịch
+# vài phút khi tải cao, nên cố ý đặt 5 phút thay vì 10 để kể cả bị trễ vẫn
+# còn nằm trong cửa sổ 15 phút.
+#
+# Repo đang PUBLIC nên GitHub Actions không tính phút — không tốn gì.
+# Lưu ý: GitHub tự tắt scheduled workflow sau 60 ngày repo không có commit.
+name: Keep-alive backend
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+# Nếu lần chạy trước chưa xong (backend đang cold start) thì bỏ lần mới,
+# tránh dồn job khi Render chậm.
+concurrency:
+  group: keepalive
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping /health
+        run: |
+          URL=https://reshare-ios-capstone1-1.onrender.com/health
+          for i in 1 2 3; do
+            code=$(curl -s -o /dev/null -m 120 -w '%{http_code}' "$URL" || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "Lần $i: HTTP 200 — backend đang thức."
+              exit 0
+            fi
+            echo "Lần $i: HTTP $code — thử lại sau 15s."
+            sleep 15
+          done
+          echo "::error::Backend không trả 200 sau 3 lần thử. Kiểm tra Render dashboard."
+          exit 1
