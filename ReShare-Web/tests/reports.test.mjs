@@ -33,6 +33,22 @@ test('May report totals match independently identified source documents', () => 
   assert.equal(report.rows.some((row) => row.id === 'DEMO-X-DRAFT'), false)
 })
 
+test('unassigned donation is visible only to System Admin without a warehouse filter', () => {
+  const data = structuredClone(reportFixtures)
+  data.sources.push({
+    id: 'DON-UNASSIGNED', type: 'donation', timestamp: '2025-05-04T02:00:00Z',
+    warehouseId: '', categoryId: 'clothing', item: 'Áo chưa phân kho',
+    quantity: 1, unit: 'chiếc', reference: '', status: 'pending',
+  })
+  assert.ok(calculateReports(data, filters, admin).rows.some(row => row.id === 'DON-UNASSIGNED'))
+  assert.ok(!calculateReports(data, filters, staff).rows.some(row => row.id === 'DON-UNASSIGNED'))
+  assert.ok(!calculateReports(data, { ...filters, warehouseId: 'hai-chau' }, admin).rows.some(row => row.id === 'DON-UNASSIGNED'))
+  const csv = parseCsv(buildReportsCsv(data, filters, admin))
+  assert.ok(csv.some(row => row[1] === 'DON-UNASSIGNED' && row[5] === 'Chưa phân kho' && row[0] === REPORT_CSV_NOTICE))
+  const liveCsv = parseCsv(buildReportsCsv(data, filters, admin, 'Dữ liệu chính thức'))
+  assert.ok(liveCsv.some(row => row[1] === 'DON-UNASSIGNED' && row[0] === 'Dữ liệu chính thức'))
+})
+
 test('same filtered rows drive summary, daily series and source table', () => {
   for (const warehouseId of ['', 'hai-chau', 'son-tra']) {
     for (const categoryId of ['', 'clothing', 'blankets', 'household']) {

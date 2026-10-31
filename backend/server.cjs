@@ -9,6 +9,8 @@ const { ApiError: ContactApiError, createContactApi } = require('./contact-api.c
 const { createDonationReviewApi } = require('./donation-review-api.cjs');
 const { createReceiptApi } = require('./receipt-api.cjs');
 const { createStockIntakeApi } = require('./stock-intake-api.cjs');
+const { createDistributionApi } = require('./distribution-api.cjs');
+const { createReportsApi } = require('./reports-api.cjs');
 
 const {
   CLOUDINARY_CLOUD_NAME,
@@ -37,6 +39,8 @@ const contactApi = createContactApi({ db, verifyToken, serverTimestamp: () => Fi
 const donationReviewApi = createDonationReviewApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const receiptApi = createReceiptApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const stockIntakeApi = createStockIntakeApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
+const distributionApi = createDistributionApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
+const reportsApi = createReportsApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const adminWebOrigins = new Set((process.env.ADMIN_WEB_ORIGINS || '')
   .split(',').map(origin => origin.trim()).filter(Boolean));
 
@@ -47,6 +51,11 @@ const server = http.createServer(async (request, response) => {
   const isReceiptPath = /^\/v1\/admin\/donations\/[^/]+\/receipt$/.test(pathname);
   const isStockIntakePath = /^\/v1\/admin\/donations\/[^/]+\/stock-in$/.test(pathname) ||
     /^\/v1\/admin\/stock-entries\/[^/]+$/.test(pathname);
+  // Neo chính xác, KHÔNG dùng startsWith: '/v1/admin/distribution' là tiền tố của
+  // '/v1/admin/distributions' (US17), nên startsWith sẽ nuốt route đó và trả 404.
+  const isDistributionPath = pathname === '/v1/admin/distribution' ||
+    pathname === '/v1/admin/distribution/options';
+  const isReportsPath = pathname === '/v1/admin/reports' || pathname === '/v1/admin/reports/';
   const isAdminImageRead = pathname === '/v1/images/read-access';
   const isContactPath = pathname === '/v1/contact';
   const origin = request.headers.origin;
@@ -87,15 +96,27 @@ const server = http.createServer(async (request, response) => {
       try { body = JSON.parse(raw); }
       catch { throw new ApiError(400, 'Invalid JSON body'); }
     }
-    const handler = isContactPath ? contactApi : isReceiptPath ? receiptApi : isStockIntakePath ? stockIntakeApi : isDonationAdminPath ? donationReviewApi : isAdminApi ? staffApi : api;
-    const result = await handler.handle(request.method, pathname, request.headers, body);
+    // Thứ tự quan trọng: receipt và stock-in là path con của /v1/admin/donations nên
+    // phải đứng trước isDonationAdminPath; isAdminApi là nhánh bắt tất cả cuối cùng.
+    const handler = isContactPath ? contactApi
+      : isReceiptPath ? receiptApi
+      : isStockIntakePath ? stockIntakeApi
+      : isDistributionPath ? distributionApi
+      : isReportsPath ? reportsApi
+      : isDonationAdminPath ? donationReviewApi
+      : isAdminApi ? staffApi
+      : api;
+    const result = await handler.handle(request.method, pathname, request.headers, body, request.url);
     response.writeHead(result.status, responseHeaders);
     response.end(JSON.stringify(result.body));
   } catch (error) {
     const status = error instanceof ApiError || error instanceof ContactApiError ? error.status : 500;
     if (status === 500) console.error('ReShare API failure:', error);
     response.writeHead(status, responseHeaders);
-    response.end(JSON.stringify({ message: status === 500 ? 'Internal server error' : error.message }));
+    const errBody = { message: status === 500 ? 'Internal server error' : error.message };
+    if (error.code) errBody.code = error.code;
+    if (error.details) errBody.details = error.details;
+    response.end(JSON.stringify(errBody));
   }
 });
 
