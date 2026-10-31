@@ -1,6 +1,6 @@
 // Lớp dữ liệu tồn kho. Hiện dùng mock khi dev; bản build báo "chưa kết nối" (chưa nối API #47).
-// Khi nối API phải đổi tên field BE → FE (itemName → name, conditionId → condition, unitId → unit,
-// stockEntryId → stockInVoucherId, inventoryItemId → itemId), không chỉ thay phần thân hàm.
+// Tên field giữ đúng như BE (itemName, conditionId, unitId, quantityReceived, quantityAvailable,
+// stockEntryId, inventoryItemId) để khi nối API không phải đổi tên.
 import { MOCK_WAREHOUSES, createMockInventory, getInventoryScenario } from './inventory.mock'
 import { normalizeText } from '../shared/text.js'
 
@@ -21,6 +21,9 @@ export const CONDITION_LABEL = Object.freeze({
   damaged: 'Hư hỏng cần phân loại',
 })
 
+// Đơn vị của biên bản thực nhận (US12); kho lưu mã unitId.
+export const UNIT_LABEL = Object.freeze({ piece: 'chiếc', kg: 'kg', bag: 'túi', box: 'thùng/hộp', set: 'bộ' })
+
 export const MOVEMENT_TYPE_LABEL = Object.freeze({
   stock_in: 'Nhập kho',
   distribution: 'Phân phối',
@@ -39,7 +42,7 @@ export function getItemSources(item) {
       to: item?.donationId ? { name: DONATION_DETAIL_ROUTE, params: { donationId: item.donationId } } : null,
     },
     { label: 'Biên bản thực nhận', icon: 'clipboard-check', code: item?.receiptId, linked: 'Chưa hỗ trợ mở biên bản', empty: 'Chưa xác nhận', to: null },
-    { label: 'Phiếu nhập kho', icon: 'file-text', code: item?.stockInVoucherId, linked: 'Chưa hỗ trợ xem phiếu', empty: 'Chưa tạo phiếu', to: null },
+    { label: 'Phiếu nhập kho', icon: 'file-text', code: item?.stockEntryId, linked: 'Chưa hỗ trợ xem phiếu', empty: 'Chưa tạo phiếu', to: null },
   ]
 }
 
@@ -82,10 +85,10 @@ export function getAccessibleWarehouses(access) {
 // AC1: số còn là quantityAvailable do BE cập nhật nguyên tử cùng mỗi biến động; FE không tự cộng.
 // Mock không có ô đó nên tính bằng tổng biến động để luôn khớp lịch sử.
 function withStock(item) {
-  const movements = mock.movements.filter(({ itemId }) => itemId === item.id)
+  const movements = mock.movements.filter(({ inventoryItemId }) => inventoryItemId === item.id)
   return {
     ...item,
-    remainingQuantity: movements.reduce((sum, { quantity }) => sum + quantity, 0),
+    quantityAvailable: movements.reduce((sum, { quantity }) => sum + quantity, 0),
     updatedAt: movements.at(-1)?.createdAt ?? null,
     warehouse: getWarehouseInfo(item.warehouseId),
   }
@@ -104,16 +107,16 @@ export async function fetchInventory(access, { warehouseId, search, category, co
       canView(access, item.warehouseId) &&
       (!warehouseId || item.warehouseId === warehouseId) &&
       (!category || item.category === category) &&
-      (!condition || item.condition === condition) &&
-      (!keyword || normalizeText(`${item.name} ${item.id} ${item.stockInVoucherId}`).includes(keyword)))
+      (!condition || item.conditionId === condition) &&
+      (!keyword || normalizeText(`${item.itemName} ${item.id} ${item.stockEntryId}`).includes(keyword)))
     .map(withStock)
     .sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))
 
-  const inStockCount = matched.filter(({ remainingQuantity }) => remainingQuantity > 0).length
+  const inStockCount = matched.filter(({ quantityAvailable }) => quantityAvailable > 0).length
   const counts = { all: matched.length, in_stock: inStockCount, out_of_stock: matched.length - inStockCount }
   const items = stock === STOCK_FILTER.all
     ? matched
-    : matched.filter(({ remainingQuantity }) => (remainingQuantity > 0) === (stock === STOCK_FILTER.inStock))
+    : matched.filter(({ quantityAvailable }) => (quantityAvailable > 0) === (stock === STOCK_FILTER.inStock))
   return { items, counts }
 }
 
@@ -123,6 +126,6 @@ export async function fetchInventoryItem(access, itemId) {
   const item = mock.items.find(({ id }) => id === itemId)
   if (!item) throw createError(INVENTORY_ERROR.notFound)
   if (!canView(access, item.warehouseId)) throw createError(INVENTORY_ERROR.forbidden)
-  const movements = mock.movements.filter((movement) => movement.itemId === itemId).reverse()
+  const movements = mock.movements.filter((movement) => movement.inventoryItemId === itemId).reverse()
   return { item: withStock(item), movements }
 }

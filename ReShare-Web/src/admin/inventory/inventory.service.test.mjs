@@ -30,9 +30,9 @@ describe('US14 – tồn kho', () => {
     const { items } = await service.fetchInventory(SYSTEM_ADMIN, query())
     assert.equal(items.length, 12)
     for (const item of items) {
-      const total = movements.filter(({ itemId }) => itemId === item.id).reduce((sum, { quantity }) => sum + quantity, 0)
-      assert.equal(item.remainingQuantity, total, item.id)
-      assert.ok(item.remainingQuantity >= 0, item.id)
+      const total = movements.filter(({ inventoryItemId }) => inventoryItemId === item.id).reduce((sum, { quantity }) => sum + quantity, 0)
+      assert.equal(item.quantityAvailable, total, item.id)
+      assert.ok(item.quantityAvailable >= 0, item.id)
     }
   })
 
@@ -41,7 +41,7 @@ describe('US14 – tồn kho', () => {
     const outOfStock = await service.fetchInventory(SYSTEM_ADMIN, query({ stock: 'out_of_stock' }))
     assert.equal(counts.in_stock + counts.out_of_stock, counts.all)
     assert.equal(outOfStock.items.length, counts.out_of_stock)
-    assert.ok(outOfStock.items.every(({ remainingQuantity }) => remainingQuantity === 0))
+    assert.ok(outOfStock.items.every(({ quantityAvailable }) => quantityAvailable === 0))
   })
 
   test('Warehouse Admin chỉ thấy kho được giao; System Admin thấy mọi kho', async () => {
@@ -60,7 +60,7 @@ describe('US14 – tồn kho', () => {
   test('AC3: phiếu nhập trong lịch sử khớp chứng từ gốc và truy được đơn + biên bản', async () => {
     const { item, movements } = await service.fetchInventoryItem(SYSTEM_ADMIN, 'vp-0002')
     const stockIn = movements.find(({ type }) => type === 'stock_in')
-    assert.equal(stockIn.voucherId, item.stockInVoucherId)
+    assert.equal(stockIn.voucherId, item.stockEntryId)
     assert.ok(item.donationId && item.receiptId)
     assert.ok(movements.every(({ voucherId, actor, createdAt }) => voucherId && actor && createdAt))
     assert.ok(movements[0].createdAt >= movements.at(-1).createdAt, 'mới nhất trước')
@@ -79,7 +79,7 @@ describe('US14 – tồn kho', () => {
   test('Tình trạng dùng đúng 3 giá trị của biên bản thực nhận (receipt-api), mọi vật phẩm đều có nhãn', async () => {
     assert.deepEqual(Object.keys(service.CONDITION_LABEL), ['good', 'minor-wear', 'damaged'])
     const { items } = await service.fetchInventory(SYSTEM_ADMIN, query())
-    assert.ok(items.every(({ condition }) => service.CONDITION_LABEL[condition]))
+    assert.ok(items.every(({ conditionId }) => service.CONDITION_LABEL[conditionId]))
   })
 
   test('Tìm theo tên không dấu, mã vật phẩm, mã phiếu nhập', async () => {
@@ -90,7 +90,7 @@ describe('US14 – tồn kho', () => {
 
   test('Lọc kết hợp kho + danh mục + tình trạng', async () => {
     const { items } = await service.fetchInventory(SYSTEM_ADMIN, query({ warehouseId: 'wh_dn_02', category: 'books', condition: 'good' }))
-    assert.deepEqual(items.map(({ name }) => name), ['Từ điển Anh – Việt'])
+    assert.deepEqual(items.map(({ itemName }) => itemName), ['Từ điển Anh – Việt'])
   })
 
   test('Không tìm thấy → 404; lỗi máy chủ → 500; rỗng → 0 vật phẩm', async () => {
