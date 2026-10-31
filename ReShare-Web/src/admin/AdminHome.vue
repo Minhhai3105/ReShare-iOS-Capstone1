@@ -7,7 +7,7 @@ import AuthAccountInfo from './auth/components/AuthAccountInfo.vue'
 import logoUrl from './auth/assets/reshare-logo.png'
 import { currentUser, signOut, staffAssignment } from './auth/auth.store'
 import { ADMIN_ROUTE, USER_ROLE, USER_ROLE_LABEL } from './auth/auth.constants'
-import { fetchDashboardMetrics } from './dashboard/dashboard.service.js'
+import { DASHBOARD_ERROR, fetchDashboardMetrics } from './dashboard/dashboard.service.js'
 import {
   DONATION_QUEUE_ERROR,
   DONATION_SORT,
@@ -75,6 +75,11 @@ const taskErrorMessage = computed(() => {
 const metricErrorMessage = computed(() => {
   if (metricError.value === 404) return 'API chỉ số chưa được triển khai. Danh sách tác vụ vẫn có thể sử dụng.'
   if ([401, 403].includes(metricError.value)) return 'Bạn không có quyền xem chỉ số trong phạm vi này.'
+  if (metricError.value === 400) return 'Bộ lọc chỉ số không hợp lệ. Kiểm tra lại kho và khoảng ngày.'
+  // Lệch contract thì thử lại cũng vô ích, phải báo đúng để người dùng đi tìm người sửa.
+  if (metricError.value === DASHBOARD_ERROR.invalidPayload) {
+    return 'API chỉ số trả dữ liệu không đúng cấu trúc. Hãy báo người phát triển backend.'
+  }
   if (metricError.value === 'TIMEOUT') return 'Tải chỉ số quá lâu. Hãy thử lại.'
   return 'Không thể tải chỉ số vận hành. Hãy thử lại.'
 })
@@ -341,6 +346,9 @@ onBeforeUnmount(() => {
           </RouterLink>
           <RouterLink :to="{ name: ADMIN_ROUTE.donationQueue }" class="admin-ops__nav-link">
             <AuthIcon name="inbox" :size="17" />Tiếp nhận quyên góp
+          </RouterLink>
+          <RouterLink :to="{ name: ADMIN_ROUTE.inventory }" class="admin-ops__nav-link">
+            <AuthIcon name="shelves" :size="17" />Kho hàng
           </RouterLink>
           <RouterLink :to="{ name: 'admin-distribution' }" class="admin-ops__nav-link">
             <AuthIcon name="warehouse" :size="17" />Xuất kho & phân phối

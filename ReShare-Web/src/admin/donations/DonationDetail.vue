@@ -321,6 +321,7 @@ watch(enlarged, async (value) => {
           </ol>
           <p v-if="donation.status === 'rejected'" class="rejected">Đơn đã bị từ chối; không tiếp tục luồng tiếp nhận.</p>
           <RouterLink v-if="!localPreview && donation.status === 'approved' && donation.warehouseId" :to="{ name: 'admin-donation-receipt', params: { donationId: donation.id } }">Ghi nhận hàng thực nhận →</RouterLink>
+          <RouterLink v-if="!localPreview && ['received', 'in_stock'].includes(donation.status)" :to="{ name: 'admin-donation-stock-in', params: { donationId: donation.id } }">{{ donation.status === 'received' ? 'Nhập kho →' : 'Xem nhập kho →' }}</RouterLink>
           <p v-if="donation.statusNote"><strong>Nội dung công khai cho donor:</strong> {{ donation.statusNote }}</p>
         </section>
         <section v-if="!localPreview && (isSystemAdmin || donation.warehouseId)" class="card" aria-labelledby="warehouse-assignment-title">
