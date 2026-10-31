@@ -8,6 +8,7 @@ const { createStaffApi } = require('./staff-api.cjs');
 const { ApiError: ContactApiError, createContactApi } = require('./contact-api.cjs');
 const { createDonationReviewApi } = require('./donation-review-api.cjs');
 const { createReceiptApi } = require('./receipt-api.cjs');
+const { createStockIntakeApi } = require('./stock-intake-api.cjs');
 const { createDistributionApi } = require('./distribution-api.cjs');
 const { createReportsApi } = require('./reports-api.cjs');
 
@@ -37,6 +38,7 @@ const staffApi = createStaffApi({ db, auth: getAuth(), verifyToken });
 const contactApi = createContactApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const donationReviewApi = createDonationReviewApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const receiptApi = createReceiptApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
+const stockIntakeApi = createStockIntakeApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const distributionApi = createDistributionApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const reportsApi = createReportsApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const adminWebOrigins = new Set((process.env.ADMIN_WEB_ORIGINS || '')
@@ -47,6 +49,8 @@ const server = http.createServer(async (request, response) => {
   const isAdminApi = pathname.startsWith('/v1/admin/');
   const isDonationAdminPath = pathname.startsWith('/v1/admin/donations');
   const isReceiptPath = /^\/v1\/admin\/donations\/[^/]+\/receipt$/.test(pathname);
+  const isStockIntakePath = /^\/v1\/admin\/donations\/[^/]+\/stock-in$/.test(pathname) ||
+    /^\/v1\/admin\/stock-entries\/[^/]+$/.test(pathname);
   // Neo chính xác, KHÔNG dùng startsWith: '/v1/admin/distribution' là tiền tố của
   // '/v1/admin/distributions' (US17), nên startsWith sẽ nuốt route đó và trả 404.
   const isDistributionPath = pathname === '/v1/admin/distribution' ||
@@ -92,11 +96,14 @@ const server = http.createServer(async (request, response) => {
       try { body = JSON.parse(raw); }
       catch { throw new ApiError(400, 'Invalid JSON body'); }
     }
+    // Thứ tự quan trọng: receipt và stock-in là path con của /v1/admin/donations nên
+    // phải đứng trước isDonationAdminPath; isAdminApi là nhánh bắt tất cả cuối cùng.
     const handler = isContactPath ? contactApi
       : isReceiptPath ? receiptApi
-      : isDonationAdminPath ? donationReviewApi
+      : isStockIntakePath ? stockIntakeApi
       : isDistributionPath ? distributionApi
       : isReportsPath ? reportsApi
+      : isDonationAdminPath ? donationReviewApi
       : isAdminApi ? staffApi
       : api;
     const result = await handler.handle(request.method, pathname, request.headers, body, request.url);
