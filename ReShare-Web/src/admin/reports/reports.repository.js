@@ -28,3 +28,56 @@ export function createMockReportsRepository({ delayMs = 220, scenario = 'normal'
     },
   }
 }
+
+export function createLiveReportsRepository({
+  apiBase = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_ADMIN_API_BASE_URL ? import.meta.env.VITE_ADMIN_API_BASE_URL : 'https://reshare-ios-capstone1-1.onrender.com').replace(/\/$/, ''),
+  authInstance = null,
+} = {}) {
+  async function resolveAuth() {
+    if (authInstance) return authInstance
+    try {
+      const mod = await import('../auth/firebase.js')
+      return mod.auth
+    } catch {
+      return null
+    }
+  }
+
+  return {
+    async load({ assignment, filters, signal } = {}) {
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+      const authObj = await resolveAuth()
+      const user = authObj?.currentUser
+      if (!user) throw new Error('Vui lòng đăng nhập lại để tiếp tục.')
+      const token = await user.getIdToken()
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+
+      const params = new URLSearchParams()
+      if (filters?.from) params.set('from', filters.from)
+      if (filters?.to) params.set('to', filters.to)
+      if (filters?.warehouseId) params.set('warehouseId', filters.warehouseId)
+      if (filters?.categoryId) params.set('categoryId', filters.categoryId)
+
+      const queryStr = params.toString() ? `?${params.toString()}` : ''
+      let response
+      try {
+        response = await fetch(`${apiBase}/v1/admin/reports${queryStr}`, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          signal,
+        })
+      } catch (err) {
+        if (err.name === 'AbortError') throw err
+        throw new Error('Không thể kết nối máy chủ báo cáo. Vui lòng kiểm tra mạng.')
+      }
+
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(result.message || 'Không thể tải báo cáo từ máy chủ.')
+      }
+      return result
+    },
+  }
+}

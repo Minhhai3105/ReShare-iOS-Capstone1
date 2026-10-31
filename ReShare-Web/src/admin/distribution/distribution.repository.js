@@ -4,6 +4,18 @@ import { mockError } from '../lq-errors.js'
 const clone = (value) => structuredClone(value)
 const fail = (code, message, details = {}) => Object.assign(new Error(message), { code, ...details })
 
+// Khóa chống gửi trùng cho một lần xuất kho. crypto.randomUUID chỉ tồn tại trong
+// secure context (https hoặc localhost), còn getRandomValues thì luôn có; giữ phương
+// án dự phòng để form xuất kho không chết khi Admin Web được serve qua http.
+export function newRequestKey() {
+  const webCrypto = typeof crypto !== 'undefined' ? crypto : null
+  if (typeof webCrypto?.randomUUID === 'function') return webCrypto.randomUUID()
+  const bytes = new Uint8Array(16)
+  if (typeof webCrypto?.getRandomValues === 'function') webCrypto.getRandomValues(bytes)
+  else for (let i = 0; i < bytes.length; i += 1) bytes[i] = Math.floor(Math.random() * 256)
+  return [...bytes].map(byte => byte.toString(16).padStart(2, '0')).join('')
+}
+
 export function canDistribute(assignment, warehouseId) {
   return assignment?.active === true && (
     assignment.role === 'system_admin' ||
@@ -98,6 +110,90 @@ export function createDemoDistributionRepository({ getAssignment, getActor }) {
     movements.push(movement)
     if (scenario === 'TIMEOUT_AFTER_COMMIT') throw mockError('TIMEOUT')
     return clone({ voucher, movement, item })
+  }
+
+  return { list, createVoucher }
+}
+
+export function createLiveDistributionRepository({
+  apiBase = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_ADMIN_API_BASE_URL ? import.meta.env.VITE_ADMIN_API_BASE_URL : 'https://reshare-ios-capstone1-1.onrender.com').replace(/\/$/, ''),
+  authInstance = null,
+} = {}) {
+  async function resolveAuth() {
+    if (authInstance) return authInstance
+    try {
+      const mod = await import('../auth/firebase.js')
+      return mod.auth
+    } catch {
+      return null
+    }
+  }
+
+  async function getToken() {
+    const authObj = await resolveAuth()
+    const user = authObj?.currentUser
+    if (!user) throw fail('UNAUTHENTICATED', 'Vui lòng đăng nhập lại để tiếp tục.')
+    return user.getIdToken()
+  }
+
+  async function list() {
+    const token = await getToken()
+    let response
+    try {
+      response = await fetch(`${apiBase}/v1/admin/distribution/options`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+    } catch {
+      throw fail('NETWORK_ERROR', 'Không thể kết nối máy chủ phân phối.')
+    }
+    const result = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      throw fail(result.code || 'ERROR', result.message || 'Không thể tải danh sách kho và vật phẩm.')
+    }
+    return result
+  }
+
+  async function createVoucher(draft) {
+    const token = await getToken()
+    let response
+    try {
+      response = await fetch(`${apiBase}/v1/admin/distribution`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          warehouseId: draft.warehouseId,
+          itemId: draft.itemId,
+          beneficiaryId: draft.beneficiaryId,
+          quantity: Number(draft.quantity),
+          handedOver: draft.handedOver,
+          note: draft.note || '',
+          expectedVersion: draft.expectedVersion,
+          idempotencyKey: draft.idempotencyKey,
+        }),
+      })
+    } catch {
+      throw fail('NETWORK_ERROR', 'Không thể kết nối máy chủ phân phối.')
+    }
+    let result
+    try {
+      result = await response.json()
+    } catch {
+      // Mất kết nối giữa lúc đọc body: máy chủ có thể đã ghi phiếu rồi. Phải coi là
+      // chưa rõ kết quả để giữ idempotencyKey cho lần gửi lại, tuyệt đối không báo
+      // thành công với dữ liệu rỗng.
+      if (response.ok) throw fail('NETWORK_ERROR', 'Mất kết nối khi đang đọc kết quả từ máy chủ.')
+      result = {}
+    }
+    if (!response.ok) {
+      throw fail(result.code || 'ERROR', result.message || 'Không thể tạo phiếu xuất.', {
+        item: result.details?.item,
+        errors: result.details?.errors,
+      })
+    }
+    return result
   }
 
   return { list, createVoucher }

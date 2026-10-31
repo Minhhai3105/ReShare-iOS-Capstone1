@@ -36,7 +36,10 @@ export function calculateReports(data, filters, assignment) {
   const allowed = new Set(allowedWarehouseIds(data, assignment))
   if (filters.warehouseId && !allowed.has(filters.warehouseId)) throw new Error('Bạn không có quyền xem kho đã chọn.')
   if (filters.categoryId && !data.categories.some((entry) => entry.id === filters.categoryId)) throw new Error('Danh mục không hợp lệ.')
-  const inScope = (row) => allowed.has(row.warehouseId) && (!filters.warehouseId || row.warehouseId === filters.warehouseId) && (!filters.categoryId || row.categoryId === filters.categoryId)
+  const inScope = (row) => (
+    allowed.has(row.warehouseId) ||
+    (!row.warehouseId && row.type === 'donation' && assignment?.role === 'system_admin' && assignment.active === true)
+  ) && (!filters.warehouseId || row.warehouseId === filters.warehouseId) && (!filters.categoryId || row.categoryId === filters.categoryId)
   const rows = data.sources.filter((row) => {
     const day = reportDay(row.timestamp)
     const validType = REPORT_TYPES.some((type) => type.id === row.type)

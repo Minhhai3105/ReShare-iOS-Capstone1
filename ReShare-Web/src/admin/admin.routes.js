@@ -10,16 +10,28 @@ import {
 } from './auth/auth.store'
 
 export const adminRoutes = [
+  {
+    path: '/admin/reports',
+    name: 'admin-reports',
+    component: () => import('./reports/ReportsRoute.vue'),
+    meta: { requiresAuth: true, roles: ADMIN_ROLES },
+  },
+  {
+    path: '/admin/distribution',
+    name: 'admin-distribution',
+    component: () => import('./distribution/DistributionRoute.vue'),
+    meta: { requiresAuth: true, roles: ADMIN_ROLES },
+  },
   ...(import.meta.env.DEV ? [{
     path: '/admin/reports-preview',
     name: 'admin-reports-preview',
-    component: () => import('./reports/ReportsRoute.vue'),
+    component: () => import('./reports/ReportsPreviewRoute.vue'),
     meta: { requiresAuth: true, roles: ADMIN_ROLES, devPreview: true },
   }] : []),
   ...(import.meta.env.DEV ? [{
     path: '/admin/distribution-preview',
     name: 'admin-distribution-preview',
-    component: () => import('./distribution/DistributionRoute.vue'),
+    component: () => import('./distribution/DistributionPreviewRoute.vue'),
     meta: { requiresAuth: true, roles: ADMIN_ROLES, devPreview: true },
   }] : []),
   { path: '/admin/login', name: ADMIN_ROUTE.login, component: () => import('./auth/views/AdminLogin.vue') },
