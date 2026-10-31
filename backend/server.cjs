@@ -13,6 +13,8 @@ const { createInventoryApi } = require('./inventory-api.cjs');
 const { createDistributionHistoryApi } = require('./distribution-history-api.cjs');
 const { createDistributionApi } = require('./distribution-api.cjs');
 const { createReportsApi } = require('./reports-api.cjs');
+const { createBeneficiariesApi } = require('./beneficiaries-api.cjs');
+const { createDashboardApi } = require('./dashboard-api.cjs');
 
 const {
   CLOUDINARY_CLOUD_NAME,
@@ -45,6 +47,8 @@ const inventoryApi = createInventoryApi({ db, verifyToken });
 const distributionHistoryApi = createDistributionHistoryApi({ db, verifyToken });
 const distributionApi = createDistributionApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const reportsApi = createReportsApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
+const beneficiariesApi = createBeneficiariesApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
+const dashboardApi = createDashboardApi({ db, verifyToken });
 const adminWebOrigins = new Set((process.env.ADMIN_WEB_ORIGINS || '')
   .split(',').map(origin => origin.trim()).filter(Boolean));
 
@@ -67,6 +71,11 @@ const server = http.createServer(async (request, response) => {
   const isDistributionPath = pathname === '/v1/admin/distribution' ||
     pathname === '/v1/admin/distribution/options';
   const isReportsPath = pathname === '/v1/admin/reports' || pathname === '/v1/admin/reports/';
+  // Cũng neo chính xác thay vì startsWith, để sau này thêm route có tiền tố trùng
+  // (ví dụ '/v1/admin/beneficiaries-export') thì không bị nuốt như đã xảy ra với distribution.
+  const isBeneficiaryPath = pathname === '/v1/admin/beneficiaries' ||
+    /^\/v1\/admin\/beneficiaries\/[^/]+(\/(audit|update|verify))?$/.test(pathname);
+  const isDashboardPath = pathname === '/v1/admin/dashboard/metrics';
   const isAdminImageRead = pathname === '/v1/images/read-access';
   const isContactPath = pathname === '/v1/contact';
   const origin = request.headers.origin;
@@ -116,6 +125,8 @@ const server = http.createServer(async (request, response) => {
       : isDistributionHistoryPath ? distributionHistoryApi
       : isDistributionPath ? distributionApi
       : isReportsPath ? reportsApi
+      : isBeneficiaryPath ? beneficiariesApi
+      : isDashboardPath ? dashboardApi
       : isDonationAdminPath ? donationReviewApi
       : isAdminApi ? staffApi
       : api;
