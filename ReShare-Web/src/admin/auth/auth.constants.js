@@ -1,3 +1,4 @@
+
 // Khớp UserProfile.UserRole bên iOS
 export const USER_ROLE = Object.freeze({
   donor: 'donor',
@@ -27,6 +28,14 @@ export const ADMIN_ROUTE = Object.freeze({
   forgotPassword: 'admin-forgot-password',
   forbidden: 'admin-forbidden',
   donationQueue: 'admin-donation-queue',
+
+  // US15 - Beneficiary
+  beneficiaryList: 'admin-beneficiary-list',
+  beneficiaryNew: 'admin-beneficiary-new',
+  beneficiaryDetail: 'admin-beneficiary-detail',
+  beneficiaryEdit: 'admin-beneficiary-edit',
+
+  // Routes từ dev - Inventory và Distribution
   inventory: 'admin-inventory',
   inventoryDetail: 'admin-inventory-detail',
   distributionDetail: 'admin-distribution-detail',
