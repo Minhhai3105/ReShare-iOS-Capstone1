@@ -1,5 +1,6 @@
-// Lớp dữ liệu tồn kho. Hiện dùng mock khi dev; khi có API/Firestore chỉ thay phần thân hàm,
-// giữ chữ ký và dạng kết quả để giao diện không phải sửa.
+// Lớp dữ liệu tồn kho. Hiện dùng mock khi dev; bản build báo "chưa kết nối" (chưa nối API #47).
+// Khi nối API phải đổi tên field BE → FE (itemName → name, conditionId → condition, unitId → unit,
+// stockEntryId → stockInVoucherId, inventoryItemId → itemId), không chỉ thay phần thân hàm.
 import { MOCK_WAREHOUSES, createMockInventory, getInventoryScenario } from './inventory.mock'
 import { normalizeText } from '../shared/text.js'
 
@@ -12,12 +13,12 @@ export const INVENTORY_ERROR = Object.freeze({
 
 export const STOCK_FILTER = Object.freeze({ all: 'all', inStock: 'in_stock', outOfStock: 'out_of_stock' })
 
-// Khớp ItemCondition (iOS).
+// Tình trạng nhân sự ghi khi thực nhận (receipt-api, US12), kho giữ nguyên giá trị này;
+// khác ItemCondition (iOS) là tình trạng donor tự khai.
 export const CONDITION_LABEL = Object.freeze({
-  new: 'Mới 100%',
-  like_new: 'Như mới (95%)',
   good: 'Còn tốt',
-  fair: 'Dùng được',
+  'minor-wear': 'Có hao mòn nhẹ',
+  damaged: 'Hư hỏng cần phân loại',
 })
 
 export const MOVEMENT_TYPE_LABEL = Object.freeze({
@@ -51,6 +52,7 @@ const dateFormatter = new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: 
 const hourFormatter = new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit' })
 
 export function formatDateTime(value) {
+  if (!value) return '—'
   const date = new Date(value)
   return `${dateFormatter.format(date)} ${hourFormatter.format(date)}`
 }
@@ -77,13 +79,14 @@ export function getAccessibleWarehouses(access) {
   return mock.warehouses.map(({ id }) => getWarehouseInfo(id))
 }
 
-// AC1: số còn = tổng các biến động đã xác nhận, không đọc từ một ô số lưu sẵn.
+// AC1: số còn là quantityAvailable do BE cập nhật nguyên tử cùng mỗi biến động; FE không tự cộng.
+// Mock không có ô đó nên tính bằng tổng biến động để luôn khớp lịch sử.
 function withStock(item) {
   const movements = mock.movements.filter(({ itemId }) => itemId === item.id)
   return {
     ...item,
     remainingQuantity: movements.reduce((sum, { quantity }) => sum + quantity, 0),
-    updatedAt: movements.at(-1).createdAt,
+    updatedAt: movements.at(-1)?.createdAt ?? null,
     warehouse: getWarehouseInfo(item.warehouseId),
   }
 }
@@ -104,7 +107,7 @@ export async function fetchInventory(access, { warehouseId, search, category, co
       (!condition || item.condition === condition) &&
       (!keyword || normalizeText(`${item.name} ${item.id} ${item.stockInVoucherId}`).includes(keyword)))
     .map(withStock)
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))
 
   const inStockCount = matched.filter(({ remainingQuantity }) => remainingQuantity > 0).length
   const counts = { all: matched.length, in_stock: inStockCount, out_of_stock: matched.length - inStockCount }

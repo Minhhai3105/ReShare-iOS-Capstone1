@@ -13,16 +13,16 @@ const DAY_MS = 24 * 60 * 60 * 1000
 // [tên, danh mục, đơn vị, tình trạng, kho, số nhập ban đầu, các lần phân phối, điều chỉnh]
 const SEED = [
   ['Áo khoác mùa đông', 'clothing', 'chiếc', 'good', 'wh_dn_01', 24, [5, 3], 0],
-  ['Sách giáo khoa lớp 5', 'books', 'cuốn', 'like_new', 'wh_dn_01', 40, [12], -2],
+  ['Sách giáo khoa lớp 5', 'books', 'cuốn', 'good', 'wh_dn_01', 40, [12], -2],
   ['Nồi cơm điện', 'household', 'cái', 'good', 'wh_dn_01', 3, [3], 0],
-  ['Bộ quần áo trẻ em', 'clothing', 'bộ', 'new', 'wh_dn_01', 15, [], 0],
+  ['Bộ quần áo trẻ em', 'clothing', 'bộ', 'good', 'wh_dn_01', 15, [], 0],
   ['Đèn học để bàn', 'household', 'cái', 'good', 'wh_dn_01', 7, [2], 0],
-  ['Chăn mỏng', 'household', 'chiếc', 'fair', 'wh_dn_02', 10, [4, 6], 0],
+  ['Chăn mỏng', 'household', 'chiếc', 'minor-wear', 'wh_dn_02', 10, [4, 6], 0],
   ['Từ điển Anh – Việt', 'books', 'cuốn', 'good', 'wh_dn_02', 8, [2], 1],
-  ['Quạt đứng', 'household', 'cái', 'like_new', 'wh_dn_02', 5, [1], 0],
-  ['Áo sơ mi công sở', 'clothing', 'chiếc', 'like_new', 'wh_dn_02', 30, [10, 5], 0],
-  ['Bộ truyện tranh thiếu nhi', 'books', 'bộ', 'fair', 'wh_dn_03', 12, [12], 0],
-  ['Bộ chén đĩa sứ', 'household', 'bộ', 'new', 'wh_dn_03', 6, [], -1],
+  ['Quạt đứng', 'household', 'cái', 'good', 'wh_dn_02', 5, [1], 0],
+  ['Áo sơ mi công sở', 'clothing', 'chiếc', 'good', 'wh_dn_02', 30, [10, 5], 0],
+  ['Bộ truyện tranh thiếu nhi', 'books', 'bộ', 'minor-wear', 'wh_dn_03', 12, [12], 0],
+  ['Bộ chén đĩa sứ', 'household', 'bộ', 'damaged', 'wh_dn_03', 6, [], -1],
   ['Váy liền thân', 'clothing', 'chiếc', 'good', 'wh_dn_03', 18, [7], 0],
 ]
 

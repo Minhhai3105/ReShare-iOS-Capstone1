@@ -76,6 +76,12 @@ describe('US14 – tồn kho', () => {
     assert.equal(stockIn.to, null)
   })
 
+  test('Tình trạng dùng đúng 3 giá trị của biên bản thực nhận (receipt-api), mọi vật phẩm đều có nhãn', async () => {
+    assert.deepEqual(Object.keys(service.CONDITION_LABEL), ['good', 'minor-wear', 'damaged'])
+    const { items } = await service.fetchInventory(SYSTEM_ADMIN, query())
+    assert.ok(items.every(({ condition }) => service.CONDITION_LABEL[condition]))
+  })
+
   test('Tìm theo tên không dấu, mã vật phẩm, mã phiếu nhập', async () => {
     assert.equal((await service.fetchInventory(SYSTEM_ADMIN, query({ search: 'ao khoac' }))).items.length, 1)
     assert.equal((await service.fetchInventory(SYSTEM_ADMIN, query({ search: 'VP-0003' }))).items[0].id, 'vp-0003')
