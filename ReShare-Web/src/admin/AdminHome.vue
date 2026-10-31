@@ -4,8 +4,10 @@ import { useRouter } from 'vue-router'
 import AuthShell from './auth/components/AuthShell.vue'
 import AuthIcon from './auth/components/AuthIcon.vue'
 import AuthAccountInfo from './auth/components/AuthAccountInfo.vue'
+import logoUrl from './auth/assets/reshare-logo.png'
 import { currentUser, signOut, staffAssignment } from './auth/auth.store'
 import { ADMIN_ROUTE, USER_ROLE, USER_ROLE_LABEL } from './auth/auth.constants'
+import { fetchDashboardMetrics } from './dashboard/dashboard.service.js'
 import {
   DONATION_QUEUE_ERROR,
   DONATION_SORT,
@@ -27,6 +29,10 @@ const isLoading = ref(true)
 const isWarehousesLoading = ref(false)
 const errorStatus = ref(null)
 const warehouseErrorStatus = ref(null)
+const metricData = ref(null)
+const metricsLoading = ref(true)
+const metricError = ref(null)
+const warehouseDialog = ref(null)
 const access = computed(() => resolveQueueAccess(staffAssignment.value))
 const isSystemAdmin = computed(() => access.value?.isAllWarehouses === true)
 const hasActiveFilters = computed(() => Boolean(
@@ -54,6 +60,10 @@ const scopeLabel = computed(() => {
     || access.value.warehouseIds.join(', ')
     || 'Chưa được phân công kho'
 })
+const selectedWarehouseLabel = computed(() => {
+  if (filters.value.warehouseId) return scopeLabel.value
+  return isSystemAdmin.value ? 'Tất cả kho' : 'Tất cả kho được giao'
+})
 const demoWarehouse = computed(() => staffAssignment.value?.warehouseIds?.[0]
   || (staffAssignment.value?.role === USER_ROLE.systemAdmin ? 'demo-hub' : null))
 const taskErrorMessage = computed(() => {
@@ -62,35 +72,63 @@ const taskErrorMessage = computed(() => {
   return 'Không thể tải tác vụ từ Firestore. Kiểm tra kết nối rồi thử lại.'
 })
 
-const metrics = [
+const metricErrorMessage = computed(() => {
+  if (metricError.value === 404) return 'API chỉ số chưa được triển khai. Danh sách tác vụ vẫn có thể sử dụng.'
+  if ([401, 403].includes(metricError.value)) return 'Bạn không có quyền xem chỉ số trong phạm vi này.'
+  if (metricError.value === 'TIMEOUT') return 'Tải chỉ số quá lâu. Hãy thử lại.'
+  return 'Không thể tải chỉ số vận hành. Hãy thử lại.'
+})
+const stockUnits = computed(() => Object.entries(metricData.value?.metrics?.inventoryAvailableByUnit || {})
+  .filter(([unitId, quantity]) => unitId !== 'other' && quantity !== 0)
+  .map(([unitId, quantity]) => ({
+    label: { piece: 'cái', kg: 'kg', bag: 'túi', box: 'thùng', set: 'bộ' }[unitId] || unitId,
+    quantity: new Intl.NumberFormat('vi-VN').format(quantity),
+  })))
+const hasOtherStockUnits = computed(() => Boolean(metricData.value?.metrics?.inventoryAvailableByUnit?.other))
+function metricValue(value) {
+  if (metricsLoading.value) return 'Đang tải…'
+  if (metricError.value || value === undefined) return 'Chưa tải được'
+  return new Intl.NumberFormat('vi-VN').format(value)
+}
+const stockValue = computed(() => {
+  if (metricsLoading.value || metricError.value) return metricValue()
+  if (stockUnits.value.length) return 'Theo đơn vị'
+  return hasOtherStockUnits.value ? 'Chưa chuẩn hoá' : '0'
+})
+const metrics = computed(() => [
   {
     title: 'Quyên góp chờ xử lý',
-    value: 'Chưa có tổng số',
-    note: 'Nguồn hàng đợi hiện chỉ trả danh sách phân trang.',
+    value: metricValue(metricData.value?.metrics?.pendingDonations),
+    note: 'Đơn đang pending, theo kho và ngày tạo.',
     icon: 'clock',
   },
   {
     title: 'Quyên góp đã duyệt',
-    value: 'Chưa có số liệu',
-    note: 'Chưa có nguồn tổng hợp trạng thái để tính chính xác.',
+    value: metricValue(metricData.value?.metrics?.approvedDonations),
+    note: 'Đơn đang approved, theo kho và ngày tạo.',
     icon: 'check',
   },
   {
-    title: 'Tình trạng tồn kho',
-    value: 'Chưa có nguồn dữ liệu',
-    note: 'Chưa có nguồn tồn kho vận hành được xác minh.',
-    icon: 'box',
+    title: 'Tồn kho khả dụng',
+    value: stockValue.value,
+    note: filters.value.dateTo
+      ? 'Tồn tại cuối ngày Đến ngày; Từ ngày không áp dụng cho tồn kho.'
+      : 'Tồn tại thời điểm hiện tại; Từ ngày không áp dụng cho tồn kho.',
+    icon: 'server',
+    units: metricsLoading.value || metricError.value ? [] : stockUnits.value,
   },
   {
-    title: 'Tình hình phân phối',
-    value: 'Chưa có nguồn dữ liệu',
-    note: 'Chưa có nguồn tổng hợp phân phối vận hành được xác minh.',
+    title: 'Phiếu phân phối đã xác nhận',
+    value: metricValue(metricData.value?.metrics?.confirmedDistributions),
+    note: 'Phiếu confirmed, theo kho và ngày tạo.',
     icon: 'warehouse',
   },
-]
+])
 
 let latestTaskRequestId = 0
 let latestWarehouseRequestId = 0
+let latestMetricRequestId = 0
+let metricAbort = null
 
 function formatCreatedAt(value) {
   if (!value) return 'Chưa có thời gian'
@@ -108,6 +146,38 @@ function warehouseLabel(donation) {
   return warehouses.value.find((warehouse) => warehouse.id === donation.warehouseId)?.name
     || donation.warehouseName
     || donation.warehouseId
+}
+
+async function loadMetrics() {
+  const requestId = ++latestMetricRequestId
+  metricAbort?.abort()
+  metricData.value = null
+  metricError.value = null
+  metricsLoading.value = true
+
+  if (!resolveQueueAccess(staffAssignment.value)) {
+    metricError.value = 403
+    metricsLoading.value = false
+    return
+  }
+
+  const controller = new AbortController()
+  metricAbort = controller
+  const timeout = setTimeout(() => controller.abort(), 30000)
+  try {
+    const result = await fetchDashboardMetrics(filters.value, controller.signal)
+    if (requestId === latestMetricRequestId) metricData.value = result
+  } catch (error) {
+    if (requestId === latestMetricRequestId) {
+      metricError.value = error?.name === 'AbortError' ? 'TIMEOUT' : error?.status || 'NETWORK'
+    }
+  } finally {
+    clearTimeout(timeout)
+    if (requestId === latestMetricRequestId) {
+      metricsLoading.value = false
+      metricAbort = null
+    }
+  }
 }
 
 async function loadTasks() {
@@ -168,6 +238,7 @@ async function loadWarehouses() {
       && !availableWarehouses.some((warehouse) => warehouse.id === filters.value.warehouseId)) {
       filters.value.warehouseId = ''
       loadTasks()
+      loadMetrics()
     }
   } catch (error) {
     if (requestId !== latestWarehouseRequestId) return
@@ -188,10 +259,15 @@ function refreshDashboard() {
     warehouses.value = []
     errorStatus.value = DONATION_QUEUE_ERROR.forbidden
     warehouseErrorStatus.value = DONATION_QUEUE_ERROR.forbidden
+    metricData.value = null
+    metricError.value = 403
+    metricsLoading.value = false
     isLoading.value = false
     isWarehousesLoading.value = false
     latestTaskRequestId += 1
     latestWarehouseRequestId += 1
+    latestMetricRequestId += 1
+    metricAbort?.abort()
     return
   }
 
@@ -205,10 +281,12 @@ function refreshDashboard() {
 
   loadWarehouses()
   loadTasks()
+  loadMetrics()
 }
 
 function onFilterChange() {
   loadTasks()
+  loadMetrics()
 }
 
 function resetFilters() {
@@ -220,6 +298,17 @@ function resetFilters() {
     filters.value.warehouseId = ''
   }
   loadTasks()
+  loadMetrics()
+}
+
+function openWarehouseSelector() {
+  if (!isWarehousesLoading.value) warehouseDialog.value?.showModal()
+}
+
+function chooseWarehouse(warehouseId) {
+  filters.value.warehouseId = warehouseId
+  warehouseDialog.value?.close()
+  onFilterChange()
 }
 
 async function onSignOutClick() {
@@ -232,189 +321,338 @@ watch(staffAssignment, refreshDashboard)
 onBeforeUnmount(() => {
   latestTaskRequestId += 1
   latestWarehouseRequestId += 1
+  latestMetricRequestId += 1
+  metricAbort?.abort()
 })
 </script>
 
 <template>
   <AuthShell>
-    <section
-      v-if="currentUser && staffAssignment"
-      class="admin-dashboard"
-      aria-labelledby="admin-dashboard-title"
-    >
-      <header class="admin-dashboard__header">
-        <div class="admin-dashboard__intro">
-          <p class="admin-dashboard__eyebrow">ReShare · Portal vận hành</p>
-          <h1 id="admin-dashboard-title">Tổng quan vận hành</h1>
-          <p>Theo dõi các yêu cầu quyên góp cần xử lý trong phạm vi kho được cấp quyền.</p>
+    <div v-if="currentUser && staffAssignment" class="admin-ops">
+      <aside class="admin-ops__sidebar" aria-label="Thanh điều hướng quản trị">
+        <div class="admin-ops__brand">
+          <img :src="logoUrl" alt="" />
+          <span><strong>ReShare</strong><small>Admin Portal</small></span>
         </div>
-        <div class="admin-dashboard__header-actions">
-          <span class="auth-chip admin-dashboard__role"><span class="auth-dot" />{{ roleLabel }}</span>
-          <RouterLink :to="{ name: ADMIN_ROUTE.donationQueue }" class="auth-btn auth-btn--primary">
-            <AuthIcon name="inbox" />Mở hàng đợi
+        <p class="admin-ops__nav-heading">Vận hành kho & xử lý</p>
+        <nav class="admin-ops__nav" aria-label="Điều hướng quản trị">
+          <RouterLink :to="{ name: ADMIN_ROUTE.home }" aria-current="page" class="admin-ops__nav-link admin-ops__nav-link--active">
+            <AuthIcon name="dashboard" :size="17" />Tổng quan
           </RouterLink>
-        </div>
-      </header>
+          <RouterLink :to="{ name: ADMIN_ROUTE.donationQueue }" class="admin-ops__nav-link">
+            <AuthIcon name="inbox" :size="17" />Tiếp nhận quyên góp
+          </RouterLink>
+          <RouterLink :to="{ name: 'admin-distribution' }" class="admin-ops__nav-link">
+            <AuthIcon name="warehouse" :size="17" />Xuất kho & phân phối
+          </RouterLink>
+          <RouterLink :to="{ name: 'admin-reports' }" class="admin-ops__nav-link">
+            <AuthIcon name="chart" :size="17" />Báo cáo
+          </RouterLink>
+          <RouterLink v-if="isSystemAdmin" :to="{ name: ADMIN_ROUTE.staff }" class="admin-ops__nav-link">
+            <AuthIcon name="users" :size="17" />Nhân sự & phân quyền
+          </RouterLink>
+        </nav>
+        <div class="admin-ops__sidebar-footer"><AuthIcon name="shield-check" :size="17" />{{ roleLabel }}</div>
+      </aside>
 
-      <section class="admin-dashboard__scope auth-card" aria-label="Thông tin phạm vi truy cập">
-        <div class="admin-dashboard__scope-copy">
-          <span class="admin-dashboard__scope-icon"><AuthIcon name="shield" :size="20" /></span>
-          <div>
-            <h2>Phạm vi dữ liệu</h2>
-            <p><strong>{{ scopeLabel }}</strong> · Các bộ lọc áp dụng cho danh sách tác vụ bên dưới.</p>
-          </div>
-        </div>
-        <AuthAccountInfo :user="currentUser" :assignment="staffAssignment" class="admin-dashboard__account">
-          <div>
-            <dt>Kho được giao</dt>
-            <dd class="auth-mono">{{ assignedWarehousesLabel }}</dd>
-          </div>
-        </AuthAccountInfo>
-      </section>
-
-      <section class="admin-dashboard__metrics" aria-label="Chỉ số vận hành">
-        <article v-for="metric in metrics" :key="metric.title" class="admin-dashboard__metric auth-card">
-          <div class="admin-dashboard__metric-top">
-            <span class="admin-dashboard__metric-icon"><AuthIcon :name="metric.icon" :size="20" /></span>
-            <span class="admin-dashboard__metric-label">{{ metric.title }}</span>
-          </div>
-          <strong class="admin-dashboard__metric-value">{{ metric.value }}</strong>
-          <p>{{ metric.note }}</p>
-        </article>
-      </section>
-
-      <section class="admin-dashboard__tasks auth-card" aria-labelledby="admin-dashboard-tasks-title">
-        <header class="admin-dashboard__section-header">
-          <div>
-            <p class="admin-dashboard__eyebrow">Ưu tiên xử lý</p>
-            <h2 id="admin-dashboard-tasks-title">Quyên góp đang chờ duyệt</h2>
-            <p>Danh sách tác vụ thật từ hàng đợi; tối đa 10 mục theo giới hạn trang hiện có.</p>
-          </div>
+      <div class="admin-ops__body">
+        <header class="admin-ops__topbar">
+          <strong class="admin-ops__topbar-title">ReShare <span>Admin Portal</span></strong>
           <button
             type="button"
-            class="auth-btn auth-btn--soft"
-            :disabled="isLoading"
-            @click="refreshDashboard"
+            class="admin-ops__warehouse-button"
+            :disabled="isWarehousesLoading"
+            aria-haspopup="dialog"
+            @click="openWarehouseSelector"
           >
-            <AuthIcon :name="isLoading ? 'loader' : 'refresh'" :size="18" :class="{ 'auth-spin': isLoading }" />
-            Làm mới
+            <AuthIcon name="warehouse" :size="17" />{{ selectedWarehouseLabel }} <span aria-hidden="true">⌄</span>
           </button>
+          <span class="admin-ops__topbar-role"><AuthIcon name="shield-check" :size="16" />{{ roleLabel }}</span>
+          <span class="admin-ops__user"><AuthIcon name="user" :size="18" />{{ currentUser.displayName || currentUser.email }}</span>
         </header>
+        <div class="admin-ops__content">
+          <section class="admin-dashboard" aria-labelledby="admin-dashboard-title">
+            <header class="admin-dashboard__header">
+              <div class="admin-dashboard__intro">
+                <p class="admin-dashboard__eyebrow">ReShare · Portal vận hành</p>
+                <h1 id="admin-dashboard-title">Tổng quan vận hành</h1>
+                <p>Theo dõi các yêu cầu quyên góp cần xử lý trong phạm vi kho được cấp quyền.</p>
+              </div>
+              <div class="admin-dashboard__header-actions">
+                <span class="auth-chip admin-dashboard__role"><span class="auth-dot" />{{ roleLabel }}</span>
+                <RouterLink :to="{ name: ADMIN_ROUTE.donationQueue }" class="auth-btn auth-btn--primary">
+                  <AuthIcon name="inbox" />Mở hàng đợi
+                </RouterLink>
+              </div>
+            </header>
 
-        <div class="admin-dashboard__filters" aria-label="Lọc danh sách tác vụ">
-          <label class="admin-dashboard__field">
-            <span>Kho</span>
-            <select
-              v-model="filters.warehouseId"
-              :disabled="isWarehousesLoading || (!isSystemAdmin && !access?.warehouseIds.length)"
-              @change="onFilterChange"
-            >
-              <option value="">{{ isSystemAdmin ? 'Tất cả kho' : 'Tất cả kho được giao' }}</option>
-              <option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">
-                {{ warehouse.name }}
-              </option>
-            </select>
-          </label>
-          <label class="admin-dashboard__field">
-            <span>Từ ngày</span>
-            <input v-model="filters.dateFrom" type="date" :max="filters.dateTo || undefined" @change="onFilterChange" />
-          </label>
-          <label class="admin-dashboard__field">
-            <span>Đến ngày</span>
-            <input v-model="filters.dateTo" type="date" :min="filters.dateFrom || undefined" @change="onFilterChange" />
-          </label>
-          <button
-            type="button"
-            class="auth-btn auth-btn--soft admin-dashboard__reset"
-            :disabled="!hasActiveFilters"
-            @click="resetFilters"
-          >
-            <AuthIcon name="refresh" :size="18" />Đặt lại
-          </button>
-        </div>
+            <section class="admin-dashboard__scope auth-card" aria-label="Thông tin phạm vi truy cập">
+              <div class="admin-dashboard__scope-copy">
+                <span class="admin-dashboard__scope-icon"><AuthIcon name="shield" :size="20" /></span>
+                <div>
+                  <h2>Phạm vi dữ liệu</h2>
+                  <p><strong>{{ scopeLabel }}</strong> · Kho áp dụng cho mọi khu vực. Từ/Đến ngày áp dụng cho đơn và phiếu; tồn kho tính đến cuối ngày Đến ngày.</p>
+                </div>
+              </div>
+              <AuthAccountInfo :user="currentUser" :assignment="staffAssignment" class="admin-dashboard__account">
+                <div>
+                  <dt>Kho được giao</dt>
+                  <dd class="auth-mono">{{ assignedWarehousesLabel }}</dd>
+                </div>
+              </AuthAccountInfo>
+            </section>
 
-        <p v-if="warehouseErrorStatus" class="admin-dashboard__inline-alert" role="status">
-          Không tải được danh sách tên kho. {{ isSystemAdmin ? 'Bạn vẫn có thể xem tất cả kho; bộ lọc kho riêng lẻ tạm thời không khả dụng.' : 'Danh sách được giới hạn ở các kho đã phân công.' }}
-        </p>
-
-        <div v-if="isLoading" class="admin-dashboard__task-state" aria-live="polite" aria-busy="true">
-          <span class="admin-dashboard__loader"><AuthIcon name="loader" :size="22" class="auth-spin" /></span>
-          <p>Đang tải tác vụ trong phạm vi được cấp quyền…</p>
-        </div>
-
-        <div v-else-if="errorStatus" class="admin-dashboard__task-state admin-dashboard__task-state--error" role="alert">
-          <span class="admin-dashboard__loader"><AuthIcon name="cloud-off" :size="22" /></span>
-          <p>{{ taskErrorMessage }}</p>
-          <button type="button" class="auth-btn auth-btn--soft" @click="loadTasks">
-            <AuthIcon name="refresh" :size="18" />Thử lại
-          </button>
-        </div>
-
-        <div v-else-if="!tasks.length" class="admin-dashboard__task-state" aria-live="polite">
-          <span class="admin-dashboard__loader"><AuthIcon name="inbox" :size="22" /></span>
-          <p>Không có yêu cầu chờ duyệt phù hợp với bộ lọc hiện tại.</p>
-        </div>
-
-        <ul v-else class="admin-dashboard__task-list" :aria-busy="isLoading">
-          <li v-for="task in tasks" :key="task.id" class="admin-dashboard__task">
-            <span class="admin-dashboard__task-icon"><AuthIcon name="donation" :size="20" /></span>
-            <div class="admin-dashboard__task-main">
-              <RouterLink
-                class="admin-dashboard__task-title"
-                :to="{ name: 'admin-donation-detail', params: { donationId: task.id } }"
-              >{{ task.title || `Yêu cầu ${task.id}` }}</RouterLink>
-              <span class="admin-dashboard__task-meta">
-                <span class="auth-mono">#{{ task.id }}</span>
-                <span>{{ warehouseLabel(task) }}</span>
-                <time :datetime="task.createdAt">{{ formatCreatedAt(task.createdAt) }}</time>
-              </span>
+            <div v-if="metricError" class="admin-dashboard__inline-alert" role="alert">
+              {{ metricErrorMessage }}
+              <button type="button" class="auth-btn auth-btn--soft" @click="loadMetrics"><AuthIcon name="refresh" :size="16" />Thử lại</button>
             </div>
-            <span class="admin-dashboard__status">{{ DONATION_STATUS_LABEL[task.status] || 'Chờ duyệt' }}</span>
-            <RouterLink
-              class="admin-dashboard__task-action"
-              :to="{ name: 'admin-donation-detail', params: { donationId: task.id } }"
-              :aria-label="`Xem yêu cầu ${task.id}`"
-            >
-              Xem <AuthIcon name="arrow" :size="16" />
-            </RouterLink>
-          </li>
-        </ul>
 
-        <footer class="admin-dashboard__tasks-footer">
-          <span v-if="tasks.length">Đang hiển thị {{ tasks.length }} yêu cầu phù hợp; đây không phải tổng số toàn hệ thống.</span>
-          <RouterLink :to="{ name: ADMIN_ROUTE.donationQueue }" class="admin-dashboard__all-tasks">
-            Xem hàng đợi <AuthIcon name="arrow" :size="16" />
-          </RouterLink>
-        </footer>
-      </section>
+            <section class="admin-dashboard__metrics" aria-label="Chỉ số vận hành" :aria-busy="metricsLoading">
+              <article v-for="metric in metrics" :key="metric.title" class="admin-dashboard__metric auth-card">
+                <div class="admin-dashboard__metric-top">
+                  <span class="admin-dashboard__metric-icon"><AuthIcon :name="metric.icon" :size="20" /></span>
+                  <span class="admin-dashboard__metric-label">{{ metric.title }}</span>
+                </div>
+                <strong class="admin-dashboard__metric-value">{{ metric.value }}</strong>
+                <ul v-if="metric.units?.length" class="admin-dashboard__unit-list">
+                  <li v-for="unit in metric.units" :key="unit.label"><strong>{{ unit.quantity }}</strong> {{ unit.label }}</li>
+                </ul>
+                <p v-if="metric.title === 'Tồn kho khả dụng' && hasOtherStockUnits" class="admin-dashboard__unit-warning">Có đơn vị chưa chuẩn hoá; không cộng vào các số trên.</p>
+                <p>{{ metric.note }}</p>
+              </article>
+            </section>
 
-      <nav class="admin-dashboard__shortcuts" aria-label="Liên kết quản trị">
-        <RouterLink
-          v-if="staffAssignment.role === USER_ROLE.systemAdmin"
-          :to="{ name: ADMIN_ROUTE.staff }"
-          class="auth-btn auth-btn--soft"
-        >
-          <AuthIcon name="users" />Quản lý nhân sự
-        </RouterLink>
-        <RouterLink :to="{ name: ADMIN_ROUTE.donationQueue }" class="auth-btn auth-btn--soft">
-          <AuthIcon name="inbox" />Hàng đợi yêu cầu quyên góp
-        </RouterLink>
-        <RouterLink
-          v-if="isDemoBuild && demoWarehouse"
-          :to="{ name: 'admin-donation-detail', params: { warehouseId: demoWarehouse, donationId: 'demo-001' } }"
-          class="auth-btn auth-btn--soft"
-        >
-          <AuthIcon name="eye" />Xem trước donation (DEV)
-        </RouterLink>
-        <button type="button" class="auth-btn auth-btn--soft" @click="onSignOutClick">
-          <AuthIcon name="log-out" />Đăng xuất
-        </button>
-      </nav>
-    </section>
+            <section class="admin-dashboard__tasks auth-card" aria-labelledby="admin-dashboard-tasks-title">
+              <header class="admin-dashboard__section-header">
+                <div>
+                  <p class="admin-dashboard__eyebrow">Ưu tiên xử lý</p>
+                  <h2 id="admin-dashboard-tasks-title">Quyên góp đang chờ duyệt</h2>
+                  <p>Danh sách tác vụ thật từ hàng đợi; tối đa 10 mục theo giới hạn trang hiện có.</p>
+                </div>
+                <button
+                  type="button"
+                  class="auth-btn auth-btn--soft"
+                  :disabled="isLoading"
+                  @click="refreshDashboard"
+                >
+                  <AuthIcon :name="isLoading ? 'loader' : 'refresh'" :size="18" :class="{ 'auth-spin': isLoading }" />
+                  Làm mới
+                </button>
+              </header>
+
+              <div class="admin-dashboard__filters" aria-label="Lọc chỉ số và tác vụ">
+                <div class="admin-dashboard__field">
+                  <span>Kho</span>
+                  <button type="button" class="admin-dashboard__warehouse-filter" :disabled="isWarehousesLoading" @click="openWarehouseSelector"><AuthIcon name="warehouse" :size="16" />{{ selectedWarehouseLabel }}</button>
+                </div>
+                <label class="admin-dashboard__field">
+                  <span>Từ ngày</span>
+                  <input v-model="filters.dateFrom" type="date" :max="filters.dateTo || undefined" @change="onFilterChange" />
+                </label>
+                <label class="admin-dashboard__field">
+                  <span>Đến ngày</span>
+                  <input v-model="filters.dateTo" type="date" :min="filters.dateFrom || undefined" @change="onFilterChange" />
+                </label>
+                <button
+                  type="button"
+                  class="auth-btn auth-btn--soft admin-dashboard__reset"
+                  :disabled="!hasActiveFilters"
+                  @click="resetFilters"
+                >
+                  <AuthIcon name="refresh" :size="18" />Đặt lại
+                </button>
+              </div>
+
+              <p v-if="warehouseErrorStatus" class="admin-dashboard__inline-alert" role="status">
+                Không tải được danh sách tên kho. {{ isSystemAdmin ? 'Bạn vẫn có thể xem tất cả kho; bộ lọc kho riêng lẻ tạm thời không khả dụng.' : 'Danh sách được giới hạn ở các kho đã phân công.' }}
+              </p>
+
+              <div v-if="isLoading" class="admin-dashboard__task-state" aria-live="polite" aria-busy="true">
+                <span class="admin-dashboard__loader"><AuthIcon name="loader" :size="22" class="auth-spin" /></span>
+                <p>Đang tải tác vụ trong phạm vi được cấp quyền…</p>
+              </div>
+
+              <div v-else-if="errorStatus" class="admin-dashboard__task-state admin-dashboard__task-state--error" role="alert">
+                <span class="admin-dashboard__loader"><AuthIcon name="cloud-off" :size="22" /></span>
+                <p>{{ taskErrorMessage }}</p>
+                <button type="button" class="auth-btn auth-btn--soft" @click="loadTasks">
+                  <AuthIcon name="refresh" :size="18" />Thử lại
+                </button>
+              </div>
+
+              <div v-else-if="!tasks.length" class="admin-dashboard__task-state" aria-live="polite">
+                <span class="admin-dashboard__loader"><AuthIcon name="inbox" :size="22" /></span>
+                <p>Không có yêu cầu chờ duyệt phù hợp với bộ lọc hiện tại.</p>
+              </div>
+
+              <ul v-else class="admin-dashboard__task-list" :aria-busy="isLoading">
+                <li v-for="task in tasks" :key="task.id" class="admin-dashboard__task">
+                  <span class="admin-dashboard__task-icon"><AuthIcon name="heart-handshake" :size="20" /></span>
+                  <div class="admin-dashboard__task-main">
+                    <RouterLink
+                      class="admin-dashboard__task-title"
+                      :to="{ name: 'admin-donation-detail', params: { donationId: task.id } }"
+                    >{{ task.title || `Yêu cầu ${task.id}` }}</RouterLink>
+                    <span class="admin-dashboard__task-meta">
+                      <span class="auth-mono">#{{ task.id }}</span>
+                      <span>{{ warehouseLabel(task) }}</span>
+                      <time :datetime="task.createdAt">{{ formatCreatedAt(task.createdAt) }}</time>
+                    </span>
+                  </div>
+                  <span class="admin-dashboard__status">{{ DONATION_STATUS_LABEL[task.status] || 'Chờ duyệt' }}</span>
+                  <RouterLink
+                    class="admin-dashboard__task-action"
+                    :to="{ name: 'admin-donation-detail', params: { donationId: task.id } }"
+                    :aria-label="`Xem yêu cầu ${task.id}`"
+                  >
+                    Xem <AuthIcon name="arrow-right" :size="16" />
+                  </RouterLink>
+                </li>
+              </ul>
+
+              <footer class="admin-dashboard__tasks-footer">
+                <span v-if="tasks.length">Đang hiển thị {{ tasks.length }} yêu cầu phù hợp; đây không phải tổng số toàn hệ thống.</span>
+                <RouterLink :to="{ name: ADMIN_ROUTE.donationQueue }" class="admin-dashboard__all-tasks">
+                  Xem hàng đợi <AuthIcon name="arrow-right" :size="16" />
+                </RouterLink>
+              </footer>
+            </section>
+
+            <nav class="admin-dashboard__shortcuts" aria-label="Liên kết quản trị">
+              <RouterLink
+                v-if="staffAssignment.role === USER_ROLE.systemAdmin"
+                :to="{ name: ADMIN_ROUTE.staff }"
+                class="auth-btn auth-btn--soft"
+              >
+                <AuthIcon name="users" />Quản lý nhân sự
+              </RouterLink>
+              <RouterLink :to="{ name: ADMIN_ROUTE.donationQueue }" class="auth-btn auth-btn--soft">
+                <AuthIcon name="inbox" />Hàng đợi yêu cầu quyên góp
+              </RouterLink>
+              <RouterLink
+                v-if="isDemoBuild && demoWarehouse"
+                :to="{ name: 'admin-donation-detail', params: { warehouseId: demoWarehouse, donationId: 'demo-001' } }"
+                class="auth-btn auth-btn--soft"
+              >
+                <AuthIcon name="eye" />Xem trước donation (DEV)
+              </RouterLink>
+              <button type="button" class="auth-btn auth-btn--soft" @click="onSignOutClick">
+                <AuthIcon name="log-out" />Đăng xuất
+              </button>
+            </nav>
+          </section>
+        </div>
+      </div>
+      <dialog ref="warehouseDialog" class="admin-ops__dialog" aria-labelledby="warehouse-selector-title">
+        <div class="admin-ops__dialog-header">
+          <h2 id="warehouse-selector-title">Chọn không gian kho làm việc</h2>
+          <button type="button" aria-label="Đóng bộ chọn kho" @click="warehouseDialog?.close()">×</button>
+        </div>
+        <p>Các kho bạn có quyền truy cập. Chọn kho để cập nhật chỉ số và tác vụ.</p>
+        <div class="admin-ops__warehouse-list">
+          <button type="button" :aria-pressed="!filters.warehouseId" @click="chooseWarehouse('')">
+            <AuthIcon name="dashboard" :size="18" />
+            <span><strong>{{ isSystemAdmin ? 'Tất cả kho' : 'Tất cả kho được giao' }}</strong><small>Phạm vi {{ isSystemAdmin ? 'toàn hệ thống' : 'được phân công' }}</small></span>
+            <AuthIcon v-if="!filters.warehouseId" name="check" :size="18" />
+          </button>
+          <button
+            v-for="warehouse in warehouses"
+            :key="warehouse.id"
+            type="button"
+            :aria-pressed="filters.warehouseId === warehouse.id"
+            @click="chooseWarehouse(warehouse.id)"
+          >
+            <AuthIcon name="warehouse" :size="18" />
+            <span><strong>{{ warehouse.name }}</strong><small>{{ warehouse.id }}</small></span>
+            <AuthIcon v-if="filters.warehouseId === warehouse.id" name="check" :size="18" />
+          </button>
+        </div>
+        <p v-if="warehouseErrorStatus" class="admin-dashboard__inline-alert">Không tải được tên kho. Hãy thử lại sau.</p>
+      </dialog>
+    </div>
+    <div v-else class="admin-ops__pending" role="status">Đang tải quyền truy cập…</div>
   </AuthShell>
 </template>
 
 <style scoped>
+:deep(.auth-shell__header),
+:deep(.auth-shell__footer) {
+  display: none;
+}
+
+:deep(.auth-shell__main) {
+  display: block;
+  padding: 0;
+}
+
+.admin-ops {
+  display: grid;
+  grid-template-columns: 228px minmax(0, 1fr);
+  min-height: 100vh;
+  background: #f6f7fb;
+}
+
+.admin-ops__sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+  padding: 24px 16px;
+  border-right: 1px solid var(--auth-border);
+  background: var(--auth-surface);
+}
+
+.admin-ops__brand,
+.admin-ops__nav-link,
+.admin-ops__sidebar-footer,
+.admin-ops__topbar,
+.admin-ops__warehouse-button,
+.admin-ops__topbar-role,
+.admin-ops__user {
+  display: flex;
+  align-items: center;
+}
+
+.admin-ops__brand { gap: 10px; color: var(--auth-primary); }
+.admin-ops__brand img { width: 36px; height: 36px; }
+.admin-ops__brand span { display: flex; flex-direction: column; line-height: 1.2; }
+.admin-ops__brand small { color: var(--auth-text-secondary); font-size: 11px; }
+.admin-ops__nav-heading { margin: 0; color: var(--auth-text-tertiary); font-size: 11px; font-weight: 700; text-transform: uppercase; }
+.admin-ops__nav { display: flex; flex-direction: column; gap: 5px; }
+.admin-ops__nav-link { gap: 10px; min-height: 42px; padding: 8px 10px; border-radius: 8px; color: var(--auth-text-secondary); font-size: 13px; text-decoration: none; }
+.admin-ops__nav-link:hover { background: var(--auth-primary-soft); color: var(--auth-primary); }
+.admin-ops__nav-link--active { background: var(--auth-primary); color: white; font-weight: 700; }
+.admin-ops__nav-link--active:hover { background: var(--auth-primary-hover); color: white; }
+.admin-ops__sidebar-footer { gap: 8px; margin-top: auto; padding: 12px; border-radius: 9px; background: var(--auth-accent-soft); color: var(--auth-text-secondary); font-size: 12px; }
+.admin-ops__body { min-width: 0; }
+.admin-ops__topbar { flex-wrap: wrap; gap: 12px; min-height: 70px; padding: 12px 24px; border-bottom: 1px solid var(--auth-border); background: var(--auth-surface); }
+.admin-ops__topbar-title { margin-right: auto; color: var(--auth-primary); white-space: nowrap; }
+.admin-ops__topbar-title span { display: block; color: var(--auth-text-tertiary); font-size: 11px; font-weight: 500; }
+.admin-ops__warehouse-button,
+.admin-dashboard__warehouse-filter { gap: 8px; min-height: 40px; padding: 8px 12px; border: 1px solid var(--auth-border); border-radius: 8px; background: var(--auth-surface); color: var(--auth-text); cursor: pointer; font: inherit; text-align: left; }
+.admin-ops__warehouse-button:disabled,
+.admin-dashboard__warehouse-filter:disabled { cursor: not-allowed; opacity: .6; }
+.admin-ops__topbar-role { gap: 6px; padding: 7px 10px; border-radius: 999px; background: var(--auth-primary-soft); color: var(--auth-primary); font-size: 12px; }
+.admin-ops__user { gap: 7px; min-width: 0; max-width: 230px; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.admin-ops__content { padding: 26px; }
+.admin-ops__pending { padding: 48px; }
+.admin-ops__dialog { width: min(500px, calc(100vw - 32px)); max-height: min(650px, calc(100vh - 32px)); padding: 22px; border: 1px solid var(--auth-border); border-radius: 14px; box-shadow: var(--auth-shadow); color: var(--auth-text); }
+.admin-ops__dialog::backdrop { background: rgb(18 29 25 / .55); }
+.admin-ops__dialog-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.admin-ops__dialog-header h2 { margin: 0; font-size: 18px; }
+.admin-ops__dialog-header button { border: 0; background: transparent; font-size: 26px; cursor: pointer; }
+.admin-ops__dialog > p { margin: 10px 0 16px; color: var(--auth-text-secondary); font-size: 13px; }
+.admin-ops__warehouse-list { display: flex; flex-direction: column; gap: 8px; overflow: auto; }
+.admin-ops__warehouse-list button { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 58px; padding: 10px; border: 1px solid var(--auth-border); border-radius: 9px; background: white; color: var(--auth-text); cursor: pointer; text-align: left; }
+.admin-ops__warehouse-list button[aria-pressed="true"] { border-color: var(--auth-primary); background: var(--auth-primary-soft); }
+.admin-ops__warehouse-list button span { display: flex; flex: 1; flex-direction: column; }
+.admin-ops__warehouse-list button small { color: var(--auth-text-tertiary); }
+.admin-dashboard__warehouse-filter { width: 100%; }
+.admin-dashboard__unit-list { display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 6px 0; list-style: none; }
+.admin-dashboard__unit-list li { padding: 4px 7px; border-radius: 5px; background: var(--auth-primary-soft); color: var(--auth-primary); font-size: 12px; }
+.admin-dashboard__unit-warning { color: var(--auth-warning) !important; }
+.admin-dashboard__inline-alert .auth-btn { margin-left: 10px; }
+
 .admin-dashboard {
   display: flex;
   flex-direction: column;
@@ -747,6 +985,12 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 1000px) {
+  .admin-ops { grid-template-columns: minmax(0, 1fr); }
+  .admin-ops__sidebar { gap: 10px; padding: 12px 18px; border-right: 0; border-bottom: 1px solid var(--auth-border); }
+  .admin-ops__nav { flex-direction: row; flex-wrap: wrap; }
+  .admin-ops__sidebar-footer,
+  .admin-ops__nav-heading { display: none; }
+
   .admin-dashboard__metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -761,6 +1005,14 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 640px) {
+  .admin-ops__content { padding: 16px; }
+  .admin-ops__topbar { padding: 12px 16px; }
+  .admin-ops__topbar-role { display: none; }
+  .admin-ops__user { max-width: 100%; }
+  .admin-ops__nav { flex-wrap: nowrap; overflow-x: auto; }
+  .admin-ops__nav-link { flex: 0 0 auto; }
+  .admin-ops__dialog { padding: 16px; }
+
   .admin-dashboard {
     gap: 16px;
   }
