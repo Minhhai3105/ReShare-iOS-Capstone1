@@ -23,7 +23,7 @@ function profileFrom(doc, includePrivate = false) {
   };
   if (includePrivate) {
     Object.assign(profile, {
-      phone: data.phone || '', notes: data.notes || '', supportNeeds: data.supportNeeds || '',
+      phone: data.phone || '', notes: data.notes || '',
       needs: Array.isArray(data.needs) ? data.needs : [],
       createdByUid: data.createdByUid || '', verifiedByUid: data.verifiedByUid || '',
       verifiedAt: dateString(data.verifiedAt), unverifiedByUid: data.unverifiedByUid || '',
