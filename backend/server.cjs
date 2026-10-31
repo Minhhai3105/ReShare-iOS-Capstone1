@@ -10,6 +10,7 @@ const { createDonationReviewApi } = require('./donation-review-api.cjs');
 const { createReceiptApi } = require('./receipt-api.cjs');
 const { createStockIntakeApi } = require('./stock-intake-api.cjs');
 const { createInventoryApi } = require('./inventory-api.cjs');
+const { createDistributionHistoryApi } = require('./distribution-history-api.cjs');
 const { createDistributionApi } = require('./distribution-api.cjs');
 const { createReportsApi } = require('./reports-api.cjs');
 
@@ -41,6 +42,7 @@ const donationReviewApi = createDonationReviewApi({ db, verifyToken, serverTimes
 const receiptApi = createReceiptApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const stockIntakeApi = createStockIntakeApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const inventoryApi = createInventoryApi({ db, verifyToken });
+const distributionHistoryApi = createDistributionHistoryApi({ db, verifyToken });
 const distributionApi = createDistributionApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const reportsApi = createReportsApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const adminWebOrigins = new Set((process.env.ADMIN_WEB_ORIGINS || '')
@@ -55,6 +57,11 @@ const server = http.createServer(async (request, response) => {
     /^\/v1\/admin\/stock-entries\/[^/]+$/.test(pathname);
   const isInventoryPath = pathname === '/v1/admin/inventory' ||
     /^\/v1\/admin\/inventory\/[^/]+$/.test(pathname);
+  // Đặt tên theo đúng handler: US17 đọc lịch sử ở /distributions (số nhiều), còn
+  // US16 ghi phiếu ở /distribution (số ít, PR #49). Hai thứ khác nhau nên không
+  // dùng chung tên isDistributionPath, tránh resolve conflict sai khi gộp.
+  const isDistributionHistoryPath = pathname === '/v1/admin/distributions' ||
+    /^\/v1\/admin\/distributions\/[^/]+$/.test(pathname);
   // Neo chính xác, KHÔNG dùng startsWith: '/v1/admin/distribution' là tiền tố của
   // '/v1/admin/distributions' (US17), nên startsWith sẽ nuốt route đó và trả 404.
   const isDistributionPath = pathname === '/v1/admin/distribution' ||
@@ -106,6 +113,7 @@ const server = http.createServer(async (request, response) => {
       : isReceiptPath ? receiptApi
       : isStockIntakePath ? stockIntakeApi
       : isInventoryPath ? inventoryApi
+      : isDistributionHistoryPath ? distributionHistoryApi
       : isDistributionPath ? distributionApi
       : isReportsPath ? reportsApi
       : isDonationAdminPath ? donationReviewApi
