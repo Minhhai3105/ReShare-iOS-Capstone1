@@ -1,6 +1,7 @@
 const { ApiError } = require('./image-api.cjs');
 const { createHash } = require('node:crypto');
 const { runTransaction } = require('./firestore-transaction.cjs');
+const { assertCurrentStaffAccess } = require('./staff-access.cjs');
 
 function createDistributionApi({ db, verifyToken, serverTimestamp }) {
   if (!db || !verifyToken) throw new Error('Distribution API configuration is incomplete');
@@ -242,6 +243,8 @@ function createDistributionApi({ db, verifyToken, serverTimestamp }) {
       const movementRef = db.collection('inventory_movements').doc(movementId);
 
       const result = await runTransaction(db, async (transaction) => {
+        // Kho đã biết từ body nên kiểm ngay đầu, phủ cả nhánh gửi lại bên dưới.
+        await assertCurrentStaffAccess(transaction, db, staff.uid, { warehouseId });
         const [voucherDoc, movementDoc] = await Promise.all([
           transaction.get(voucherRef), transaction.get(movementRef),
         ]);

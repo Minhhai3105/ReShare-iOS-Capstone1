@@ -1,6 +1,7 @@
 const { ApiError } = require('./image-api.cjs');
 const { FieldValue } = require('firebase-admin/firestore');
 const { runTransaction } = require('./firestore-transaction.cjs');
+const { assertCurrentStaffAccess } = require('./staff-access.cjs');
 
 function publicHistory(history) {
   if (!Array.isArray(history)) return [];
@@ -54,6 +55,8 @@ function createDonationReviewApi({ db, verifyToken, serverTimestamp }) {
       const [donationDoc, warehouseDoc, reviewDoc] = await Promise.all([
         transaction.get(donationRef), transaction.get(warehouseRef), transaction.get(reviewRef),
       ]);
+      // Phân kho chỉ System Admin làm được; kiểm lại ngay trong transaction.
+      await assertCurrentStaffAccess(transaction, db, staff.uid, { warehouseId, systemOnly: true });
       if (!donationDoc.exists) throw new ApiError(404, 'Donation not found');
       const donation = donationDoc.data();
       if (!warehouseDoc.exists) throw new ApiError(404, 'Warehouse not found');
@@ -132,6 +135,8 @@ function createDonationReviewApi({ db, verifyToken, serverTimestamp }) {
           throw new ApiError(403, 'You are not authorized to appraise donations for this warehouse.');
         }
       }
+      // Kiểm ở trên dùng quyền đọc trước transaction; lần đọc lại này mới là lần quyết định.
+      await assertCurrentStaffAccess(transaction, db, staff.uid, { warehouseId: assignedWarehouse });
 
       // Concurrency and state check
       if (data.status !== 'pending') {
@@ -219,6 +224,7 @@ function createDonationReviewApi({ db, verifyToken, serverTimestamp }) {
           (!donation.warehouseId || !staff.warehouseIds.includes(donation.warehouseId))) {
         throw new ApiError(403, 'Forbidden: not your assigned warehouse');
       }
+      await assertCurrentStaffAccess(transaction, db, staff.uid, { warehouseId: donation.warehouseId });
       const reviewDoc = await transaction.get(reviewRef);
       const review = reviewDoc.exists ? reviewDoc.data() : {};
       const currentVersion = review.staffConfirmationVersion || 0;
