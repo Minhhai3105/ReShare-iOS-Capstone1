@@ -67,7 +67,7 @@ extension DonationStatus {
         case .received:
             return "Đã tiếp nhận thành công tại trạm ReShare Hub."
         case .inStock:
-            return "Đã qua sấy khử trùng UV-C và lưu kho an toàn."
+            return "Đã được nhập kho và đang chờ phân phối."
         case .distributed:
             return "Đã trao tặng thành công đến người nhận."
         case .rejected:

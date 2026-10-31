@@ -46,6 +46,75 @@ function createDistributionApi({ db, verifyToken, serverTimestamp }) {
     return staff.warehouseIds.includes(warehouseId);
   }
 
+  // Đếm số đã thực sự trao của một mục tồn và quyết định donation nguồn đã trao xong chưa.
+  // Chỉ gồm read, nên phải gọi trước mọi write của transaction xuất kho.
+  async function readDonationProgress(transaction, { itemId, itemData, warehouseId, unit, currentAvailable, quantity }) {
+    const donationId = typeof itemData.donationId === 'string' &&
+      /^[A-Za-z0-9_-]{1,120}$/.test(itemData.donationId) ? itemData.donationId : null;
+    // Mục tồn không gắn donation (hàng nhập ngoài luồng quyên góp, dữ liệu kiểu cũ) thì không có
+    // donor nào để báo: không đếm, không đối soát, không gắn cờ — giữ nguyên hành vi cũ, tránh
+    // gắn nhãn "cần kiểm tra" lên mọi mục tồn không phải từ quyên góp.
+    if (!donationId) return { quantityDistributed: null, issue: null };
+
+    const received = itemData.quantityReceived;
+    let distributedBefore = null;
+    let issue = null;
+
+    if (Number.isSafeInteger(itemData.quantityDistributed) && itemData.quantityDistributed >= 0) {
+      distributedBefore = itemData.quantityDistributed;
+    } else {
+      // Mục tồn cũ chưa có bộ đếm: cộng lại từ movement xuất phân phối. Không suy từ
+      // quantityReceived − quantityAvailable, vì phép trừ đó tính cả hàng hỏng/điều chỉnh
+      // thành hàng đã trao.
+      const movements = await transaction.get(db.collection('inventory_movements')
+        .where('inventoryItemId', '==', itemId).where('type', '==', 'distribution'));
+      let sum = 0;
+      const valid = movements.docs.every(doc => {
+        const movement = doc.data();
+        if (movement.warehouseId !== warehouseId || movement.unitId !== unit ||
+            !Number.isSafeInteger(movement.quantity) || movement.quantity >= 0) return false;
+        sum -= movement.quantity;
+        return true;
+      });
+      // Đối soát chéo với tồn: hiện chỉ nhập kho đặt và xuất kho giảm tồn, nên nhận − đã xuất
+      // phải đúng bằng tồn còn lại. Lệch nghĩa là có biến động không ghi sổ — không đoán.
+      if (valid && Number.isSafeInteger(received) && received - sum === currentAvailable) {
+        distributedBefore = sum;
+      } else {
+        issue = 'LEGACY_DISTRIBUTION_UNRECONCILED';
+      }
+    }
+
+    const quantityDistributed = distributedBefore === null ? null : distributedBefore + quantity;
+    if (quantityDistributed !== null && Number.isSafeInteger(received) && quantityDistributed > received) {
+      return { quantityDistributed: null, issue: 'DISTRIBUTED_EXCEEDS_RECEIVED' };
+    }
+    const fullyDistributed = quantityDistributed !== null && Number.isSafeInteger(received) &&
+      received > 0 && quantityDistributed === received;
+    if (!fullyDistributed) return { quantityDistributed, issue };
+
+    // Trước khi báo donor "đã trao tặng", đối chiếu chuỗi nguồn: donation ↔ phiếu thực nhận
+    // ↔ phiếu nhập kho ↔ mục tồn phải trỏ về nhau, cùng kho, cùng số lượng. Lệch thì không đụng
+    // donation, vì ghi nhầm trạng thái cho đơn khác còn tệ hơn chưa ghi.
+    const receiptId = typeof itemData.receiptId === 'string' &&
+      /^[A-Za-z0-9_-]{1,128}$/.test(itemData.receiptId) ? itemData.receiptId : null;
+    const donationRef = db.collection('donations').doc(donationId);
+    const [donationDoc, receiptDoc] = await Promise.all([
+      transaction.get(donationRef),
+      receiptId ? transaction.get(db.collection('receipts').doc(receiptId)) : Promise.resolve(null),
+    ]);
+    const donation = donationDoc.exists ? donationDoc.data() : null;
+    const receipt = receiptDoc?.exists ? receiptDoc.data() : null;
+    const linked = Boolean(donation && receipt && itemData.stockEntryId &&
+      donation.warehouseId === warehouseId && receipt.warehouseId === warehouseId &&
+      donation.actualReceiptId === receiptId && receipt.donationId === donationId &&
+      donation.stockEntryId === itemData.stockEntryId && receipt.stockEntryId === itemData.stockEntryId &&
+      receipt.quantity === received);
+    if (!linked) return { quantityDistributed, issue: 'DONATION_LINK_MISMATCH' };
+    if (donation.status !== 'in_stock') return { quantityDistributed, issue: 'DONATION_STATUS_UNEXPECTED' };
+    return { quantityDistributed, issue, donationRef, donationVersion: donation.version || 1 };
+  }
+
   // Contract dùng chung cho mọi module: path là pathname, query ở tham số thứ 5.
   // new URL(requestUrl || path) chịu được cả hai dạng nên không vỡ nếu ai gọi kiểu cũ.
   async function handle(method, path, headers, body, requestUrl = '') {
@@ -198,6 +267,8 @@ function createDistributionApi({ db, verifyToken, serverTimestamp }) {
               version: typeof itemData.version === 'number' ? itemData.version : 1,
             } : null,
             idempotentReplay: true,
+            // Gửi lại không ghi gì thêm, nên cũng không sinh cảnh báo mới.
+            warnings: [],
           };
         }
 
@@ -276,6 +347,9 @@ function createDistributionApi({ db, verifyToken, serverTimestamp }) {
         const before = currentAvailable;
         const after = before - quantity;
         const newVersion = currentVersion + 1;
+        const progress = await readDonationProgress(transaction, {
+          itemId, itemData, warehouseId, unit, currentAvailable, quantity,
+        });
 
         const timestamp = new Date().toISOString();
         const serverNow = now();
@@ -339,10 +413,24 @@ function createDistributionApi({ db, verifyToken, serverTimestamp }) {
           available: after,
           version: newVersion,
           updatedAt: serverNow,
+          // Bộ đếm chỉ được ghi khi đã biết chắc; không đối soát được thì để trống và gắn cờ
+          // cho người kiểm tra, thay vì ghi một con số đoán.
+          ...(progress.quantityDistributed !== null ? { quantityDistributed: progress.quantityDistributed } : {}),
+          ...(progress.issue ? { needsReconciliation: true, reconciliationIssue: progress.issue } : {}),
         });
 
         transaction.set(voucherRef, voucherData);
         transaction.set(movementRef, movementData);
+
+        if (progress.donationRef) {
+          // Donor đọc được document này, nên tuyệt đối không ghi beneficiaryId hay phiếu xuất vào
+          // đây. Tăng version để thao tác cầm expectedVersion cũ trên donation bị từ chối.
+          transaction.update(progress.donationRef, {
+            status: 'distributed',
+            distributedAt: serverNow,
+            version: progress.donationVersion + 1,
+          });
+        }
 
         return {
           voucher: voucherData,
@@ -353,6 +441,10 @@ function createDistributionApi({ db, verifyToken, serverTimestamp }) {
             quantityAvailable: after,
             version: newVersion,
           },
+          donationClosed: Boolean(progress.donationRef),
+          // Xuất kho vẫn thành công khi sổ donation lệch — trao hàng là việc chính — nhưng phải
+          // báo ra để người vận hành biết có mục cần kiểm tra.
+          warnings: progress.issue ? [progress.issue] : [],
         };
       });
 
