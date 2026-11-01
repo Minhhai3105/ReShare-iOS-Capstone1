@@ -218,7 +218,7 @@ onBeforeUnmount(() => { latestRequestId += 1 })
               <em>{{ source.code ? source.linked : source.empty }}</em>
             </span>
           </div>
-          <p class="detail-source-note">Bấm mã yêu cầu quyên góp để mở màn chi tiết. Phiếu xuất mở từ lịch sử biến động; biên bản thực nhận và phiếu nhập/điều chỉnh chưa có màn xem.</p>
+          <p class="detail-source-note">Bấm mã yêu cầu quyên góp hoặc phiếu nhập kho để mở màn chi tiết. Phiếu xuất mở từ lịch sử biến động; biên bản thực nhận và phiếu điều chỉnh chưa có màn xem.</p>
           <p class="detail-hint is-green"><AuthIcon name="check-circle" :size="15" />Cam kết truy xuất nguồn gốc ReShare</p>
         </section>
 

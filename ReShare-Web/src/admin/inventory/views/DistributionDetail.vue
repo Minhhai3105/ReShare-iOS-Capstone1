@@ -215,7 +215,8 @@ onBeforeUnmount(() => { latestRequestId += 1 })
           <div class="px-related">
             <AuthIcon name="download" :size="18" />
             <div><p class="px-label">Phiếu nhập nguồn</p><b class="mono">{{ formatCode(selectedLine?.stockEntryId) }}</b></div>
-            <span class="px-unsupported">Chưa hỗ trợ</span>
+            <RouterLink v-if="selectedLine?.stockEntryId && !IS_SAMPLE_DATA" :to="{ name: 'admin-stock-entry-detail', params: { entryId: selectedLine.stockEntryId } }" class="inv-btn px-small">Xem phiếu nhập</RouterLink>
+            <span v-else class="px-unsupported">Chưa hỗ trợ</span>
           </div>
           <div class="px-related">
             <AuthIcon name="user" :size="18" />
