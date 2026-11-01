@@ -294,7 +294,9 @@ function createDonationReviewApi({ db, auth, verifyToken, serverTimestamp }) {
     const review = reviewDoc.exists ? reviewDoc.data() : {};
     const donorDoc = data.donorId ? await db.collection('users').doc(data.donorId).get() : null;
     const donor = donorDoc?.exists ? donorDoc.data() : {};
-    const emails = await staffEmails(auth, [review.staffConfirmedBy, review.warehouseAssignedBy]);
+    const history = review.history || data.history || [];
+    const emails = await staffEmails(auth, [review.staffConfirmedBy, review.warehouseAssignedBy,
+      ...history.map(entry => entry?.actorUid)]);
     return {
       status: 200,
       body: { donation: {
@@ -318,7 +320,7 @@ function createDonationReviewApi({ db, auth, verifyToken, serverTimestamp }) {
         warehouseAssignedAt: review.warehouseAssignedAt?.toDate?.().toISOString() ||
           (review.warehouseAssignedAt instanceof Date ? review.warehouseAssignedAt.toISOString() : (review.warehouseAssignedAt || null)),
         categoryConfirmationHistory: review.categoryConfirmationHistory || [],
-        history: review.history || data.history || [],
+        history: history.map(entry => (emails.has(entry?.actorUid) ? { ...entry, actorEmail: emails.get(entry.actorUid) } : entry)),
       } },
     };
   }
