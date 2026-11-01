@@ -522,6 +522,10 @@ test('Chi tiết đơn trả email người phân kho / xác nhận danh mục, 
   const confirmed = await api.handle('POST', '/v1/admin/donations/don-unassigned/confirm-category', headers,
     { category: 'books', expectedVersion: 0 });
   assert.equal(confirmed.body.donation.staffConfirmedByEmail, 'admin@reshare.vn');
+  const decided = await api.handle('POST', '/v1/admin/donations/don-unassigned/decide', headers, { action: 'approve' });
+  const entry = decided.body.donation.history.at(-1);
+  assert.equal(entry.actorUid, 'admin-1');
+  assert.equal(entry.actorEmail, 'admin@reshare.vn', 'lịch sử trạng thái cũng hiện email người thao tác');
 
   const { api: withoutAuth } = setup();
   const plain = await withoutAuth.handle('POST', '/v1/admin/donations/don-unassigned/assign-warehouse', headers,
