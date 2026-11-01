@@ -1,7 +1,10 @@
 import { distributionFixtures } from './distribution.mock.js'
 import { mockError } from '../lq-errors.js'
+import { unitLabel } from '../shared/units.js'
 
 const clone = (value) => structuredClone(value)
+// API trả mã đơn vị (piece…); form chỉ dùng `unit` để hiển thị, `unitId` giữ nguyên mã gốc.
+const withUnitLabel = (entry) => entry && { ...entry, unit: unitLabel(entry.unit) }
 const fail = (code, message, details = {}) => Object.assign(new Error(message), { code, ...details })
 
 // Khóa chống gửi trùng cho một lần xuất kho. crypto.randomUUID chỉ tồn tại trong
@@ -150,7 +153,7 @@ export function createLiveDistributionRepository({
     if (!response.ok) {
       throw fail(result.code || 'ERROR', result.message || 'Không thể tải danh sách kho và vật phẩm.')
     }
-    return result
+    return { ...result, inventory: (result.inventory || []).map(withUnitLabel) }
   }
 
   async function createVoucher(draft) {
@@ -189,11 +192,11 @@ export function createLiveDistributionRepository({
     }
     if (!response.ok) {
       throw fail(result.code || 'ERROR', result.message || 'Không thể tạo phiếu xuất.', {
-        item: result.details?.item,
+        item: withUnitLabel(result.details?.item),
         errors: result.details?.errors,
       })
     }
-    return result
+    return { ...result, item: withUnitLabel(result.item), voucher: withUnitLabel(result.voucher) }
   }
 
   return { list, createVoucher }

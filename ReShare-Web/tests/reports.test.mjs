@@ -199,3 +199,21 @@ test('Live repository giữ mã lỗi để màn báo cáo hiện đúng lý do,
   respond(401, { message: 'Invalid session' })
   assert.equal(mapLqError(await repository.load({ filters }).catch((error) => error)).kind, 'session')
 })
+
+test('Báo cáo gộp mã đơn vị với nhãn cũ cùng nghĩa và hiển thị nhãn tiếng Việt', () => {
+  const data = {
+    warehouses: [{ id: 'hai-chau', name: 'Kho Hải Châu' }],
+    categories: [{ id: 'clothing', name: 'Quần áo' }],
+    inventory: [{ id: 'inv-1', warehouseId: 'hai-chau', categoryId: 'clothing', item: 'Áo', available: 3, unit: 'piece' }],
+    sources: [
+      { id: 'don-old', type: 'donation', timestamp: '2025-05-02T02:00:00Z', warehouseId: 'hai-chau', categoryId: 'clothing', item: 'Áo cũ', quantity: 1, unit: 'chiếc', reference: '', status: 'approved' },
+      { id: 'don-new', type: 'donation', timestamp: '2025-05-03T02:00:00Z', warehouseId: 'hai-chau', categoryId: 'clothing', item: 'Áo mới', quantity: 2, unit: 'piece', reference: '', status: 'pending' },
+    ],
+  }
+  const report = calculateReports(data, filters, admin)
+  assert.deepEqual(report.summary.find((entry) => entry.id === 'donation').quantities, [{ unit: 'chiếc', quantity: 3 }])
+  assert.deepEqual(report.rows.map((row) => row.unit), ['chiếc', 'chiếc'])
+  assert.equal(report.stock[0].unit, 'chiếc')
+  const csv = parseCsv(buildReportsCsv(data, filters, admin, 'Dữ liệu chính thức'))
+  assert.ok(csv.slice(1).every((row) => row[9] === 'chiếc'), 'CSV dùng cùng nhãn đơn vị với màn hình')
+})
