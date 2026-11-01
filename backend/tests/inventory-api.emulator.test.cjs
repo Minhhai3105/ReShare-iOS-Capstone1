@@ -20,7 +20,11 @@ test('US14: read inventory by assigned warehouse, filter, paginate and trace rec
       db.doc(`staff_assignments/${uid}`).set({ active: true, role, warehouseIds })));
     const verifyToken = async token => ({ uid: token, email: `${token}@example.com` });
     const intake = createStockIntakeApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
-    const inventory = createInventoryApi({ db, verifyToken });
+    // Auth giả: chỉ tra được email của inventory-admin, để thấy movement thiếu actorEmail được bổ sung.
+    const auth = { async getUsers(ids) {
+      return { users: ids.filter(({ uid }) => uid === 'inventory-admin').map(({ uid }) => ({ uid, email: 'admin@reshare.test' })) };
+    } };
+    const inventory = createInventoryApi({ db, auth, verifyToken });
     for (const [id, warehouseId, title, category, quantity] of [
       ['item-a', 'kho-a', 'Sách cũ', 'books', 3],
       ['item-b', 'kho-a', 'Áo sơ mi', 'clothing', 2],
@@ -67,6 +71,16 @@ test('US14: read inventory by assigned warehouse, filter, paginate and trace rec
     assert.equal(detail.movements[0].receiptId, 'rcp_item-a');
     assert.equal(detail.movements[0].voucherId, null);
     assert.equal(detail.movements[0].stockEntryId, 'ste_rcp_item-a');
+    assert.equal(detail.movements[0].actorEmail, 'inventory-admin@example.com', 'giữ actorEmail đã lưu khi nhập kho');
+
+    // Movement xuất kho chỉ lưu actorUid: API tra email để lịch sử không hiện UID.
+    await db.doc('inventory_movements/mov_out_item-a').set({
+      type: 'distribution', quantity: -1, inventoryItemId: 'inv_rcp_item-a', voucherId: 'PX-ITEM-A',
+      warehouseId: 'kho-a', actorUid: 'inventory-admin', createdAt: new Date(Date.now() + 60000),
+    });
+    const withOut = (await get('/v1/admin/inventory/inv_rcp_item-a', 'inventory-worker-a')).body;
+    assert.equal(withOut.movements[0].id, 'mov_out_item-a');
+    assert.equal(withOut.movements[0].actorEmail, 'admin@reshare.test');
 
     // Dòng trong danh sách phải mở được dù ID không theo tiền tố inv_rcp_ (dữ liệu seed/demo).
     await db.doc('inventory/legacy-item').set({

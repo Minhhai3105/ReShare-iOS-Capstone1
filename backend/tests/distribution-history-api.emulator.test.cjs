@@ -32,7 +32,12 @@ test('US17: distribution history is scoped, filtered and tied to confirmed movem
         voucherId: id, warehouseId, actorUid: 'history-admin', createdAt: new Date(createdAt),
       });
     }
-    const api = createDistributionHistoryApi({ db, verifyToken: async token => ({ uid: token }) });
+    await db.doc('beneficiaries/person-a').set({ name: 'Người nhận A', warehouseId: 'history-kho-a', phone: 'private-must-not-leak' });
+    await db.doc('beneficiaries/person-c').set({ name: 'Hồ sơ kho khác', warehouseId: 'history-kho-a' });
+    const auth = { async getUsers(ids) {
+      return { users: ids.filter(({ uid }) => uid === 'history-admin').map(({ uid }) => ({ uid, email: 'history-admin@reshare.test' })) };
+    } };
+    const api = createDistributionHistoryApi({ db, auth, verifyToken: async token => ({ uid: token }) });
     const get = (path, uid = 'history-admin') => api.handle('GET', path.split('?')[0],
       { authorization: `Bearer ${uid}` }, null, path);
     const listA = (await get('/v1/admin/distributions', 'history-a')).body;
@@ -50,7 +55,13 @@ test('US17: distribution history is scoped, filtered and tied to confirmed movem
     await assert.rejects(get('/v1/admin/distributions', 'history-donor'), { status: 403 });
     const detail = (await get('/v1/admin/distributions/history-dist-a', 'history-a')).body;
     assert.equal(detail.voucher.lines[0].quantity, -detail.movements[0].quantity);
-    assert.equal(detail.beneficiary.id, 'person-a');
+    // AC3: người thụ hưởng chỉ gồm mã, tên hiển thị và số lần hỗ trợ tại kho của phiếu.
+    assert.deepEqual(detail.beneficiary, { id: 'person-a', displayName: 'Người nhận A', supportCount: 1 });
+    assert.equal(detail.voucher.confirmedByEmail, 'history-admin@reshare.test');
+    assert.equal(detail.movements[0].actorEmail, 'history-admin@reshare.test');
+    // Hồ sơ không cùng kho với phiếu thì không lộ tên.
+    const otherWarehouse = (await get('/v1/admin/distributions/history-dist-b')).body;
+    assert.equal(otherWarehouse.beneficiary.displayName, '');
     assert.equal(JSON.stringify(detail).includes('private-must-not-leak'), false);
     await db.doc('inventory_movements/mov_history-dist-a').update({ quantity: -99 });
     await assert.rejects(get('/v1/admin/distributions/history-dist-a', 'history-a'), { status: 409 });

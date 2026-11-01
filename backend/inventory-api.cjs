@@ -1,6 +1,7 @@
 const { ApiError } = require('./image-api.cjs');
 const { FieldPath } = require('firebase-admin/firestore');
 const { cursorFor, readCursor, warehouseQueries, compareBy, mergedPage } = require('./scoped-pagination.cjs');
+const { staffEmails } = require('./staff-emails.cjs');
 
 const dateString = value => value?.toDate?.().toISOString() ||
   (value instanceof Date ? value.toISOString() : value || null);
@@ -14,7 +15,7 @@ const integer = (value, fallback, max) => {
   return parsed;
 };
 
-function createInventoryApi({ db, verifyToken }) {
+function createInventoryApi({ db, auth, verifyToken }) {
   if (!db || !verifyToken) throw new Error('Inventory API configuration is incomplete');
 
   async function staffFrom(headers) {
@@ -110,8 +111,13 @@ function createInventoryApi({ db, verifyToken }) {
     const page = await mergedPage([db.collection('inventory_movements')
       .where('inventoryItemId', '==', itemId).orderBy('createdAt', 'desc')
       .orderBy(FieldPath.documentId(), 'desc')], cursor, limit, compareBy('createdAt'), 'createdAt');
+    // Movement xuất kho chỉ lưu actorUid; tra email để lịch sử hiện người thao tác dễ đọc.
+    const movements = page.docs.map(movementFrom);
+    const emails = await staffEmails(auth, movements.filter(movement => !movement.actorEmail)
+      .map(movement => movement.actorUid));
     return {
-      item, movements: page.docs.map(movementFrom),
+      item, movements: movements.map(movement => (movement.actorEmail || !emails.has(movement.actorUid)
+        ? movement : { ...movement, actorEmail: emails.get(movement.actorUid) })),
       nextCursor: page.hasMore ? cursorFor(page.docs.at(-1), filterKey) : null,
     };
   }

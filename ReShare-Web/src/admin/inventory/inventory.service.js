@@ -1,7 +1,9 @@
-// Lớp dữ liệu tồn kho. Hiện dùng mock khi dev; bản build báo "chưa kết nối" (chưa nối API #47).
-// Tên field giữ đúng như BE (itemName, conditionId, unitId, quantityReceived, quantityAvailable,
-// stockEntryId, inventoryItemId) để khi nối API không phải đổi tên.
+// Lớp dữ liệu tồn kho. Khi dev dùng mock; bản build đọc API thật qua inventory.live.js
+// (inventory-api #47, distribution-history-api #48). Tên field giữ đúng như BE (itemName, conditionId,
+// unitId, quantityReceived, quantityAvailable, stockEntryId, inventoryItemId).
+import { ref } from 'vue'
 import { MOCK_WAREHOUSES, createMockInventory, getInventoryScenario } from './inventory.mock'
+import { createLiveInventorySource } from './inventory.live.js'
 import { normalizeText } from '../shared/text.js'
 
 export const INVENTORY_ERROR = Object.freeze({
@@ -56,6 +58,39 @@ const IS_MOCK = import.meta.env.DEV
 const mock = IS_MOCK
   ? { ...createMockInventory(), warehouses: MOCK_WAREHOUSES, getScenario: getInventoryScenario }
   : { items: [], movements: [], vouchers: [], beneficiaries: [], warehouses: [], getScenario: () => 'normal' }
+// Bản build: tên kho đọc theo phạm vi quyền (như hàng đợi donation). Ref để ô "Kho làm việc"
+// và tên kho trên các dòng tự cập nhật khi danh sách tải xong.
+const liveWarehouses = ref([])
+let liveWarehousesKey = ''
+let liveWarehousesLoad = null
+let live = null
+
+function liveSource() {
+  live ||= createLiveInventorySource({
+    apiBase: (import.meta.env.VITE_ADMIN_API_BASE_URL || 'https://reshare-ios-capstone1-1.onrender.com').replace(/\/$/, ''),
+    getToken: async () => {
+      const { auth } = await import('../auth/firebase.js')
+      if (!auth.currentUser) throw createError(INVENTORY_ERROR.forbidden)
+      return auth.currentUser.getIdToken()
+    },
+  })
+  return live
+}
+
+function ensureWarehouses(access) {
+  if (IS_MOCK || !access) return Promise.resolve()
+  const key = JSON.stringify([access.isAllWarehouses, access.warehouseIds])
+  if (key !== liveWarehousesKey) {
+    liveWarehousesKey = key
+    liveWarehousesLoad = import('../donations/donation.service.js')
+      .then(({ fetchQueueWarehouses }) => fetchQueueWarehouses(access))
+      .then((warehouses) => { if (key === liveWarehousesKey) liveWarehouses.value = warehouses })
+      // Không có tên kho thì hiện mã kho; lần sau đổi phạm vi sẽ thử tải lại.
+      .catch(() => { if (key === liveWarehousesKey) liveWarehousesKey = '' })
+  }
+  return liveWarehousesLoad
+}
+
 const dateFormatter = new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
 const hourFormatter = new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit' })
 
@@ -76,15 +111,24 @@ async function simulateRequest(access) {
 }
 
 export function getWarehouseInfo(warehouseId) {
-  const warehouse = mock.warehouses.find(({ id }) => id === warehouseId)
+  const warehouse = (IS_MOCK ? mock.warehouses : liveWarehouses.value).find(({ id }) => id === warehouseId)
   return { id: warehouseId, name: warehouse?.name ?? warehouseId, area: warehouse?.area ?? '' }
 }
 
 /** Kho được chọn trong ô "Kho làm việc" theo phân công. */
 export function getAccessibleWarehouses(access) {
   if (!access) return []
+  ensureWarehouses(access)
   if (!access.isAllWarehouses) return access.warehouseIds.map(getWarehouseInfo)
-  return mock.warehouses.map(({ id }) => getWarehouseInfo(id))
+  return (IS_MOCK ? mock.warehouses : liveWarehouses.value).map(({ id }) => getWarehouseInfo(id))
+}
+
+// Kiểm quyền phía client trước khi gọi API, giống mock; API vẫn kiểm lại theo phân công thật.
+async function liveRequest(access, warehouseId, load) {
+  if (!access) throw createError(INVENTORY_ERROR.forbidden)
+  if (warehouseId && !canView(access, warehouseId)) throw createError(INVENTORY_ERROR.forbidden)
+  const [result] = await Promise.all([load(liveSource()), ensureWarehouses(access)])
+  return result
 }
 
 // AC1: số còn là quantityAvailable do BE cập nhật nguyên tử cùng mỗi biến động; FE không tự cộng.
@@ -101,6 +145,11 @@ function withStock(item) {
 
 /** @returns { items, counts: { all, in_stock, out_of_stock } } */
 export async function fetchInventory(access, { warehouseId, search, category, condition, stock }) {
+  if (!IS_MOCK) {
+    const { items, counts } = await liveRequest(access, warehouseId,
+      (source) => source.listInventory({ warehouseId, search, category, condition, stock }))
+    return { items: items.map((item) => ({ ...item, warehouse: getWarehouseInfo(item.warehouseId) })), counts }
+  }
   await simulateRequest(access)
   // AC2: từ chối khi request chỉ định kho ngoài phân công, kể cả sửa URL thủ công.
   if (warehouseId && !canView(access, warehouseId)) throw createError(INVENTORY_ERROR.forbidden)
@@ -127,6 +176,11 @@ export async function fetchInventory(access, { warehouseId, search, category, co
 
 /** @returns { item, movements } — movements mới nhất trước. */
 export async function fetchInventoryItem(access, itemId) {
+  if (!IS_MOCK) {
+    const { item, movements } = await liveRequest(access, '', (source) => source.getInventoryItem(itemId))
+    if (!canView(access, item.warehouseId)) throw createError(INVENTORY_ERROR.forbidden)
+    return { item: { ...item, warehouse: getWarehouseInfo(item.warehouseId) }, movements }
+  }
   await simulateRequest(access)
   const item = mock.items.find(({ id }) => id === itemId)
   if (!item) throw createError(INVENTORY_ERROR.notFound)
@@ -141,6 +195,11 @@ export async function fetchInventoryItem(access, itemId) {
  * @returns { voucher, beneficiary, lines }
  */
 export async function fetchDistributionVoucher(access, voucherId) {
+  if (!IS_MOCK) {
+    const result = await liveRequest(access, '', (source) => source.getDistributionVoucher(voucherId))
+    if (!canView(access, result.voucher.warehouseId)) throw createError(INVENTORY_ERROR.forbidden)
+    return { ...result, voucher: { ...result.voucher, warehouse: getWarehouseInfo(result.voucher.warehouseId) } }
+  }
   await simulateRequest(access)
   const voucher = mock.vouchers.find(({ id }) => id === voucherId)
   if (!voucher) throw createError(INVENTORY_ERROR.notFound)
