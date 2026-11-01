@@ -1,5 +1,9 @@
 import { auth } from '../auth/firebase'
 import { demoReceiptAdapter } from './receipt.demo'
+import { unitLabel } from '../shared/units.js'
+
+// Tình trạng người gửi tự khai báo trên iOS (ItemCondition), khác bộ tình trạng nghiệm thu tại kho.
+const DONOR_CONDITION_LABEL = Object.freeze({ new: 'Mới 100%', like_new: 'Như mới (95%)', good: 'Còn tốt', fair: 'Dùng được' })
 
 const apiBase = (import.meta.env?.VITE_ADMIN_API_BASE_URL || 'https://reshare-ios-capstone1-1.onrender.com').replace(/\/$/, '')
 
@@ -69,10 +73,10 @@ export const liveReceiptAdapter = {
       itemName: data.title || data.itemName || 'Vật phẩm quyên góp',
       donorName: data.donor?.name || data.donorName || data.donorId || 'Người gửi',
       declaredQuantity: data.quantity ?? 1,
-      declaredUnitName: data.unitName || data.unit || 'chiếc',
+      declaredUnitName: unitLabel(data.unitId) || data.unitName || data.unit || 'chiếc',
       expectedWarehouseId: data.warehouseId || '',
       expectedWarehouseName: data.warehouseName || '',
-      declaredConditionName: data.condition || 'Chưa phân loại',
+      declaredConditionName: DONOR_CONDITION_LABEL[data.condition] || data.condition || 'Chưa phân loại',
     }
   },
 

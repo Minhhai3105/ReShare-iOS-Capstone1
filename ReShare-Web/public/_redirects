@@ -1,4 +1,6 @@
 # Cloudflare Pages mặc định phục vụ SPA khi không có 404.html ở gốc.
 # Giữ rewrite tường minh chỉ cho route Admin; không bắt /assets/*, favicon hoặc ảnh.
-/admin  /index.html  200
+# `/admin` (không có dấu / cuối) rewrite thẳng sang /index.html bị Pages trả 308 về "/" (trang landing);
+# chuyển sang `/admin/` để khớp rule dưới. Router coi `/admin/` và `/admin` là một.
+/admin  /admin/  301
 /admin/*  /index.html  200

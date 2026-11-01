@@ -33,6 +33,12 @@ const allowedWarehouses = computed(() => (options.value?.warehouses ?? []).filte
   isDemoPreview || (warehouse.id === donation.value?.expectedWarehouseId && canAccessWarehouse(warehouse.id)),
 ))
 const isApproved = computed(() => donation.value?.status === 'approved')
+// Sau khi ghi phiếu thành công, đơn đã sang "received" dù chưa tải lại trang.
+const ORIGIN_STATUS_LABEL = { approved: 'Đã duyệt (approved)', received: 'Đã thực nhận (received)', in_stock: 'Trong kho (in_stock)', distributed: 'Đã phân phối (distributed)' }
+const originStatusLabel = computed(() => ORIGIN_STATUS_LABEL[createdReceipt.value ? 'received' : donation.value?.status] || 'Chờ kiểm tra')
+// API chi tiết đơn chỉ trả warehouseId; tên kho lấy từ danh sách kho đã tải cho form.
+const expectedWarehouseName = computed(() => donation.value?.expectedWarehouseName ||
+  options.value?.warehouses?.find((warehouse) => warehouse.id === donation.value?.expectedWarehouseId)?.name || '—')
 const selectedWarehouse = computed(() => allowedWarehouses.value.find((item) => item.id === form.warehouseId))
 const validForm = computed(() => !loadError.value && isApproved.value && selectedWarehouse.value &&
   Number.isFinite(Number(form.quantity)) && Number(form.quantity) > 0 && form.unitId && form.conditionId)
@@ -161,9 +167,9 @@ onMounted(load)
           <p>Chỉ xác nhận sau khi đã kiểm tra hàng được bàn giao thực tế tại kho vật lí.</p>
         </div>
         <div class="receipt-status-block"><small>TRẠNG THÁI YÊU CẦU GỐC</small>
-          <span class="receipt-status" :class="isApproved ? 'receipt-status--approved' : ''">
-            <AuthIcon :name="isApproved ? 'badge-check' : 'clock'" :size="14" />
-            {{ isApproved ? 'Đã duyệt (approved)' : 'Chờ kiểm tra' }}
+          <span class="receipt-status" :class="isApproved || createdReceipt ? 'receipt-status--approved' : ''">
+            <AuthIcon :name="isApproved || createdReceipt ? 'badge-check' : 'clock'" :size="14" />
+            {{ originStatusLabel }}
           </span>
         </div>
       </header>
@@ -225,9 +231,9 @@ onMounted(load)
             <div><dt>Mã yêu cầu</dt><dd>{{ donation.id || '—' }}</dd></div>
             <div><dt>Tên vật phẩm</dt><dd>{{ donation.itemName || '—' }}</dd></div>
             <div><dt>Người gửi</dt><dd>{{ donation.donorName || '—' }}</dd></div>
-            <div><dt>Kho dự kiến ban đầu</dt><dd>{{ donation.expectedWarehouseName || '—' }}</dd></div>
+            <div><dt>Kho dự kiến ban đầu</dt><dd>{{ expectedWarehouseName }}</dd></div>
             <div><dt>Tình trạng người gửi khai báo</dt><dd>{{ donation.declaredConditionName || '—' }}</dd></div>
-            <div><dt>Trạng thái hồ sơ gốc</dt><dd>{{ donation.status === 'approved' ? 'Đã duyệt (approved)' : donation.status || '—' }}</dd></div>
+            <div><dt>Trạng thái hồ sơ gốc</dt><dd>{{ originStatusLabel }}</dd></div>
           </dl>
         </section>
 

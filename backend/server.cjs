@@ -15,6 +15,7 @@ const { createDistributionApi } = require('./distribution-api.cjs');
 const { createReportsApi } = require('./reports-api.cjs');
 const { createBeneficiariesApi } = require('./beneficiaries-api.cjs');
 const { createDashboardApi } = require('./dashboard-api.cjs');
+const { errorBody } = require('./error-body.cjs');
 
 const {
   CLOUDINARY_CLOUD_NAME,
@@ -40,14 +41,14 @@ const api = createImageApi({
 });
 const staffApi = createStaffApi({ db, auth: getAuth(), verifyToken });
 const contactApi = createContactApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
-const donationReviewApi = createDonationReviewApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
+const donationReviewApi = createDonationReviewApi({ db, auth: getAuth(), verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const receiptApi = createReceiptApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const stockIntakeApi = createStockIntakeApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const inventoryApi = createInventoryApi({ db, verifyToken });
 const distributionHistoryApi = createDistributionHistoryApi({ db, verifyToken });
 const distributionApi = createDistributionApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const reportsApi = createReportsApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
-const beneficiariesApi = createBeneficiariesApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
+const beneficiariesApi = createBeneficiariesApi({ db, auth: getAuth(), verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const dashboardApi = createDashboardApi({ db, verifyToken });
 const adminWebOrigins = new Set((process.env.ADMIN_WEB_ORIGINS || '')
   .split(',').map(origin => origin.trim()).filter(Boolean));
@@ -137,10 +138,7 @@ const server = http.createServer(async (request, response) => {
     const status = error instanceof ApiError || error instanceof ContactApiError ? error.status : 500;
     if (status === 500) console.error('ReShare API failure:', error);
     response.writeHead(status, responseHeaders);
-    const errBody = { message: status === 500 ? 'Internal server error' : error.message };
-    if (error.code) errBody.code = error.code;
-    if (error.details) errBody.details = error.details;
-    response.end(JSON.stringify(errBody));
+    response.end(JSON.stringify(errorBody(error, status)));
   }
 });
 

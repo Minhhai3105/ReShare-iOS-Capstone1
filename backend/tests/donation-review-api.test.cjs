@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createDonationReviewApi } = require('../donation-review-api.cjs');
 
-function setup() {
+function setup({ auth } = {}) {
   const documents = new Map();
   const collection = (name) => ({
     orderBy(field, direction) {
@@ -68,6 +68,7 @@ function setup() {
 
   const api = createDonationReviewApi({
     db,
+    ...(auth ? { auth } : {}),
     verifyToken,
     serverTimestamp: () => 'SERVER_TIMESTAMP',
   });
@@ -506,4 +507,24 @@ test('Manual assignment: queue scoping unlocks only for assigned warehouse; dono
   assert.equal(rawDonation.warehouseId, 'kho-a');
   assert.equal(rawDonation.warehouseAssignedBy, undefined);
   assert.equal(rawDonation.warehouseAssignedAt, undefined);
+});
+
+test('Chi tiết đơn trả email người phân kho / xác nhận danh mục, vẫn giữ UID gốc', async () => {
+  const auth = { async getUsers(ids) {
+    return { users: ids.filter(({ uid }) => uid === 'admin-1').map(({ uid }) => ({ uid, email: 'admin@reshare.vn' })) };
+  } };
+  const { api } = setup({ auth });
+  const headers = { authorization: 'Bearer admin-token' };
+  const assigned = await api.handle('POST', '/v1/admin/donations/don-unassigned/assign-warehouse', headers,
+    { warehouseId: 'kho-a', expectedVersion: 1 });
+  assert.equal(assigned.body.donation.warehouseAssignedBy, 'admin-1');
+  assert.equal(assigned.body.donation.warehouseAssignedByEmail, 'admin@reshare.vn');
+  const confirmed = await api.handle('POST', '/v1/admin/donations/don-unassigned/confirm-category', headers,
+    { category: 'books', expectedVersion: 0 });
+  assert.equal(confirmed.body.donation.staffConfirmedByEmail, 'admin@reshare.vn');
+
+  const { api: withoutAuth } = setup();
+  const plain = await withoutAuth.handle('POST', '/v1/admin/donations/don-unassigned/assign-warehouse', headers,
+    { warehouseId: 'kho-a', expectedVersion: 1 });
+  assert.equal(plain.body.donation.warehouseAssignedByEmail, null, 'không có Auth thì web hiện UID như cũ');
 });
