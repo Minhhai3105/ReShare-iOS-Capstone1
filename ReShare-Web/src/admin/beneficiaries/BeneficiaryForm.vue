@@ -218,7 +218,7 @@ function formatDate(value) {
             <div class="beneficiary-form__metadata">
               <article><small>MÃ HỒ SƠ</small><strong>{{ form.id || '—' }}</strong><span>{{ form.id ? 'Mã hồ sơ' : 'Được sinh tự động khi lưu' }}</span></article>
               <article><small>KHO ĐANG LÀM VIỆC</small><strong>{{ warehouseLabel }}</strong><span>Phạm vi theo phân công hiện tại</span></article>
-              <article><small>NGƯỜI TẠO BAN ĐẦU</small><strong>{{ form.createdByUid || '—' }}</strong><span>Ghi nhận bởi máy chủ</span></article>
+              <article><small>NGƯỜI TẠO BAN ĐẦU</small><strong>{{ form.createdByEmail || form.createdByUid || '—' }}</strong><span>Ghi nhận bởi máy chủ</span></article>
               <article><small>THỜI GIAN TẠO HỒ SƠ</small><strong>{{ form.createdAt ? formatDate(form.createdAt) : '—' }}</strong><span>{{ createdAtText }}</span></article>
             </div>
             <div class="beneficiary-form__immutable"><AuthIcon name="shield" :size="17" /><p><strong>Nguyên tắc bất biến</strong><br />Mã hồ sơ và phạm vi kho được kiểm soát theo quyền truy cập. Không nhập CCCD/CMND, VNeID hoặc địa chỉ nhà riêng.</p></div>

@@ -167,7 +167,7 @@ const formatTime = value => value ? new Intl.DateTimeFormat('vi-VN', { dateStyle
               <div><dt>Nhu cầu cơ bản</dt><dd>{{ beneficiary.needs?.map(need => ({ clothing: 'Quần áo', books: 'Sách', household: 'Đồ gia dụng' }[need] || need)).join(', ') || '—' }}</dd></div>
               <div class="beneficiary-detail__meta-wide"><dt>Số điện thoại liên hệ</dt><dd>{{ beneficiary.phone || '—' }}</dd></div>
               <div class="beneficiary-detail__meta-wide"><dt>Ghi chú phục vụ hỗ trợ</dt><dd>{{ beneficiary.notes || '—' }}</dd></div>
-              <div><dt>Người tạo</dt><dd>{{ beneficiary.createdByUid || '—' }}</dd></div>
+              <div><dt>Người tạo</dt><dd>{{ beneficiary.createdByEmail || beneficiary.createdByUid || '—' }}</dd></div>
               <div><dt>Ngày tạo</dt><dd>{{ createdAtText }}</dd></div>
             </dl>
           </article>

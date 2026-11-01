@@ -2,6 +2,7 @@ const { ApiError } = require('./image-api.cjs');
 const { FieldValue } = require('firebase-admin/firestore');
 const { runTransaction } = require('./firestore-transaction.cjs');
 const { assertCurrentStaffAccess } = require('./staff-access.cjs');
+const { staffEmails } = require('./staff-emails.cjs');
 
 function publicHistory(history) {
   if (!Array.isArray(history)) return [];
@@ -12,7 +13,7 @@ function publicHistory(history) {
   ));
 }
 
-function createDonationReviewApi({ db, verifyToken, serverTimestamp }) {
+function createDonationReviewApi({ db, auth, verifyToken, serverTimestamp }) {
   if (!db || !verifyToken) throw new Error('Donation Review API configuration is incomplete');
 
   async function authenticateStaff(headers) {
@@ -293,6 +294,7 @@ function createDonationReviewApi({ db, verifyToken, serverTimestamp }) {
     const review = reviewDoc.exists ? reviewDoc.data() : {};
     const donorDoc = data.donorId ? await db.collection('users').doc(data.donorId).get() : null;
     const donor = donorDoc?.exists ? donorDoc.data() : {};
+    const emails = await staffEmails(auth, [review.staffConfirmedBy, review.warehouseAssignedBy]);
     return {
       status: 200,
       body: { donation: {
@@ -307,10 +309,12 @@ function createDonationReviewApi({ db, verifyToken, serverTimestamp }) {
         reviewedBy: review.reviewedBy || null,
         staffConfirmedCategory: review.staffConfirmedCategory || null,
         staffConfirmedBy: review.staffConfirmedBy || null,
+        staffConfirmedByEmail: emails.get(review.staffConfirmedBy) || null,
         staffConfirmedAt: review.staffConfirmedAt?.toDate?.().toISOString() ||
           (review.staffConfirmedAt instanceof Date ? review.staffConfirmedAt.toISOString() : (review.staffConfirmedAt || null)),
         staffConfirmationVersion: review.staffConfirmationVersion || 0,
         warehouseAssignedBy: review.warehouseAssignedBy || null,
+        warehouseAssignedByEmail: emails.get(review.warehouseAssignedBy) || null,
         warehouseAssignedAt: review.warehouseAssignedAt?.toDate?.().toISOString() ||
           (review.warehouseAssignedAt instanceof Date ? review.warehouseAssignedAt.toISOString() : (review.warehouseAssignedAt || null)),
         categoryConfirmationHistory: review.categoryConfirmationHistory || [],

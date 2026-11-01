@@ -2,6 +2,7 @@ const { ApiError } = require('./image-api.cjs');
 const { FieldPath } = require('firebase-admin/firestore');
 const { cursorFor, readCursor, warehouseQueries, compareBy, mergedPage } = require('./scoped-pagination.cjs');
 const { runTransaction } = require('./firestore-transaction.cjs');
+const { staffEmails } = require('./staff-emails.cjs');
 
 const VALID_ID = /^[A-Za-z0-9_-]{1,128}$/;
 const PROFILE_FIELDS = ['name', 'phone', 'notes', 'needs'];
@@ -74,9 +75,15 @@ function pageNumber(value, fallback, max) {
   return Number(value);
 }
 
-function createBeneficiariesApi({ db, verifyToken, serverTimestamp }) {
+function createBeneficiariesApi({ db, auth, verifyToken, serverTimestamp }) {
   if (!db || !verifyToken) throw new Error('Beneficiaries API configuration is incomplete');
   const now = serverTimestamp || (() => new Date());
+
+  async function withStaffEmails(profile) {
+    const emails = await staffEmails(auth, [profile.createdByUid, profile.verifiedByUid]);
+    return { ...profile, createdByEmail: emails.get(profile.createdByUid) || '',
+      verifiedByEmail: emails.get(profile.verifiedByUid) || '' };
+  }
 
   async function staffFrom(headers) {
     const match = /^Bearer (\S+)$/.exec(headers?.authorization || '');
@@ -176,7 +183,7 @@ function createBeneficiariesApi({ db, verifyToken, serverTimestamp }) {
       query.count().get(),
     ]);
     return { status: 200, body: {
-      beneficiary: profileFrom(doc, true), supportCount: count.data().count,
+      beneficiary: await withStaffEmails(profileFrom(doc, true)), supportCount: count.data().count,
       supportHistory: history.docs.map(voucher => ({
         voucherId: voucher.id, confirmedAt: dateString(voucher.data().confirmedAt),
         lines: (Array.isArray(voucher.data().lines) ? voucher.data().lines : [])
@@ -232,7 +239,7 @@ function createBeneficiariesApi({ db, verifyToken, serverTimestamp }) {
         version: 1, changedFields: Object.keys(fields), createdAt: timestamp,
       });
     });
-    return { status: 201, body: { beneficiary: profileFrom(await ref.get(), true) } };
+    return { status: 201, body: { beneficiary: await withStaffEmails(profileFrom(await ref.get(), true)) } };
   }
 
   async function update(staff, id, body, verify = false) {
@@ -292,7 +299,7 @@ function createBeneficiariesApi({ db, verifyToken, serverTimestamp }) {
         createdAt: timestamp,
       });
     });
-    return { status: 200, body: { beneficiary: profileFrom(await ref.get(), true) } };
+    return { status: 200, body: { beneficiary: await withStaffEmails(profileFrom(await ref.get(), true)) } };
   }
 
   async function handle(method, path, headers, body, requestUrl = '') {

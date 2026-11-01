@@ -329,7 +329,7 @@ watch(enlarged, async (value) => {
           <p v-if="donation.warehouseId">Kho phụ trách: <strong>{{ warehouseName(donation.warehouseId) }}</strong></p>
           <p v-if="donation.warehouseAssignedAt">
             Phân công lúc {{ formatDate(donation.warehouseAssignedAt) }}
-            <span v-if="donation.warehouseAssignedBy">bởi {{ donation.warehouseAssignedBy }}</span>
+            <span v-if="donation.warehouseAssignedBy">bởi {{ donation.warehouseAssignedByEmail || donation.warehouseAssignedBy }}</span>
           </p>
           <template v-if="isSystemAdmin">
             <form v-if="canAssignWarehouse" @submit.prevent="assignWarehouse">
@@ -369,7 +369,7 @@ watch(enlarged, async (value) => {
                 <div><dt>Model</dt><dd>{{ donation.aiModelVersion || 'Không có' }}</dd></div>
                 <div><dt>Nhân sự xác nhận</dt><dd>{{ donation.staffConfirmedCategory ? categoryName(donation.staffConfirmedCategory) : 'Chưa xác nhận' }}</dd></div>
               </dl>
-              <p v-if="donation.staffConfirmedAt">Xác nhận lúc {{ formatDate(donation.staffConfirmedAt) }} bởi {{ donation.staffConfirmedBy }}</p>
+              <p v-if="donation.staffConfirmedAt">Xác nhận lúc {{ formatDate(donation.staffConfirmedAt) }} bởi {{ donation.staffConfirmedByEmail || donation.staffConfirmedBy }}</p>
               <form v-if="!localPreview" @submit.prevent="confirmCategory">
                 <label for="staff-category">Danh mục thực tế theo nhân sự</label>
                 <select id="staff-category" v-model="staffCategory" :disabled="aiSubmitting || !allowed">
