@@ -187,11 +187,13 @@ struct CatalogItem: Identifiable, Codable, Hashable {
 }
 
 extension CatalogItem {
+    // pickupAddress và pickupTime cố ý không có trong CodingKeys: bài đăng công khai ai cũng đọc được,
+    // nên địa chỉ chính xác nằm ở catalog_items/{id}/private/pickup, giờ hẹn nằm trong hội thoại.
     private enum CodingKeys: String, CodingKey {
         case id, donorId, donorName, title, category, condition, district
-        case timeAgo, imageName, status, pickupAddress, donorNote, createdAt
+        case timeAgo, imageName, status, donorNote, createdAt
         case imageBase64, imageUrl, images, imageProvider, imagePublicIds, reservedChatId, reservedRequesterId
-        case pickupTime, reservationDeadline, donorHandoverConfirmed, requesterHandoverConfirmed
+        case reservationDeadline, donorHandoverConfirmed, requesterHandoverConfirmed
     }
 
     init(from decoder: Decoder) throws {
@@ -206,7 +208,7 @@ extension CatalogItem {
         timeAgo = try values.decode(String.self, forKey: .timeAgo)
         imageName = try values.decode(String.self, forKey: .imageName)
         status = try values.decode(CatalogItemStatus.self, forKey: .status)
-        pickupAddress = try values.decode(String.self, forKey: .pickupAddress)
+        pickupAddress = ""
         donorNote = try values.decode(String.self, forKey: .donorNote)
         createdAt = try values.decode(Date.self, forKey: .createdAt)
         imageBase64 = try values.decodeIfPresent(String.self, forKey: .imageBase64)
@@ -216,7 +218,7 @@ extension CatalogItem {
         imagePublicIds = try values.decodeIfPresent([String].self, forKey: .imagePublicIds)
         reservedChatId = try values.decodeIfPresent(String.self, forKey: .reservedChatId)
         reservedRequesterId = try values.decodeIfPresent(String.self, forKey: .reservedRequesterId)
-        pickupTime = try values.decodeIfPresent(Date.self, forKey: .pickupTime)
+        pickupTime = nil
         reservationDeadline = try values.decodeIfPresent(Date.self, forKey: .reservationDeadline)
         // Món đồ cũ chưa có hai cờ xác nhận bàn giao vẫn phải hiển thị được.
         donorHandoverConfirmed = try values.decodeIfPresent(Bool.self, forKey: .donorHandoverConfirmed) ?? false

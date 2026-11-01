@@ -32,6 +32,7 @@ protocol FirestoreServiceProtocol {
 
     // MARK: - Kênh 1: Kho đồ 0đ Cộng đồng (P2P Catalog)
     func publishCatalogItem(_ item: CatalogItem) async throws
+    func fetchCatalogPickupAddress(itemId: String) async -> String?
     func fetchCatalogItems(pageSize: Int, after cursor: CatalogPageCursor?) async throws -> CatalogPage
     func reserveCatalogItem(
         chatId: String,
@@ -224,11 +225,31 @@ final class FirestoreService: FirestoreServiceProtocol {
     func publishCatalogItem(_ item: CatalogItem) async throws {
         let encoded = try Firestore.Encoder().encode(item)
         let reference = db.collection(Constants.FirestoreCollections.catalogItems).document(item.id)
-        try await createIfAbsent(reference, donorId: item.donorId, title: item.title, imagePublicIds: item.imagePublicIds, data: encoded)
+        // Địa chỉ chính xác ghi cùng transaction vào document riêng, không nằm trên bài công khai.
+        let address = String(item.pickupAddress.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200))
+        let pickupWrite: (DocumentReference, [String: Any])? = address.isEmpty
+            ? nil
+            : (pickupReference(itemId: item.id), ["pickupAddress": address])
+        try await createIfAbsent(reference, donorId: item.donorId, title: item.title, imagePublicIds: item.imagePublicIds, data: encoded, extraWrite: pickupWrite)
+    }
+
+    private func pickupReference(itemId: String) -> DocumentReference {
+        db.collection(Constants.FirestoreCollections.catalogItems).document(itemId).collection("private").document("pickup")
+    }
+
+    /// Địa chỉ nhận đồ chính xác; nil khi không có quyền (không phải người đăng hoặc người đang được giữ đồ) hoặc chưa có.
+    func fetchCatalogPickupAddress(itemId: String) async -> String? {
+        do {
+            let snapshot = try await pickupReference(itemId: itemId).getDocument()
+            guard let address = snapshot.data()?["pickupAddress"] as? String, !address.isEmpty else { return nil }
+            return address
+        } catch {
+            return nil
+        }
     }
 
     /// Retry sau khi mất phản hồi ghi: nếu document đúng chủ và đúng bộ ảnh đã tồn tại, không ghi đè trạng thái mới.
-    private func createIfAbsent(_ reference: DocumentReference, donorId: String, title: String, imagePublicIds: [String]?, data: [String: Any]) async throws {
+    private func createIfAbsent(_ reference: DocumentReference, donorId: String, title: String, imagePublicIds: [String]?, data: [String: Any], extraWrite: (DocumentReference, [String: Any])? = nil) async throws {
         _ = try await db.runTransaction { transaction, errorPointer -> Any? in
             do {
                 let snapshot = try transaction.getDocument(reference)
@@ -246,6 +267,9 @@ final class FirestoreService: FirestoreServiceProtocol {
                     return true
                 }
                 transaction.setData(data, forDocument: reference)
+                if let extraWrite {
+                    transaction.setData(extraWrite.1, forDocument: extraWrite.0)
+                }
                 return true
             } catch {
                 errorPointer?.pointee = error as NSError
@@ -545,7 +569,8 @@ final class FirestoreService: FirestoreServiceProtocol {
             id: sysMsgId,
             senderId: donorId,
             senderName: conversationHeader.donorName,
-            text: "🎉 Hai bên đã chốt lịch hẹn nhận đồ lúc \(pickupTimeStr) tại \(conversationHeader.itemPickupAddress). Hạn giữ đồ đến \(deadlineStr).",
+            // Không chép địa chỉ vào tin nhắn: tin nhắn còn lại cả khi lịch hẹn bị huỷ.
+            text: "🎉 Hai bên đã chốt lịch hẹn nhận đồ lúc \(pickupTimeStr). Địa chỉ nhận đồ hiện ở thẻ món đồ cho hai bên. Hạn giữ đồ đến \(deadlineStr).",
             timeString: "Vừa xong",
             isCurrentUser: false,
             createdAt: Date(),
@@ -594,7 +619,6 @@ final class FirestoreService: FirestoreServiceProtocol {
                 "status": CatalogItemStatus.reserved.rawValue,
                 "reservedChatId": chatId,
                 "reservedRequesterId": conversationHeader.requesterId,
-                "pickupTime": pickupTime,
                 "reservationDeadline": deadline,
                 "donorHandoverConfirmed": false,
                 "requesterHandoverConfirmed": false

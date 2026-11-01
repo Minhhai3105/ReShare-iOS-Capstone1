@@ -34,6 +34,8 @@ struct ChatConversationView: View {
     @State private var showActionAlert: Bool = false
     @State private var alertTitle: String = "Thông báo"
     @State private var now: Date = Date()
+    // Địa chỉ chính xác chỉ người đăng và người đang được giữ đồ đọc được (catalog_items/{id}/private/pickup).
+    @State private var privatePickupAddress: String? = nil
 
     @FocusState private var isInputFocused: Bool
 
@@ -176,6 +178,15 @@ struct ChatConversationView: View {
         .onDisappear {
             stopRealtimeListeners()
         }
+        // Chạy lại khi người nhận vừa được giữ đồ (listener cập nhật reservedRequesterId).
+        .task(id: canSeePickupAddress) {
+            guard canSeePickupAddress else {
+                await MainActor.run { privatePickupAddress = nil }
+                return
+            }
+            let address = await FirestoreService.shared.fetchCatalogPickupAddress(itemId: activeItem.id)
+            await MainActor.run { privatePickupAddress = address }
+        }
         .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { date in
             now = date
         }
@@ -201,6 +212,17 @@ struct ChatConversationView: View {
 
     private var isRequester: Bool {
         !isDonor
+    }
+
+    private var canSeePickupAddress: Bool {
+        isDonor || activeItem.reservedRequesterId == currentUserId
+    }
+
+    private var pickupAddressText: String {
+        if canSeePickupAddress, let privatePickupAddress { return privatePickupAddress }
+        // Mở từ danh sách hội thoại thì món đồ tạm có district "Đà Nẵng" cho tới khi listener trả bản thật.
+        let area = activeItem.district == "Đà Nẵng" ? "Đà Nẵng" : "\(activeItem.district), Đà Nẵng"
+        return "\(area) (địa chỉ cụ thể hiện khi người tặng chốt lịch)"
     }
 
     private var activeChatId: String {
@@ -316,7 +338,7 @@ struct ChatConversationView: View {
                         .background(Color(red: 0.55, green: 0.92, blue: 0.70))
                         .clipShape(Capsule())
 
-                    Text("• Nhận tại: \(activeItem.pickupAddress)")
+                    Text("• Nhận tại: \(pickupAddressText)")
                         .font(.system(size: 10))
                         .foregroundColor(.secondary)
                         .lineLimit(1)
@@ -712,7 +734,7 @@ struct ChatConversationView: View {
                     Image(systemName: "mappin.and.ellipse")
                         .foregroundColor(.secondary)
                         .font(.system(size: 11))
-                    Text("Tại: \(activeItem.pickupAddress)")
+                    Text("Tại: \(pickupAddressText)")
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
                         .lineLimit(1)
@@ -970,7 +992,7 @@ struct ChatConversationView: View {
                         Text(activeItem.title)
                             .font(.system(size: 13, weight: .bold))
                             .lineLimit(1)
-                        Text("Nhận tại: \(activeItem.pickupAddress)")
+                        Text("Nhận tại: \(pickupAddressText)")
                             .font(.system(size: 11))
                             .foregroundColor(.secondary)
                             .lineLimit(1)
@@ -1266,7 +1288,7 @@ struct ChatConversationView: View {
 
         let note = appointmentNote.trimmingCharacters(in: .whitespacesAndNewlines)
         let proposalText = note.isEmpty ?
-            "📅 Đề xuất lịch hẹn nhận đồ lúc \(timeStr) tại \(activeItem.pickupAddress). Bạn có tiện khung giờ này không ạ?" :
+            "📅 Đề xuất lịch hẹn nhận đồ lúc \(timeStr). Bạn có tiện khung giờ này không ạ?" :
             "📅 Đề xuất lịch hẹn nhận đồ lúc \(timeStr): \"\(note)\""
 
         let msgId = UUID().uuidString

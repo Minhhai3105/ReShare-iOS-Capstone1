@@ -82,7 +82,8 @@ struct ChatConversation: Identifiable, Codable, Equatable {
 
 extension ChatConversation {
     private enum CodingKeys: String, CodingKey {
-        case id, itemId, itemTitle, itemImageName, itemImageBase64, itemImageUrl, itemPickupAddress
+        // itemPickupAddress cố ý không lưu: người nhắn tin chưa được giữ đồ không được có bản sao địa chỉ.
+        case id, itemId, itemTitle, itemImageName, itemImageBase64, itemImageUrl
         case donorId, donorName, requesterId, requesterName, participantIds
         case lastMessage, lastMessageTime, lastSenderId, isReserved, lastReadTimes
         case appointmentStatus, proposedPickupTime, reservationDeadline
@@ -97,7 +98,6 @@ extension ChatConversation {
         itemImageName = try values.decodeIfPresent(String.self, forKey: .itemImageName) ?? "tshirt.fill"
         itemImageBase64 = try values.decodeIfPresent(String.self, forKey: .itemImageBase64)
         itemImageUrl = try values.decodeIfPresent(String.self, forKey: .itemImageUrl)
-        itemPickupAddress = try values.decodeIfPresent(String.self, forKey: .itemPickupAddress) ?? ""
         donorId = try values.decode(String.self, forKey: .donorId)
         donorName = try values.decode(String.self, forKey: .donorName)
         requesterId = try values.decode(String.self, forKey: .requesterId)

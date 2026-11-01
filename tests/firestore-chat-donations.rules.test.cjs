@@ -73,9 +73,15 @@ test('Cloudinary record requires three distinct image IDs from a server-owned ba
         ownerUid: 'donor', assets: { first: catalogIds[0], second: catalogIds[1], third: catalogIds[2] },
       });
     });
+    // Địa chỉ/giờ hẹn chính xác không được nằm trên bài công khai.
+    await assertFails(donor.doc(`catalog_items/${catalogId}`).set({
+      donorId: 'donor', status: 'available', imageProvider: 'cloudinary', imagePublicIds: catalogIds,
+      pickupAddress: '12 Lê Duẩn, Hải Châu',
+    }));
     await assertSucceeds(donor.doc(`catalog_items/${catalogId}`).set({
       donorId: 'donor', status: 'available', imageProvider: 'cloudinary', imagePublicIds: catalogIds,
     }));
+    await assertSucceeds(donor.doc(`catalog_items/${catalogId}/private/pickup`).set({ pickupAddress: '12 Lê Duẩn, Hải Châu' }));
   } finally {
     await env.cleanup();
   }
@@ -287,7 +293,7 @@ test('appointment acceptance and two-sided handover remain allowed as atomic wri
       await transaction.get(item);
       transaction.update(item, {
         status: 'reserved', reservedChatId: 'flow-test', reservedRequesterId: 'bob',
-        pickupTime, reservationDeadline: deadline,
+        reservationDeadline: deadline,
         donorHandoverConfirmed: false, requesterHandoverConfirmed: false,
       });
       transaction.update(alice.doc(`${chatPath}/messages/proposal`), { appointmentStatus: 'accepted' });
@@ -323,6 +329,77 @@ test('appointment acceptance and two-sided handover remain allowed as atomic wri
       });
       transaction.set(bob.doc(`${chatPath}/messages/requester-event`), event('requester-event', 'bob'));
     }));
+  } finally {
+    await env.cleanup();
+  }
+});
+
+test('địa chỉ nhận đồ P2P chỉ người đăng và người đang giữ đồ đọc được', async () => {
+  const env = await initializeTestEnvironment({
+    projectId: 'demo-reshare',
+    firestore: { rules: fs.readFileSync(path.join(__dirname, '..', 'firestore.rules'), 'utf8') },
+  });
+
+  try {
+    const pickupTime = new Date(Date.now() + 3_600_000);
+    const deadline = new Date(pickupTime.getTime() + 7_200_000);
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await db.doc('catalog_items/item-pii').set({ donorId: 'alice', status: 'available', district: 'Hải Châu' });
+      await db.doc('catalog_items/item-pii/private/pickup').set({ pickupAddress: '12 Lê Duẩn, Hải Châu' });
+      await db.doc('conversations/pii-chat').set({
+        id: 'pii-chat', itemId: 'item-pii', donorId: 'alice', requesterId: 'bob',
+        participantIds: ['alice', 'bob'], lastMessage: 'Đề xuất hẹn',
+        lastMessageTime: new Date(), lastSenderId: 'bob', isReserved: false,
+        appointmentStatus: 'proposed', proposedPickupTime: pickupTime,
+      });
+    });
+    const alice = env.authenticatedContext('alice').firestore();
+    const bob = env.authenticatedContext('bob').firestore();
+    const carol = env.authenticatedContext('carol').firestore();
+    const pickup = 'catalog_items/item-pii/private/pickup';
+
+    // Trước khi được giữ đồ: chỉ người đăng đọc được.
+    await assertSucceeds(alice.doc(pickup).get());
+    await assertFails(bob.doc(pickup).get());
+    await assertFails(carol.doc(pickup).get());
+    await assertFails(env.unauthenticatedContext().firestore().doc(pickup).get());
+
+    // Chỉ người đăng ghi được, đúng một field, độ dài hợp lệ.
+    await assertSucceeds(alice.doc(pickup).set({ pickupAddress: '14 Lê Duẩn, Hải Châu' }));
+    await assertFails(alice.doc(pickup).set({ pickupAddress: '' }));
+    await assertFails(alice.doc(pickup).set({ pickupAddress: '14 Lê Duẩn', phone: '0900000000' }));
+    await assertFails(bob.doc(pickup).set({ pickupAddress: 'Giả mạo' }));
+    await assertFails(alice.doc('catalog_items/item-pii/private/other').set({ pickupAddress: 'x' }));
+
+    // Người nhắn tin không được tạo bản sao địa chỉ trong hội thoại.
+    await assertFails(carol.doc('conversations/pii-chat-carol').set({
+      id: 'pii-chat-carol', itemId: 'item-pii', donorId: 'alice', requesterId: 'carol',
+      participantIds: ['alice', 'carol'], lastMessage: 'Xin đồ', lastMessageTime: new Date(),
+      lastSenderId: 'carol', isReserved: false, appointmentStatus: 'none',
+      itemPickupAddress: '12 Lê Duẩn, Hải Châu',
+    }));
+
+    const accept = (db, item, chat) => db.runTransaction(async (transaction) => {
+      await transaction.get(db.doc('catalog_items/item-pii'));
+      transaction.update(db.doc('catalog_items/item-pii'), {
+        status: 'reserved', reservedChatId: 'pii-chat', reservedRequesterId: 'bob',
+        reservationDeadline: deadline, donorHandoverConfirmed: false, requesterHandoverConfirmed: false, ...item,
+      });
+      transaction.update(db.doc('conversations/pii-chat'), {
+        isReserved: true, appointmentStatus: 'accepted', proposedPickupTime: pickupTime,
+        reservationDeadline: deadline, lastMessage: 'Đã chốt lịch',
+        lastMessageTime: new Date(), lastSenderId: 'alice', ...chat,
+      });
+    });
+    // Giờ hẹn không được ghi lên bài công khai; giờ đã chốt phải là mốc thời gian.
+    await assertFails(accept(alice, { pickupTime }, {}));
+    await assertFails(accept(alice, {}, { proposedPickupTime: 'mai 9h' }));
+    await assertSucceeds(accept(alice, {}, {}));
+
+    // Sau khi được giữ đồ: người được giữ đọc được, người khác vẫn không.
+    await assertSucceeds(bob.doc(pickup).get());
+    await assertFails(carol.doc(pickup).get());
   } finally {
     await env.cleanup();
   }

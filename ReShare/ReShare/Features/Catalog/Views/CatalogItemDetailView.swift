@@ -6,6 +6,8 @@ struct CatalogItemDetailView: View {
     @Environment(\.dismiss) private var dismiss
     let item: CatalogItem
     @State private var selectedPhotoIndex = 0
+    // Địa chỉ chính xác chỉ người đăng và người đang được giữ đồ đọc được; người khác chỉ thấy quận.
+    @State private var privatePickupAddress: String? = nil
 
 
     // Màu sắc nhận diện ReShare
@@ -20,6 +22,10 @@ struct CatalogItemDetailView: View {
     private var isMyItem: Bool {
         guard !currentUserId.isEmpty else { return false }
         return item.donorId == currentUserId
+    }
+
+    private var canSeePickupAddress: Bool {
+        isMyItem || (!currentUserId.isEmpty && item.reservedRequesterId == currentUserId)
     }
 
     var body: some View {
@@ -50,6 +56,11 @@ struct CatalogItemDetailView: View {
         .background(Color(red: 0.97, green: 0.98, blue: 0.96).ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
+        .task {
+            guard canSeePickupAddress else { return }
+            let address = await FirestoreService.shared.fetchCatalogPickupAddress(itemId: item.id)
+            await MainActor.run { privatePickupAddress = address }
+        }
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button(action: { dismiss() }) {
@@ -330,9 +341,16 @@ struct CatalogItemDetailView: View {
                     Image(systemName: "mappin.circle.fill")
                         .foregroundColor(primaryGreen)
                         .font(.system(size: 16))
-                    Text(item.pickupAddress)
+                    Text(privatePickupAddress ?? "\(item.district), Đà Nẵng")
                         .font(.system(size: 13, weight: .bold))
                         .foregroundColor(.primary)
+                }
+
+                if privatePickupAddress == nil {
+                    Text("• Địa chỉ cụ thể chỉ hiện cho người được người tặng chốt lịch hẹn.")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                        .padding(.top, 2)
                 }
 
                 Text("• Người nhận chủ động đến nhà người cho để nhận đồ trực tiếp.")
