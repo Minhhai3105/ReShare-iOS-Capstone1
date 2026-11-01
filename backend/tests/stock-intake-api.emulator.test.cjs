@@ -19,6 +19,7 @@ test('US13: intake uses actual receipt quantity once under concurrent requests',
   const donationId = 'don-stock-intake-test';
   const receiptId = `rcp_${donationId}`;
   try {
+    await db.doc('warehouses/kho-a').set({ name: 'Kho A', status: 'active' });
     await db.doc('staff_assignments/worker-a').set({ active: true, role: 'warehouse_admin', warehouseIds: ['kho-a'] });
     await db.doc('staff_assignments/worker-b').set({ active: true, role: 'warehouse_admin', warehouseIds: ['kho-a'] });
     await db.doc('staff_assignments/wrong-warehouse').set({ active: true, role: 'warehouse_admin', warehouseIds: ['kho-b'] });
@@ -63,11 +64,14 @@ test('US13: intake uses actual receipt quantity once under concurrent requests',
       { authorization: 'Bearer worker-a' })).body.stockEntry;
     assert.equal(entry.items[0].quantity, 3);
     assert.equal(entry.movement.receiptId, receiptId);
+    assert.equal(entry.warehouseName, 'Kho A', 'màn phiếu nhập hiện tên kho, không phải mã kho');
+    assert.equal(entry.movement.warehouseName, 'Kho A');
     await assert.rejects(api.handle('POST', path, { authorization: 'Bearer worker-a' },
       { ...body, location: 'Kệ khác' }), { status: 409 });
   } finally {
     try {
       await removeFixtureDocs(db, [
+        'warehouses/kho-a',
         'staff_assignments/worker-a',
         'staff_assignments/worker-b',
         'staff_assignments/wrong-warehouse',

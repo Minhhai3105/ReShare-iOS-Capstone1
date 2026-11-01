@@ -33,12 +33,17 @@ function createStockIntakeApi({ db, verifyToken, serverTimestamp }) {
     if (!doc.exists) throw new ApiError(404, 'Stock entry not found');
     const entry = doc.data();
     assertWarehouse(staff, entry.warehouseId);
-    const movementDoc = await db.collection('inventory_movements').doc(entry.movementId).get();
+    // Trả kèm tên kho để màn chi tiết phiếu nhập không phải hiện mã kho.
+    const [movementDoc, warehouseDoc] = await Promise.all([
+      db.collection('inventory_movements').doc(entry.movementId).get(),
+      db.collection('warehouses').doc(entry.warehouseId).get(),
+    ]);
     if (!movementDoc.exists) throw new ApiError(409, 'Stock entry movement is missing');
     const movement = movementDoc.data();
+    const warehouseName = (warehouseDoc.exists && warehouseDoc.data().name) || entry.warehouseId;
     return {
-      ...entry, createdAt: dateString(entry.createdAt), confirmedAt: dateString(entry.confirmedAt),
-      movement: { ...movement, createdAt: dateString(movement.createdAt) },
+      ...entry, warehouseName, createdAt: dateString(entry.createdAt), confirmedAt: dateString(entry.confirmedAt),
+      movement: { ...movement, warehouseName, createdAt: dateString(movement.createdAt) },
     };
   }
 
