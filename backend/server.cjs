@@ -44,8 +44,8 @@ const contactApi = createContactApi({ db, verifyToken, serverTimestamp: () => Fi
 const donationReviewApi = createDonationReviewApi({ db, auth: getAuth(), verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const receiptApi = createReceiptApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const stockIntakeApi = createStockIntakeApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
-const inventoryApi = createInventoryApi({ db, verifyToken });
-const distributionHistoryApi = createDistributionHistoryApi({ db, verifyToken });
+const inventoryApi = createInventoryApi({ db, auth: getAuth(), verifyToken });
+const distributionHistoryApi = createDistributionHistoryApi({ db, auth: getAuth(), verifyToken });
 const distributionApi = createDistributionApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const reportsApi = createReportsApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const beneficiariesApi = createBeneficiariesApi({ db, auth: getAuth(), verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });

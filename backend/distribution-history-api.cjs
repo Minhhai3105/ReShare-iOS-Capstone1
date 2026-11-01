@@ -1,4 +1,5 @@
 const { ApiError } = require('./image-api.cjs');
+const { staffEmails } = require('./staff-emails.cjs');
 
 const dateString = value => value?.toDate?.().toISOString() ||
   (value instanceof Date ? value.toISOString() : value || null);
@@ -10,7 +11,7 @@ const pageNumber = (value, fallback, max) => {
   return number;
 };
 
-function createDistributionHistoryApi({ db, verifyToken }) {
+function createDistributionHistoryApi({ db, auth, verifyToken }) {
   if (!db || !verifyToken) throw new Error('Distribution history API configuration is incomplete');
 
   async function staffFrom(headers) {
@@ -128,7 +129,25 @@ function createDistributionHistoryApi({ db, verifyToken }) {
         throw new ApiError(409, 'Distribution voucher and movements do not match');
       }
     }
-    return { voucher, movements, beneficiary: { id: voucher.beneficiaryId } };
+    // Người thụ hưởng chỉ trả mã, tên hiển thị và số lần hỗ trợ tại kho của phiếu (AC3 US17);
+    // không trả SĐT, ghi chú hay trường riêng tư nào khác của hồ sơ.
+    const beneficiaryRef = validId(voucher.beneficiaryId)
+      ? db.collection('beneficiaries').doc(voucher.beneficiaryId) : null;
+    const [beneficiaryDoc, supportCount, emails] = await Promise.all([
+      beneficiaryRef ? beneficiaryRef.get() : null,
+      beneficiaryRef ? db.collection('distribution_vouchers').where('beneficiaryId', '==', voucher.beneficiaryId)
+        .where('warehouseId', '==', voucher.warehouseId).where('status', '==', 'confirmed').count().get() : null,
+      staffEmails(auth, [voucher.createdByUid, voucher.confirmedByUid, ...movements.map(movement => movement.actorUid)]),
+    ]);
+    const profile = beneficiaryDoc?.exists && beneficiaryDoc.data().warehouseId === voucher.warehouseId
+      ? beneficiaryDoc.data() : null;
+    return {
+      voucher: { ...voucher, createdByEmail: emails.get(voucher.createdByUid) || '',
+        confirmedByEmail: emails.get(voucher.confirmedByUid) || '' },
+      movements: movements.map(movement => ({ ...movement, actorEmail: emails.get(movement.actorUid) || '' })),
+      beneficiary: { id: voucher.beneficiaryId, displayName: profile?.name || '',
+        supportCount: supportCount ? supportCount.data().count : 0 },
+    };
   }
 
   async function handle(method, path, headers, _body, requestUrl = '') {
