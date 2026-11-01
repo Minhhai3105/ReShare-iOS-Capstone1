@@ -103,14 +103,14 @@ service cloud.firestore {
         return request.auth.uid == resource.data.donorId
           && resource.data.status in ['available', 'Sẵn sàng nhận đồ']
           && request.resource.data.status == 'reserved'
+          // Giờ hẹn chỉ nằm trong hội thoại (chỉ 2 bên đọc được), không ghi lên bài công khai.
           && changedOnly([
-            'status', 'reservedChatId', 'reservedRequesterId', 'pickupTime',
+            'status', 'reservedChatId', 'reservedRequesterId',
             'reservationDeadline', 'donorHandoverConfirmed', 'requesterHandoverConfirmed'
           ])
           && request.resource.data.get('reservedChatId', null) is string
           && request.resource.data.get('reservedRequesterId', null) is string
           && request.resource.data.reservedRequesterId != request.auth.uid
-          && request.resource.data.get('pickupTime', null) is timestamp
           && request.resource.data.get('reservationDeadline', null) is timestamp
           && request.resource.data.get('donorHandoverConfirmed', false) == false
           && request.resource.data.get('requesterHandoverConfirmed', false) == false;
@@ -156,6 +156,8 @@ service cloud.firestore {
       allow create: if request.auth != null
         && request.resource.data.donorId == request.auth.uid
         && request.resource.data.status == 'available'
+        // Địa chỉ và giờ hẹn chính xác không được nằm trên bài mọi người đều đọc được.
+        && !request.resource.data.keys().hasAny(['pickupAddress', 'pickupTime'])
         && validCloudinaryImages('catalog_item', itemId)
         && request.resource.data.get('reservedChatId', null) == null
         && request.resource.data.get('reservedRequesterId', null) == null
@@ -166,6 +168,28 @@ service cloud.firestore {
         (canReserve() || canCancel() || canConfirmHandover());
 
       allow delete: if request.auth != null && resource.data.donorId == request.auth.uid;
+
+      // Địa chỉ nhận đồ chính xác: chỉ người đăng và người đang được giữ đồ đọc được.
+      match /private/{docId} {
+        function parentBefore() {
+          return get(/databases/$(database)/documents/catalog_items/$(itemId)).data;
+        }
+
+        function parentAfter() {
+          return getAfter(/databases/$(database)/documents/catalog_items/$(itemId)).data;
+        }
+
+        allow read: if request.auth != null && docId == 'pickup'
+          && (request.auth.uid == parentBefore().donorId ||
+              request.auth.uid == parentBefore().get('reservedRequesterId', null));
+        allow create, update: if request.auth != null && docId == 'pickup'
+          && request.auth.uid == parentAfter().donorId
+          && request.resource.data.keys().hasOnly(['pickupAddress'])
+          && request.resource.data.pickupAddress is string
+          && request.resource.data.pickupAddress.size() > 0
+          && request.resource.data.pickupAddress.size() <= 200;
+        allow delete: if request.auth != null && request.auth.uid == parentBefore().donorId;
+      }
     }
 
     // 3. Conversations (In-App Chat 1-1)
@@ -225,7 +249,9 @@ service cloud.firestore {
           && item.status == 'reserved'
           && item.get('reservedChatId', null) == chatId
           && request.resource.data.get('isReserved', false) == true
-          && request.resource.data.get('proposedPickupTime', null) == item.get('pickupTime', null)
+          // Giờ hẹn không còn trên bài công khai; giờ đã chốt chỉ nằm trong hội thoại (người tặng có thể
+          // đồng ý một thẻ đề xuất cũ hơn, nên không bắt trùng đề xuất mới nhất — giống hành vi trước đây).
+          && request.resource.data.get('proposedPickupTime', null) is timestamp
           && request.resource.data.get('reservationDeadline', null) == item.get('reservationDeadline', null)
           && changed.hasOnly([
             'appointmentStatus', 'isReserved', 'proposedPickupTime',
@@ -306,6 +332,8 @@ service cloud.firestore {
         && request.resource.data.requesterId != request.resource.data.donorId
         && request.resource.data.donorId == itemAfter().donorId
         && request.resource.data.itemId is string
+        // Người nhắn tin chưa được giữ đồ thì không có bản sao địa chỉ nhận đồ.
+        && !request.resource.data.keys().hasAny(['itemPickupAddress'])
         && request.resource.data.participantIds == [request.resource.data.donorId, request.resource.data.requesterId]
         && request.resource.data.lastSenderId == request.auth.uid
         && validConversationState();
