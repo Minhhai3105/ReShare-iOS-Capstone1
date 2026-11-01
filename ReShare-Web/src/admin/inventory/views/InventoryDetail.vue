@@ -43,6 +43,15 @@ let latestRequestId = 0
 
 const access = computed(() => resolveQueueAccess(staffAssignment.value))
 const item = computed(() => data.value?.item ?? null)
+// Biểu mẫu xuất kho dùng dữ liệu thật; chỉ mở khi vật phẩm thật còn hàng.
+const canStartDistribution = computed(() => !IS_SAMPLE_DATA && item.value?.quantityAvailable > 0)
+const actionNote = computed(() => {
+  if (!item.value) return 'Cần có vật phẩm đã nhập kho để thao tác. Hệ thống khóa các tác vụ khi chưa có dữ liệu tồn kho thực tế.'
+  if (IS_SAMPLE_DATA) return 'Dữ liệu mẫu: biểu mẫu xuất kho dùng dữ liệu thật nên không mở từ đây. Điều chỉnh tồn chưa hỗ trợ.'
+  return canStartDistribution.value
+    ? 'Phân phối mở biểu mẫu xuất kho; chọn kho và vật phẩm trên biểu mẫu. Điều chỉnh tồn chưa hỗ trợ.'
+    : 'Vật phẩm đã hết hàng nên chưa phân phối được. Điều chỉnh tồn chưa hỗ trợ.'
+})
 const movements = computed(() => data.value?.movements ?? [])
 const warehouses = computed(() => (item.value ? [item.value.warehouse] : getAccessibleWarehouses(access.value)))
 const stateMessage = computed(() => STATE_MESSAGE[errorStatus.value] ?? null)
@@ -193,9 +202,10 @@ onBeforeUnmount(() => { latestRequestId += 1 })
       <aside class="detail-side">
         <section class="inv-card">
           <h2 class="detail-side-title"><AuthIcon name="sliders" :size="20" />Tác vụ khả dụng</h2>
-          <button type="button" class="inv-btn detail-action" disabled><AuthIcon name="lock" :size="17" />Bắt đầu phân phối</button>
+          <RouterLink v-if="canStartDistribution" :to="{ name: 'admin-distribution' }" class="inv-btn detail-action"><AuthIcon name="arrow-right" :size="17" />Bắt đầu phân phối</RouterLink>
+          <button v-else type="button" class="inv-btn detail-action" disabled><AuthIcon name="lock" :size="17" />Bắt đầu phân phối</button>
           <button type="button" class="inv-btn detail-action" disabled><AuthIcon name="lock" :size="17" />Điều chỉnh tồn</button>
-          <p class="detail-note"><AuthIcon name="info" :size="16" />{{ item ? 'Phân phối và điều chỉnh tồn được thực hiện qua chức năng riêng, có chứng từ và kiểm tra quyền.' : 'Cần có vật phẩm đã nhập kho để thao tác. Hệ thống khóa các tác vụ khi chưa có dữ liệu tồn kho thực tế.' }}</p>
+          <p class="detail-note"><AuthIcon name="info" :size="16" />{{ actionNote }}</p>
         </section>
 
         <section class="inv-card">
