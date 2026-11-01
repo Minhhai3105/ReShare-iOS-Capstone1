@@ -64,7 +64,7 @@ const menu = [
 ]
 const checks = computed(() => [
   { label: 'Kho vật lý xác thực', detail: 'Vật phẩm thuộc kho được phân công.', ok: authorized.value && !!item.value },
-  { label: 'Tồn khả dụng hợp lệ', detail: preview ? 'Số lượng xuất ≤ số còn trong sổ kho mẫu.' : 'Số lượng xuất ≤ tồn khả dụng trong sổ kho.', ok: !!item.value && !errors.value.quantity },
+  { label: 'Tồn khả dụng hợp lệ', detail: props.preview ? 'Số lượng xuất ≤ số còn trong sổ kho mẫu.' : 'Số lượng xuất ≤ tồn khả dụng trong sổ kho.', ok: !!item.value && !errors.value.quantity },
   { label: 'Người thụ hưởng hợp lệ', detail: 'Hồ sơ đã duyệt thuộc phạm vi kho.', ok: !errors.value.beneficiaryId },
   { label: 'Xác nhận bàn giao thực tế', detail: 'Cam kết vật phẩm đã được trao.', ok: handedOver.value },
   { label: 'Kiểm soát số dư không âm', detail: 'Tồn sau phân phối ≥ 0 đơn vị chuẩn.', ok: stockAfter.value !== null && stockAfter.value >= 0 },
