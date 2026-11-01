@@ -73,7 +73,16 @@ describe('US14 – tồn kho', () => {
     assert.equal(receipt.code, item.receiptId)
     assert.equal(receipt.to, null, 'không dẫn tới màn tạo biên bản')
     assert.match(receipt.linked, /Chưa hỗ trợ/)
-    assert.equal(stockIn.to, null)
+    assert.equal(stockIn.to, null, 'mã phiếu nhập trong dữ liệu mẫu không có trên máy chủ')
+  })
+
+  test('AC3 dữ liệu thật: mã phiếu nhập mở màn chi tiết phiếu nhập kho; biên bản vẫn chỉ hiện mã', () => {
+    const item = { donationId: 'don-1', receiptId: 'rcp_don-1', stockEntryId: 'ste_rcp_don-1' }
+    const [, receipt, stockIn] = service.getItemSources(item, true)
+    assert.deepEqual(stockIn.to, { name: 'admin-stock-entry-detail', params: { entryId: 'ste_rcp_don-1' } })
+    assert.equal(stockIn.linked, 'Đã liên kết')
+    assert.equal(receipt.to, null)
+    assert.equal(service.getItemSources({ ...item, stockEntryId: '' }, true)[2].to, null, 'chưa có phiếu thì không gắn liên kết')
   })
 
   test('Tình trạng dùng đúng 3 giá trị của biên bản thực nhận (receipt-api), mọi vật phẩm đều có nhãn', async () => {

@@ -37,19 +37,27 @@ export const VOUCHER_STATUS_LABEL = Object.freeze({
   pending: 'Chờ xác nhận',
 })
 
-// Màn xem chứng từ đã có: chi tiết yêu cầu quyên góp (US10). Biên bản thực nhận chỉ có màn tạo (US12)
-// và phiếu nhập chưa có màn xem, nên chỉ hiển thị mã, không gắn đường dẫn.
+// Màn xem chứng từ đã có: chi tiết yêu cầu quyên góp (US10) và chi tiết phiếu nhập kho (US13).
+// Biên bản thực nhận chỉ có màn tạo (US12) nên chỉ hiển thị mã, không gắn đường dẫn.
 export const DONATION_DETAIL_ROUTE = 'admin-donation-detail'
+export const STOCK_ENTRY_DETAIL_ROUTE = 'admin-stock-entry-detail'
 
-/** Nguồn nhập & chứng từ gốc của vật phẩm; `to` = null khi chưa có màn xem. */
-export function getItemSources(item) {
+/**
+ * Nguồn nhập & chứng từ gốc của vật phẩm; `to` = null khi chưa có màn xem.
+ * Phiếu nhập chỉ mở với dữ liệu thật: mã phiếu trong dữ liệu mẫu không có trên máy chủ.
+ */
+export function getItemSources(item, live = !IS_MOCK) {
   return [
     {
       label: 'Yêu cầu quyên góp', icon: 'heart-handshake', code: item?.donationId, linked: 'Đã liên kết', empty: 'Chưa liên kết',
       to: item?.donationId ? { name: DONATION_DETAIL_ROUTE, params: { donationId: item.donationId } } : null,
     },
     { label: 'Biên bản thực nhận', icon: 'clipboard-check', code: item?.receiptId, linked: 'Chưa hỗ trợ mở biên bản', empty: 'Chưa xác nhận', to: null },
-    { label: 'Phiếu nhập kho', icon: 'file-text', code: item?.stockEntryId, linked: 'Chưa hỗ trợ xem phiếu', empty: 'Chưa tạo phiếu', to: null },
+    {
+      label: 'Phiếu nhập kho', icon: 'file-text', code: item?.stockEntryId,
+      linked: live ? 'Đã liên kết' : 'Dữ liệu mẫu: chưa mở phiếu', empty: 'Chưa tạo phiếu',
+      to: live && item?.stockEntryId ? { name: STOCK_ENTRY_DETAIL_ROUTE, params: { entryId: item.stockEntryId } } : null,
+    },
   ]
 }
 

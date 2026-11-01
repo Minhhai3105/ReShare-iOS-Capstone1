@@ -21,6 +21,8 @@ const STATE_MESSAGE = {
   [INVENTORY_ERROR.notFound]: { icon: 'search', title: 'Không tìm thấy phiếu xuất', text: 'Mã phiếu không tồn tại hoặc không thuộc hệ thống.' },
   [INVENTORY_ERROR.server]: { icon: 'cloud-off', title: 'Không tải được phiếu xuất', text: 'Máy chủ hoặc kết nối mạng đang gặp sự cố. Vui lòng thử lại.' },
 }
+// Dữ liệu mẫu ở dev dùng mã hồ sơ giả, không có trên hệ thống thật nên không mở liên kết hồ sơ.
+const IS_SAMPLE_DATA = import.meta.env.DEV
 
 const route = useRoute()
 const router = useRouter()
@@ -149,8 +151,9 @@ onBeforeUnmount(() => { latestRequestId += 1 })
             <div><p class="px-label">Tên hiển thị</p><b>{{ beneficiary?.displayName ?? '—' }}</b></div>
             <div><p class="px-label">Lần hỗ trợ tại kho</p><b>{{ beneficiary?.supportCount ?? '—' }}</b></div>
           </div>
-          <button type="button" class="inv-btn px-profile" disabled><AuthIcon name="eye" :size="17" />Xem hồ sơ người thụ hưởng</button>
-          <p class="px-caption">Chưa hỗ trợ: màn hồ sơ người thụ hưởng chưa có. Liên kết chỉ mở khi bản ghi đã tồn tại và tài khoản có quyền truy cập.</p>
+          <RouterLink v-if="beneficiary?.id && !IS_SAMPLE_DATA" :to="{ name: ADMIN_ROUTE.beneficiaryDetail, params: { beneficiaryId: beneficiary.id } }" class="inv-btn px-profile"><AuthIcon name="eye" :size="17" />Xem hồ sơ người thụ hưởng</RouterLink>
+          <button v-else type="button" class="inv-btn px-profile" disabled><AuthIcon name="eye" :size="17" />Xem hồ sơ người thụ hưởng</button>
+          <p class="px-caption">{{ IS_SAMPLE_DATA ? 'Dữ liệu mẫu: hồ sơ này không có trên hệ thống nên chưa mở được.' : 'Hồ sơ chỉ mở được khi tài khoản có quyền với kho của người thụ hưởng.' }}</p>
           <p class="px-note"><AuthIcon name="shield" :size="17" /><span><b>Bảo mật danh tính:</b> Không hiển thị số điện thoại, địa chỉ chi tiết hoặc CCCD/CMND trên chứng từ xuất kho.</span></p>
         </section>
 
@@ -212,12 +215,14 @@ onBeforeUnmount(() => { latestRequestId += 1 })
           <div class="px-related">
             <AuthIcon name="download" :size="18" />
             <div><p class="px-label">Phiếu nhập nguồn</p><b class="mono">{{ formatCode(selectedLine?.stockEntryId) }}</b></div>
-            <span class="px-unsupported">Chưa hỗ trợ</span>
+            <RouterLink v-if="selectedLine?.stockEntryId && !IS_SAMPLE_DATA" :to="{ name: 'admin-stock-entry-detail', params: { entryId: selectedLine.stockEntryId } }" class="inv-btn px-small">Xem phiếu nhập</RouterLink>
+            <span v-else class="px-unsupported">Chưa hỗ trợ</span>
           </div>
           <div class="px-related">
             <AuthIcon name="user" :size="18" />
             <div><p class="px-label">Hồ sơ người thụ hưởng</p><b class="mono">{{ formatCode(beneficiary?.id) }}</b></div>
-            <span class="px-unsupported">Chưa hỗ trợ</span>
+            <RouterLink v-if="beneficiary?.id && !IS_SAMPLE_DATA" :to="{ name: ADMIN_ROUTE.beneficiaryDetail, params: { beneficiaryId: beneficiary.id } }" class="inv-btn px-small">Xem hồ sơ</RouterLink>
+            <span v-else class="px-unsupported">Chưa hỗ trợ</span>
           </div>
           <p class="px-caption">Số lượng xuất kho thực tế làm giảm tồn kho tương ứng của lô nhập nguồn, không mặc định phân phối toàn bộ lô.</p>
         </section>
