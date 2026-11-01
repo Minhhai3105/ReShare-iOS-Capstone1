@@ -227,3 +227,26 @@ test('an error response with an unreadable body keeps the generic failure messag
     globalThis.fetch = originalFetch
   }
 })
+
+test('Live repository đổi mã đơn vị sang nhãn hiển thị, giữ nguyên unitId gốc', async (t) => {
+  const authInstance = { currentUser: { getIdToken: async () => 'token' } }
+  const repository = createLiveDistributionRepository({ apiBase: 'https://api.test', authInstance })
+  const original = globalThis.fetch
+  t.after(() => { globalThis.fetch = original })
+
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({
+    warehouses: [], beneficiaries: [],
+    inventory: [{ id: 'inv-1', unit: 'piece', unitId: 'piece', available: 2 }, { id: 'inv-2', unit: 'chiếc', available: 1 }],
+  }) })
+  const options = await repository.list()
+  assert.deepEqual(options.inventory.map((item) => [item.unit, item.unitId]), [['chiếc', 'piece'], ['chiếc', undefined]])
+
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({
+    success: true, donationClosed: true,
+    voucher: { id: 'PX-1', unit: 'box', quantity: 2 }, item: { id: 'inv-1', unit: 'box', unitId: 'box', available: 0 },
+  }) })
+  const result = await repository.createVoucher({ itemId: 'inv-1', quantity: 2, expectedVersion: 1, idempotencyKey: 'k-12345678' })
+  assert.equal(result.voucher.unit, 'thùng/hộp')
+  assert.equal(result.item.unitId, 'box')
+  assert.equal(result.donationClosed, true)
+})

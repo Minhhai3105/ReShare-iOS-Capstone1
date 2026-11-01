@@ -15,6 +15,8 @@ const props = withDefaults(defineProps<{
   actorName?: string;
   reportsPage?: boolean;
   lockRole?: boolean;
+  // Trang đang đọc dữ liệu thật qua API. Màn B (người thụ hưởng) luôn là dữ liệu thật.
+  live?: boolean;
 }>(), {
   enabledScreens: () => ['E', 'F', 'Q'],
   showPreview: true,
@@ -22,6 +24,7 @@ const props = withDefaults(defineProps<{
   accountName: 'Nguyễn Văn An',
   reportsPage: false,
   lockRole: false,
+  live: false,
 });
 
 const emit = defineEmits<{
@@ -97,16 +100,10 @@ const displayName = props.actorName || props.accountName;
 
       <div class="ac-station">
         <div>
-          {{ props.screen === 'B' ? 'Dữ liệu vận hành' : 'Bản xem thử' }}
-          {{
-            props.reportsPage
-              ? 'RC1D-94'
-              : props.screen === 'B'
-                ? 'US15'
-                : 'RC1D-59'
-          }}
+          <template v-if="props.live || props.screen === 'B'">Dữ liệu vận hành</template>
+          <template v-else>Bản xem thử {{ props.reportsPage ? 'RC1D-94' : 'RC1D-59' }}</template>
         </div>
-        <small>{{ props.screen === 'B' ? 'Theo kho được phân quyền' : 'Không kết nối dữ liệu vận hành' }}</small>
+        <small>{{ props.live || props.screen === 'B' ? 'Theo kho được phân quyền' : 'Không kết nối dữ liệu vận hành' }}</small>
       </div>
     </aside>
 

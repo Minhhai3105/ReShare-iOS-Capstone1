@@ -1,3 +1,5 @@
+import { unitLabel } from '../shared/units.js'
+
 export const REPORT_TIMEZONE = 'Asia/Ho_Chi_Minh'
 export const REPORT_TYPES = [
   { id: 'donation', label: 'Yêu cầu được gửi', icon: 'donation', description: 'Đếm yêu cầu quyên góp được tạo trong khoảng thời gian đã chọn.' },
@@ -27,6 +29,7 @@ export function allowedWarehouseIds(data, assignment) {
 export function projectSource(row) {
   return Object.fromEntries(['id', 'type', 'timestamp', 'warehouseId', 'categoryId', 'item', 'quantity', 'unit', 'reference', 'status'].map((key) => [key, row[key]]))
 }
+const withUnitLabel = (row) => ({ ...row, unit: unitLabel(row.unit) })
 export function projectInventory(row) {
   return Object.fromEntries(['id', 'warehouseId', 'categoryId', 'item', 'available', 'unit'].map((key) => [key, row[key]]))
 }
@@ -44,7 +47,7 @@ export function calculateReports(data, filters, assignment) {
     const day = reportDay(row.timestamp)
     const validType = REPORT_TYPES.some((type) => type.id === row.type)
     return inScope(row) && validType && (row.type === 'donation' || row.status === 'confirmed') && day && day >= filters.from && day <= filters.to
-  }).map(projectSource).sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp) || a.id.localeCompare(b.id))
+  }).map(projectSource).map(withUnitLabel).sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp) || a.id.localeCompare(b.id))
   const summary = REPORT_TYPES.map((type) => {
     const records = rows.filter((row) => row.type === type.id)
     const byUnit = new Map()
@@ -53,6 +56,6 @@ export function calculateReports(data, filters, assignment) {
   })
   const days = [...new Set(rows.map((row) => reportDay(row.timestamp)))].sort()
   const series = days.map((day) => ({ day, counts: Object.fromEntries(REPORT_TYPES.map((type) => [type.id, rows.filter((row) => reportDay(row.timestamp) === day && row.type === type.id).length])) }))
-  const stock = data.inventory.filter(inScope).filter((row) => row.available > 0).map(projectInventory)
+  const stock = data.inventory.filter(inScope).filter((row) => row.available > 0).map(projectInventory).map(withUnitLabel)
   return { rows, summary, series, stock, snapshotAt: data.snapshotAt, filters: { ...filters }, demo: true }
 }

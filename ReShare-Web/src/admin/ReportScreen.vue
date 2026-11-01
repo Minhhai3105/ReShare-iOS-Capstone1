@@ -139,7 +139,7 @@ function exportCsv() {
 </script>
 
 <template>
-  <AdminChrome screen="Q" :role="displayRole" :warehouse-label="warehouseLabel" :actor-name="actorName" :lock-role="authenticatedContext || !!props.assignment" reports-page @navigate="emit('navigate', $event)" @role="onRole">
+  <AdminChrome screen="Q" :live="isLive" :role="displayRole" :warehouse-label="warehouseLabel" :actor-name="actorName" :lock-role="authenticatedContext || !!props.assignment" reports-page @navigate="emit('navigate', $event)" @role="onRole">
     <div class="reports-page">
       <section v-if="!isLive" class="q-sandbox"><span class="q-icon"><AdminIcon name="flask" :size="27" /></span><div><b>MÔI TRƯỜNG THỬ NGHIỆM (SANDBOX NODE) <code>RC1D-94 / STAGING-HC01</code></b><p><strong>Dữ liệu mẫu — không dùng làm báo cáo chính thức.</strong> Dữ liệu dưới đây chỉ mô phỏng hoạt động kho, không phản ánh số liệu vận hành thực tế.</p></div><span class="q-badge">● Sandbox Active</span></section>
       <header class="q-heading"><div class="q-tags"><span>PHẠM VI KHO: {{ warehouseLabel }}</span><span>PHÂN HỆ BÁO CÁO VẬN HÀNH (REPORTS)</span></div><h1>Báo cáo</h1><p>Theo dõi yêu cầu và hoạt động kho theo phạm vi được phân quyền</p></header>
