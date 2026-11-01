@@ -36,6 +36,21 @@ const isApproved = computed(() => donation.value?.status === 'approved')
 // Sau khi ghi phiếu thành công, đơn đã sang "received" dù chưa tải lại trang.
 const ORIGIN_STATUS_LABEL = { approved: 'Đã duyệt (approved)', received: 'Đã thực nhận (received)', in_stock: 'Trong kho (in_stock)', distributed: 'Đã phân phối (distributed)' }
 const originStatusLabel = computed(() => ORIGIN_STATUS_LABEL[createdReceipt.value ? 'received' : donation.value?.status] || 'Chờ kiểm tra')
+// Tiến trình theo trạng thái thật của đơn: đơn đã thực nhận, nhập kho hay phân phối thì các bước trước đã xong.
+const STAGE_BY_STATUS = { approved: 1, received: 2, in_stock: 3, distributed: 3 }
+const progressSteps = computed(() => {
+  const stage = Math.max(createdReceipt.value ? 2 : 0, STAGE_BY_STATUS[donation.value?.status] ?? 0)
+  const step = (index, title, done, current, pending) => ({
+    index, title,
+    state: stage >= index ? 'is-done' : stage === index - 1 ? 'is-current' : '',
+    note: stage >= index ? done : stage === index - 1 ? current : pending,
+  })
+  return [
+    step(1, 'Phê duyệt quyên góp', 'Hoàn tất (approved)', 'Chờ phê duyệt', 'Chờ phê duyệt'),
+    step(2, 'Ghi nhận thực nhận tại kho', 'Hoàn tất (received)', 'Đang thực hiện (received)', 'Chờ phê duyệt trước'),
+    step(3, 'Nhập kho & xếp giá kệ', 'Hoàn tất (in_stock)', 'Chờ chuyển giao (in_stock)', 'Chờ thực nhận trước'),
+  ]
+})
 // API chi tiết đơn chỉ trả warehouseId; tên kho lấy từ danh sách kho đã tải cho form.
 const expectedWarehouseName = computed(() => donation.value?.expectedWarehouseName ||
   options.value?.warehouses?.find((warehouse) => warehouse.id === donation.value?.expectedWarehouseId)?.name || '—')
@@ -289,9 +304,7 @@ onMounted(load)
               <em>Thao tác này không tự động tạo phiếu nhập kho hay làm tăng số lượng tồn kho khả dụng.</em>
             </section>
             <section class="receipt-card progress-card"><h2>Tiến trình vận hành</h2>
-              <div class="progress-step is-done"><i>1</i><span><strong>Phê duyệt quyên góp</strong><small>{{ isApproved ? 'Hoàn tất (approved)' : 'Chưa hoàn tất' }}</small></span></div>
-              <div class="progress-step is-current"><i>2</i><span><strong>Ghi nhận thực nhận tại kho</strong><small>Đang thực hiện (received)</small></span></div>
-              <div class="progress-step"><i>3</i><span><strong>Nhập kho &amp; xếp giá kệ</strong><small>Chờ chuyển giao (in_stock)</small></span></div>
+              <div v-for="step in progressSteps" :key="step.index" class="progress-step" :class="step.state"><i>{{ step.index }}</i><span><strong>{{ step.title }}</strong><small>{{ step.note }}</small></span></div>
             </section>
             <section class="receipt-card safety-card"><div class="section-title"><AuthIcon name="shield-check" /><h2>Quy chuẩn an toàn vận hành</h2></div>
               <p>Trước khi gửi dữ liệu, hệ thống phải xác thực lại quyền thao tác tại kho đã chọn và kiểm tra trạng thái đơn phải còn hiệu lực “Đã duyệt”.</p>
