@@ -1,4 +1,4 @@
-import { ADMIN_ROLES, ADMIN_ROUTE, FORBIDDEN_REASON } from './auth/auth.constants'
+import { ADMIN_ROLES, ADMIN_ROUTE, FORBIDDEN_REASON, SESSION_EXPIRED_REASON } from './auth/auth.constants'
 import {
   canAccessWarehouse,
   currentUser,
@@ -7,6 +7,7 @@ import {
   restoreSession,
   setAccessChangedHandler,
   staffAssignment,
+  sessionExpired,
 } from './auth/auth.store'
 
 export const adminRoutes = [
@@ -178,7 +179,9 @@ export async function adminAuthGuard(to) {
     return { name: ADMIN_ROUTE.home }
   }
   if (!to.meta.requiresAuth) return true
-  if (!currentUser.value) return { name: ADMIN_ROUTE.login, query: { redirect: to.fullPath } }
+  if (!currentUser.value) return { name: ADMIN_ROUTE.login, query: {
+    redirect: to.fullPath, ...(sessionExpired.value ? { reason: SESSION_EXPIRED_REASON } : {}),
+  } }
   if (to.name === ADMIN_ROUTE.forbidden) return true
 
   const deniedReason = getAccessDeniedReason() ?? getRouteDeniedReason(to)

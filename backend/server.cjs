@@ -3,9 +3,9 @@ const { initializeApp, applicationDefault } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
 const { FieldValue, getFirestore } = require('firebase-admin/firestore');
 const cloudinary = require('cloudinary').v2;
-const { ApiError, createImageApi } = require('./image-api.cjs');
+const { createImageApi } = require('./image-api.cjs');
 const { createStaffApi } = require('./staff-api.cjs');
-const { ApiError: ContactApiError, createContactApi } = require('./contact-api.cjs');
+const { createContactApi } = require('./contact-api.cjs');
 const { createDonationReviewApi } = require('./donation-review-api.cjs');
 const { createReceiptApi } = require('./receipt-api.cjs');
 const { createStockIntakeApi } = require('./stock-intake-api.cjs');
@@ -15,7 +15,7 @@ const { createDistributionApi } = require('./distribution-api.cjs');
 const { createReportsApi } = require('./reports-api.cjs');
 const { createBeneficiariesApi } = require('./beneficiaries-api.cjs');
 const { createDashboardApi } = require('./dashboard-api.cjs');
-const { errorBody } = require('./error-body.cjs');
+const { createRequestHandler } = require('./http-handler.cjs');
 
 const {
   CLOUDINARY_CLOUD_NAME,
@@ -53,9 +53,9 @@ const dashboardApi = createDashboardApi({ db, verifyToken });
 const adminWebOrigins = new Set((process.env.ADMIN_WEB_ORIGINS || '')
   .split(',').map(origin => origin.trim()).filter(Boolean));
 
-const server = http.createServer(async (request, response) => {
-  const pathname = new URL(request.url, 'http://localhost').pathname;
+function resolveHandler(pathname) {
   const isAdminApi = pathname.startsWith('/v1/admin/');
+  const isContactPath = pathname === '/v1/contact';
   const isDonationAdminPath = pathname.startsWith('/v1/admin/donations');
   const isReceiptPath = /^\/v1\/admin\/donations\/[^/]+\/receipt$/.test(pathname);
   const isStockIntakePath = /^\/v1\/admin\/donations\/[^/]+\/stock-in$/.test(pathname) ||
@@ -77,69 +77,27 @@ const server = http.createServer(async (request, response) => {
   const isBeneficiaryPath = pathname === '/v1/admin/beneficiaries' ||
     /^\/v1\/admin\/beneficiaries\/[^/]+(\/(audit|update|verify))?$/.test(pathname);
   const isDashboardPath = pathname === '/v1/admin/dashboard/metrics';
-  const isAdminImageRead = pathname === '/v1/images/read-access';
-  const isContactPath = pathname === '/v1/contact';
-  const origin = request.headers.origin;
-  const allowedAdminOrigin = origin && (adminWebOrigins.has(origin) ||
-    /^http:\/\/(localhost|127\.0\.0\.1):\d{2,5}$/.test(origin));
-  const allowedContactOrigin = CONTACT_ALLOWED_ORIGIN?.trim();
-  const responseHeaders = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' };
-  if (((isAdminApi || isAdminImageRead) && allowedAdminOrigin) || (isContactPath && origin && origin === allowedContactOrigin)) {
-    responseHeaders['Access-Control-Allow-Origin'] = origin;
-    responseHeaders['Access-Control-Allow-Headers'] = 'Authorization, Content-Type';
-    responseHeaders['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS';
-    responseHeaders.Vary = 'Origin';
-  }
+  // Thứ tự quan trọng: receipt và stock-in là path con của /v1/admin/donations nên
+  // phải đứng trước isDonationAdminPath; isAdminApi là nhánh bắt tất cả cuối cùng.
+  return isContactPath ? contactApi
+    : isReceiptPath ? receiptApi
+    : isStockIntakePath ? stockIntakeApi
+    : isInventoryPath ? inventoryApi
+    : isDistributionHistoryPath ? distributionHistoryApi
+    : isDistributionPath ? distributionApi
+    : isReportsPath ? reportsApi
+    : isBeneficiaryPath ? beneficiariesApi
+    : isDashboardPath ? dashboardApi
+    : isDonationAdminPath ? donationReviewApi
+    : isAdminApi ? staffApi
+    : api;
+}
 
-  try {
-    if ((isAdminApi || isAdminImageRead) && origin && !allowedAdminOrigin) throw new ApiError(403, 'Origin is not allowed');
-    if (isContactPath && origin && allowedContactOrigin && origin !== allowedContactOrigin) {
-      throw new ContactApiError(403, 'Origin is not allowed');
-    }
-    if (isContactPath && request.method === 'OPTIONS' && (!origin || origin !== allowedContactOrigin)) {
-      throw new ContactApiError(403, 'Origin is not allowed');
-    }
-    if ((isAdminApi || isAdminImageRead || isContactPath) && request.method === 'OPTIONS') {
-      response.writeHead(204, responseHeaders);
-      response.end();
-      return;
-    }
-
-    let raw = '';
-    for await (const chunk of request) {
-      raw += chunk;
-      if (Buffer.byteLength(raw, 'utf8') > (isContactPath ? 32 * 1024 : 8192)) {
-        throw new ApiError(413, 'Request too large');
-      }
-    }
-    let body = null;
-    if (raw) {
-      try { body = JSON.parse(raw); }
-      catch { throw new ApiError(400, 'Invalid JSON body'); }
-    }
-    // Thứ tự quan trọng: receipt và stock-in là path con của /v1/admin/donations nên
-    // phải đứng trước isDonationAdminPath; isAdminApi là nhánh bắt tất cả cuối cùng.
-    const handler = isContactPath ? contactApi
-      : isReceiptPath ? receiptApi
-      : isStockIntakePath ? stockIntakeApi
-      : isInventoryPath ? inventoryApi
-      : isDistributionHistoryPath ? distributionHistoryApi
-      : isDistributionPath ? distributionApi
-      : isReportsPath ? reportsApi
-      : isBeneficiaryPath ? beneficiariesApi
-      : isDashboardPath ? dashboardApi
-      : isDonationAdminPath ? donationReviewApi
-      : isAdminApi ? staffApi
-      : api;
-    const result = await handler.handle(request.method, pathname, request.headers, body, request.url);
-    response.writeHead(result.status, responseHeaders);
-    response.end(JSON.stringify(result.body));
-  } catch (error) {
-    const status = error instanceof ApiError || error instanceof ContactApiError ? error.status : 500;
-    if (status === 500) console.error('ReShare API failure:', error);
-    response.writeHead(status, responseHeaders);
-    response.end(JSON.stringify(errorBody(error, status)));
-  }
-});
-
+const production = process.env.NODE_ENV === 'production' || process.env.RENDER === 'true';
+const server = http.createServer(createRequestHandler({
+  resolveHandler, adminWebOrigins, contactAllowedOrigin: CONTACT_ALLOWED_ORIGIN?.trim(),
+  allowLocalOrigins: !production,
+}));
+server.requestTimeout = 30000;
+server.headersTimeout = 10000;
 server.listen(Number(process.env.PORT || 3000), '0.0.0.0');

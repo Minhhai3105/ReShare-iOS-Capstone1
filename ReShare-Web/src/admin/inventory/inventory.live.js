@@ -1,3 +1,4 @@
+import { protectedFetch } from '../protected-fetch.js'
 // Nguồn dữ liệu tồn kho thật (bản build): gọi inventory-api (US14) và distribution-history-api (US17).
 // Tách khỏi inventory.service.js và nhận fetch/getToken từ ngoài để test bằng node, không cần Firebase.
 // Trả đúng hình dữ liệu mà các màn kho đang dùng với dữ liệu mẫu, nên view không phải sửa.
@@ -34,7 +35,7 @@ export function createLiveInventorySource({ apiBase, getToken, fetchImpl = (...a
     }
     let response
     try {
-      response = await fetchImpl(url.toString(), { headers: { Authorization: `Bearer ${await getToken()}` } })
+      response = await protectedFetch(url.toString(), { headers: { Authorization: `Bearer ${await getToken()}` } }, fetchImpl)
     } catch (error) {
       throw error?.status ? error : createError(500)
     }

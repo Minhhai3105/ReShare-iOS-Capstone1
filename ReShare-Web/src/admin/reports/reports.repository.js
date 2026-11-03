@@ -1,3 +1,4 @@
+import { protectedFetch } from '../protected-fetch.js'
 import { reportFixtures } from './reports.mock.js'
 import { allowedWarehouseIds, projectInventory, projectSource } from './reports.model.js'
 import { mockError } from '../lq-errors.js'
@@ -61,7 +62,7 @@ export function createLiveReportsRepository({
       const queryStr = params.toString() ? `?${params.toString()}` : ''
       let response
       try {
-        response = await fetch(`${apiBase}/v1/admin/reports${queryStr}`, {
+        response = await protectedFetch(`${apiBase}/v1/admin/reports${queryStr}`, {
           method: 'GET',
           headers: {
             Authorization: `Bearer ${token}`,

@@ -1,3 +1,4 @@
+import { protectedFetch } from '../protected-fetch.js'
 import { auth } from '../auth/firebase'
 import { demoStockInAdapter } from './stockin.demo'
 import {
@@ -21,7 +22,7 @@ async function request(path, body, method = 'POST') {
   const token = await user.getIdToken()
   let response
   try {
-    response = await fetch(`${apiBase}/v1/admin/${path}`, {
+    response = await protectedFetch(`${apiBase}/v1/admin/${path}`, {
       method,
       headers: {
         Authorization: `Bearer ${token}`,

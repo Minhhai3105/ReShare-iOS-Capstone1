@@ -1,3 +1,4 @@
+import { protectedFetch } from '../protected-fetch.js'
 import { auth } from '../auth/firebase'
 
 const apiBase = (import.meta.env.VITE_ADMIN_API_BASE_URL || 'https://reshare-ios-capstone1-1.onrender.com').replace(/\/$/, '')
@@ -8,7 +9,7 @@ async function request(path, body) {
   const token = await user.getIdToken()
   let response
   try {
-    response = await fetch(`${apiBase}/v1/admin/${path}`, {
+    response = await protectedFetch(`${apiBase}/v1/admin/${path}`, {
       method: body === undefined ? 'GET' : 'POST',
       headers: { Authorization: `Bearer ${token}`, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
       body: body === undefined ? undefined : JSON.stringify(body),

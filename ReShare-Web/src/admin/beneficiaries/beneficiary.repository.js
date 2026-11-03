@@ -1,3 +1,4 @@
+import { protectedFetch } from '../protected-fetch.js'
 const defaultBase = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_ADMIN_API_BASE_URL
   ? import.meta.env.VITE_ADMIN_API_BASE_URL
   : 'https://reshare-ios-capstone1-1.onrender.com').replace(/\/$/, '')
@@ -13,10 +14,10 @@ export function createBeneficiaryRepository({ apiBase = defaultBase, authInstanc
     const isWrite = options.method && options.method !== 'GET'
     let response
     try {
-      response = await fetchImpl(`${apiBase}${path}`, {
+      response = await protectedFetch(`${apiBase}${path}`, {
         ...options,
         headers: { Authorization: `Bearer ${await token()}`, ...(options.body ? { 'Content-Type': 'application/json' } : {}) },
-      })
+      }, fetchImpl)
     } catch (error) {
       if (error?.status === 401) throw error
       throw Object.assign(new Error('Không thể kết nối máy chủ.'), { status: 0, code: isWrite ? 'UNCERTAIN' : 'NETWORK_ERROR' })
