@@ -6,6 +6,7 @@ import { currentUser, staffAssignment, canAccessWarehouse } from '../../auth/aut
 import { ADMIN_ROUTE } from '../../auth/auth.constants'
 import { demoReceiptRepository, RECEIPT_ERROR, receiptRepository } from '../receipt.repository'
 import brandLogo from '../../auth/assets/reshare-logo.png'
+import AdminNavigation from '../../AdminNavigation.vue'
 
 const route = useRoute()
 const isDemoPreview = import.meta.env.DEV && route.meta.devPreview === true
@@ -162,9 +163,10 @@ onMounted(load)
 
     <aside class="sidebar">
       <p class="sidebar__label">VẬN HÀNH KHO &amp; XỬ LÝ</p>
-      <RouterLink :to="backRoute"><AuthIcon name="dashboard" />Tổng quan</RouterLink>
+      <AdminNavigation :role="staffAssignment?.active ? staffAssignment.role : undefined" vertical />
       <span class="sidebar__label sidebar__label--second">Ghi nhận thực nhận</span>
     </aside>
+    <AdminNavigation :role="staffAssignment?.active ? staffAssignment.role : undefined" mobile-only />
 
     <main class="admin-main">
     <div class="receipt-page">

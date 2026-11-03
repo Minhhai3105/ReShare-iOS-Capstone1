@@ -4,6 +4,7 @@ import AuthIcon from '../auth/components/AuthIcon.vue'
 import logoUrl from '../auth/assets/reshare-logo.png'
 import { currentUser, staffAssignment } from '../auth/auth.store'
 import { ADMIN_ROUTE, USER_ROLE, USER_ROLE_LABEL } from '../auth/auth.constants'
+import { adminNavigation } from '../navigation.js'
 
 // Nhãn demo (Sandbox, Demo, Xem thử, Prototype) chỉ hiện khi chạy dữ liệu mẫu ở dev, không hiện trên bản production.
 const IS_SAMPLE_DATA = import.meta.env.DEV
@@ -14,14 +15,7 @@ const props = defineProps({
 })
 const emit = defineEmits(['select-warehouse'])
 
-const NAV = [
-  { label: 'Tổng quan', icon: 'dashboard', to: { name: ADMIN_ROUTE.home } },
-  { label: 'Yêu cầu quyên góp', icon: 'heart-handshake', to: { name: ADMIN_ROUTE.donationQueue } },
-  { label: 'Kho hàng', icon: 'archive', to: { name: ADMIN_ROUTE.inventory }, active: true },
-  { label: 'Người thụ hưởng', icon: 'users' },
-  { label: 'Báo cáo', icon: 'chart' },
-  { label: 'Nhật ký', icon: 'scroll' },
-]
+const NAV = computed(() => adminNavigation(staffAssignment.value?.role).filter(entry => entry.key !== 'staff'))
 
 const isSystemAdmin = computed(() => staffAssignment.value?.role === USER_ROLE.systemAdmin)
 const roleLabel = computed(() => {
@@ -62,8 +56,8 @@ const currentYear = new Date().getFullYear()
       <nav aria-label="Điều hướng quản trị">
         <p class="inv-nav-group">Vận hành kho &amp; xử lý</p>
         <template v-for="item in NAV" :key="item.label">
-          <RouterLink v-if="item.to" :to="item.to" class="inv-nav" :class="{ 'is-active': item.active }">
-            <AuthIcon :name="item.icon" :size="19" />{{ item.label }}
+          <RouterLink v-if="item.to" :to="item.to" class="inv-nav" :class="{ 'is-active': item.key === 'inventory' }">
+            <AuthIcon :name="item.authIcon" :size="19" />{{ item.label }}
           </RouterLink>
           <span v-else class="inv-nav is-disabled"><AuthIcon :name="item.icon" :size="19" />{{ item.label }}</span>
         </template>
@@ -72,7 +66,8 @@ const currentYear = new Date().getFullYear()
           <AuthIcon name="users" :size="19" />Nhân sự &amp; Phân quyền
         </RouterLink>
         <span v-else class="inv-nav is-disabled"><AuthIcon name="users" :size="19" />Nhân sự &amp; Phân quyền</span>
-        <span class="inv-nav is-disabled"><AuthIcon name="settings" :size="19" />Cấu hình chung</span>
+        <span class="inv-nav is-disabled" aria-disabled="true">Nhật ký · Chưa hỗ trợ</span>
+        <span class="inv-nav is-disabled" aria-disabled="true"><AuthIcon name="settings" :size="19" />Cấu hình chung · Chưa hỗ trợ</span>
       </nav>
 
       <div v-if="IS_SAMPLE_DATA" class="inv-station"><span><AuthIcon name="terminal" :size="15" />WH-SGN-02</span><span class="inv-chip">Xem thử</span></div>

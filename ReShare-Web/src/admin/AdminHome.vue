@@ -332,7 +332,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <AuthShell>
+  <AuthShell :show-navigation="false">
     <div v-if="currentUser && staffAssignment" class="admin-ops">
       <aside class="admin-ops__sidebar" aria-label="Thanh điều hướng quản trị">
         <div class="admin-ops__brand">

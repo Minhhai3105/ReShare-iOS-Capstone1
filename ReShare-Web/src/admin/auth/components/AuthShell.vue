@@ -1,8 +1,12 @@
 <script setup>
 import AuthIcon from './AuthIcon.vue'
 import logoUrl from '../assets/reshare-logo.png'
+import { computed } from 'vue'
+import { currentUser, staffAssignment } from '../auth.store'
+import AdminNavigation from '../../AdminNavigation.vue'
 
-defineProps({ showServerStatus: { type: Boolean, default: true } })
+defineProps({ showServerStatus: { type: Boolean, default: true }, showNavigation: { type: Boolean, default: true } })
+const navigationRole = computed(() => currentUser.value && staffAssignment.value?.active ? staffAssignment.value.role : null)
 
 const currentYear = new Date().getFullYear()
 </script>
@@ -29,6 +33,7 @@ const currentYear = new Date().getFullYear()
       </div>
     </header>
 
+    <AdminNavigation v-if="showNavigation && navigationRole" :role="navigationRole" />
     <main class="auth-shell__main">
       <slot />
     </main>
