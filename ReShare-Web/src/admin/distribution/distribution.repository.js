@@ -1,3 +1,4 @@
+import { protectedFetch } from '../protected-fetch.js'
 import { distributionFixtures } from './distribution.mock.js'
 import { mockError } from '../lq-errors.js'
 import { unitLabel } from '../shared/units.js'
@@ -143,7 +144,7 @@ export function createLiveDistributionRepository({
     const token = await getToken()
     let response
     try {
-      response = await fetch(`${apiBase}/v1/admin/distribution/options`, {
+      response = await protectedFetch(`${apiBase}/v1/admin/distribution/options`, {
         headers: { Authorization: `Bearer ${token}` },
       })
     } catch {
@@ -160,7 +161,7 @@ export function createLiveDistributionRepository({
     const token = await getToken()
     let response
     try {
-      response = await fetch(`${apiBase}/v1/admin/distribution`, {
+      response = await protectedFetch(`${apiBase}/v1/admin/distribution`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,

@@ -6,6 +6,7 @@ import { currentUser, staffAssignment, canAccessWarehouse } from '../../auth/aut
 import { ADMIN_ROUTE } from '../../auth/auth.constants'
 import { demoStockInRepository, STOCK_IN_ERROR, stockInRepository } from '../stockin.repository'
 import brandLogo from '../../auth/assets/reshare-logo.png'
+import AdminNavigation from '../../AdminNavigation.vue'
 
 const route = useRoute()
 const isDemoPreview = import.meta.env.DEV && route.meta.devPreview === true
@@ -158,9 +159,10 @@ onMounted(load)
 
     <aside class="sidebar">
       <p class="sidebar__label">VẬN HÀNH KHO &amp; XỬ LÝ</p>
-      <RouterLink :to="{ name: ADMIN_ROUTE.home }"><AuthIcon name="dashboard" />Tổng quan</RouterLink>
+      <AdminNavigation :role="staffAssignment?.active ? staffAssignment.role : undefined" vertical />
       <span class="sidebar__label sidebar__label--second">Nhập kho</span>
     </aside>
+    <AdminNavigation :role="staffAssignment?.active ? staffAssignment.role : undefined" mobile-only />
 
     <main class="admin-main">
     <div class="stock-page">

@@ -1,9 +1,10 @@
 <script setup>
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import AdminIcon from '../AdminIcon.vue'
 import brandLogo from '../auth/assets/reshare-logo.png'
 import { canDistribute, createDemoDistributionRepository, newRequestKey, validateDistribution } from './distribution.repository.js'
 import { mapLqError } from '../lq-errors.js'
+import AdminNavigation from '../AdminNavigation.vue'
 
 const props = defineProps({
   assignment: Object,
@@ -30,15 +31,22 @@ const confirmation = ref(null)
 const pendingRequestKey = ref(null)
 const dialog = ref(null)
 const resultPanel = ref(null)
+let optionsRequestId = 0
+onBeforeUnmount(() => { optionsRequestId += 1 })
 
 watch(() => [props.assignment, activeRepo.value], async () => {
+  const requestId = ++optionsRequestId
+  options.value = { warehouses: [], inventory: [], beneficiaries: [] }
+  submitError.value = ''
   try {
     const res = await Promise.resolve(activeRepo.value.list())
+    if (requestId !== optionsRequestId) return
     options.value = res || { warehouses: [], inventory: [], beneficiaries: [] }
     if (!options.value.warehouses.some((entry) => entry.id === warehouseId.value)) {
       warehouseId.value = options.value.warehouses[0]?.id ?? ''
     }
   } catch (err) {
+    if (requestId !== optionsRequestId) return
     submitError.value = err.message || 'Không thể tải danh sách kho.'
   }
   confirmation.value = null
@@ -164,7 +172,7 @@ const formatTime = (value) => new Intl.DateTimeFormat('vi-VN', {
 </script>
 
 <template>
-  <div class="distribution-shell">
+  <div class="distribution-shell" :class="{ 'distribution-shell--live': !preview }">
     <header class="d-topbar">
       <div class="d-brand"><img :src="brandLogo" alt="ReShare" /><b>ReShare <small>PORTAL</small></b><span><strong>ReShare Ops</strong><small>Hệ thống Điều phối Kho</small></span></div>
       <div class="d-search"><AdminIcon name="search" /><span>Tìm kiếm vận đơn, kiện hàng, quyền góp</span><kbd>⌘K</kbd></div>
@@ -175,10 +183,11 @@ const formatTime = (value) => new Intl.DateTimeFormat('vi-VN', {
     <aside class="d-sidebar">
       <div class="d-station"><b><AdminIcon name="warehouse" :size="16" />{{ warehouse?.name || (preview ? 'Chưa có kho mẫu phù hợp' : 'Chưa có kho phù hợp') }}</b><span v-if="preview" class="d-tag">Demo</span><small>Đang thao tác tại kho <em v-if="preview">● Mô phỏng</em></small></div>
       <p class="d-nav-title">VẬN HÀNH KHO &amp; XỬ LÝ</p>
-      <nav :aria-label="preview ? 'Điều hướng demo' : 'Điều hướng vận hành'"><button v-for="entry in menu" :key="entry.label" disabled :class="{ active: entry.active }" :aria-current="entry.active ? 'page' : undefined"><AdminIcon :name="entry.icon" />{{ entry.label }}</button></nav>
-      <p class="d-nav-title">QUẢN TRỊ HỆ THỐNG</p>
-      <button disabled><AdminIcon name="shield" />Nhân sự &amp; Phân quyền</button>
-      <button disabled><AdminIcon name="settings" />Cấu hình chung</button>
+      <AdminNavigation v-if="!preview" :role="assignment?.active ? assignment.role : undefined" vertical />
+      <nav v-else aria-label="Điều hướng demo"><button v-for="entry in menu" :key="entry.label" disabled :class="{ active: entry.active }" :aria-current="entry.active ? 'page' : undefined"><AdminIcon :name="entry.icon" />{{ entry.label }}</button></nav>
+      <p v-if="preview" class="d-nav-title">QUẢN TRỊ HỆ THỐNG</p>
+      <button v-if="preview" disabled><AdminIcon name="shield" />Nhân sự &amp; Phân quyền</button>
+      <button v-if="preview" disabled><AdminIcon name="settings" />Cấu hình chung · Chưa hỗ trợ</button>
       <div v-if="preview" class="d-sidebar-status"><span>● RC1D-82</span><span class="d-tag">Dữ liệu mẫu</span></div>
     </aside>
 

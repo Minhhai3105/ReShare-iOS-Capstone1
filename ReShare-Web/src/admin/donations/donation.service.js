@@ -1,3 +1,4 @@
+import { protectedFetch } from '../protected-fetch.js'
 // Hàng đợi quyên góp đọc Firestore; warehouseId là kho được phân công, hubId chỉ là điểm minh họa trong app.
 import { DONATION_PAGE_SIZE, DONATION_QUEUE_ERROR, DONATION_SORT } from './donation.constants.js'
 import { ADMIN_ROLES, USER_ROLE } from '../auth/auth.constants.js'
@@ -185,7 +186,7 @@ async function reviewRequest(path, body, responseField = 'donation') {
   if (!token) throw Object.assign(new Error('FORBIDDEN'), { code: 'FORBIDDEN' })
   let response
   try {
-    response = await fetch(`${reviewApiBase}${path}`, {
+    response = await protectedFetch(`${reviewApiBase}${path}`, {
       method: body === undefined ? 'GET' : 'POST',
       headers: { Authorization: `Bearer ${token}`, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -224,7 +225,7 @@ export async function getDonationImageUrl(donationId, publicId) {
   const token = await auth.currentUser?.getIdToken()
   if (!token) throw Object.assign(new Error('FORBIDDEN'), { code: 'FORBIDDEN' })
   try {
-    const response = await fetch(`${reviewApiBase}/v1/images/read-access`, {
+    const response = await protectedFetch(`${reviewApiBase}/v1/images/read-access`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ donationId, publicId }),

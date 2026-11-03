@@ -1,3 +1,4 @@
+import { protectedFetch } from '../protected-fetch.js'
 // Guard `import.meta.env` và cho inject phụ thuộc giống reports.repository.js, để file
 // import được ngoài Vite — nếu không thì không viết được test cho phần kiểm payload.
 const DEFAULT_API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_ADMIN_API_BASE_URL
@@ -32,7 +33,7 @@ export async function fetchDashboardMetrics({ warehouseId, dateFrom, dateTo }, s
   if (dateFrom) url.searchParams.set('from', dateFrom)
   if (dateTo) url.searchParams.set('to', dateTo)
 
-  const response = await fetchImpl(url, { headers: { Authorization: `Bearer ${token}` }, signal })
+  const response = await protectedFetch(url, { headers: { Authorization: `Bearer ${token}` }, signal }, fetchImpl)
   if (!response.ok) throw Object.assign(new Error('Dashboard metrics unavailable'), { status: response.status })
 
   const payload = await response.json()

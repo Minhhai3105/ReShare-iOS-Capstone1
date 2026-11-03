@@ -3,8 +3,9 @@ import { onAuthStateChanged } from 'firebase/auth'
 import { auth } from './firebase'
 import { requestSignIn, requestSignOut, requestStaffAssignment, watchStaffAssignment } from './auth.service'
 import { ADMIN_ROLES, FORBIDDEN_REASON, USER_ROLE } from './auth.constants'
+import { setSessionExpiredHandler } from '../protected-fetch.js'
 
-const state = reactive({ user: null, staffAssignment: null, assignmentUnavailable: false, isLoading: false })
+const state = reactive({ user: null, staffAssignment: null, assignmentUnavailable: false, isLoading: false, sessionExpired: false })
 let stopWatchingAssignment = null
 let restorePromise = null
 let onAccessChanged = null
@@ -17,6 +18,18 @@ export const currentUser = computed(() => state.user && ({
 export const staffAssignment = computed(() => state.staffAssignment)
 export const isLoading = computed(() => state.isLoading)
 export const isAuthenticated = computed(() => Boolean(state.user))
+export const sessionExpired = computed(() => state.sessionExpired)
+
+setSessionExpiredHandler(async usedToken => {
+  const user = auth.currentUser
+  if (!user) return
+  let sameToken = true
+  try { sameToken = await user.getIdToken() === usedToken } catch { /* Phiên không thể làm mới. */ }
+  // Request của tài khoản/phiên cũ không được đăng xuất tài khoản vừa đăng nhập.
+  if (!sameToken || auth.currentUser?.uid !== user.uid) return
+  state.sessionExpired = true
+  try { await requestSignOut() } finally { setUser(null) }
+})
 
 function setUser(user) {
   if (state.user?.uid === user?.uid) return
@@ -90,6 +103,7 @@ export async function signIn(email, password, { keepSignedIn = false } = {}) {
   state.isLoading = true
   try {
     const user = await requestSignIn(email, password, keepSignedIn)
+    state.sessionExpired = false
     setUser(user)
     await loadStaffAssignment(user)
     return user

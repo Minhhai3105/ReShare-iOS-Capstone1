@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import AdminIcon from './AdminIcon.vue';
 import brandLogo from './auth/assets/reshare-logo.png';
+import { adminNavigation } from './navigation.js';
 
 type AdminScreen = 'E' | 'F' | 'Q' | 'B';
 
@@ -49,7 +50,7 @@ const displayName = props.actorName || props.accountName;
 </script>
 
 <template>
-  <div class="admin-chrome" :class="{ 'ac-reports': props.reportsPage }">
+  <div class="admin-chrome" :class="{ 'ac-reports': props.reportsPage, 'ac-live': props.live || props.screen === 'B' }">
     <aside class="ac-sidebar">
       <div class="ac-brand">
         <img
@@ -68,7 +69,14 @@ const displayName = props.actorName || props.accountName;
           VẬN HÀNH KHO &amp; XỬ LÝ
         </div>
 
+        <template v-if="props.live || props.screen === 'B'">
+          <RouterLink v-for="entry in adminNavigation(props.role)" :key="entry.key" :to="entry.to" class="ac-nav-item" active-class="active">
+            <AdminIcon :name="entry.icon" :size="19" />{{ entry.label }}
+          </RouterLink>
+          <span class="ac-nav-item ac-nav-pending" aria-disabled="true">Nhật ký · Chưa hỗ trợ</span>
+        </template>
         <button
+          v-else
           v-for="entry in menu"
           :key="entry.label"
           :disabled="!entry.screen || !props.enabledScreens.includes(entry.screen)"
@@ -87,14 +95,14 @@ const displayName = props.actorName || props.accountName;
           QUẢN TRỊ HỆ THỐNG
         </div>
 
-        <button class="ac-nav-item" disabled>
+        <button v-if="!props.live && props.screen !== 'B'" class="ac-nav-item" disabled>
           <AdminIcon name="shield" :size="19" />
           Nhân sự &amp; Phân quyền
         </button>
 
         <button class="ac-nav-item" disabled>
           <AdminIcon name="settings" :size="19" />
-          Cấu hình chung
+          Cấu hình chung · Chưa hỗ trợ
         </button>
       </nav>
 
@@ -125,13 +133,13 @@ const displayName = props.actorName || props.accountName;
         <div class="ac-warehouse">
           <b>
             {{ props.warehouseLabel }}
-            <em v-if="props.screen !== 'B'">DEMO</em>
+            <em v-if="!props.live && props.screen !== 'B'">DEMO</em>
           </b>
-          <small>{{ props.screen === 'B' ? 'Phạm vi theo phân quyền' : 'Phạm vi mô phỏng' }}</small>
+          <small>{{ props.live || props.screen === 'B' ? 'Phạm vi theo phân quyền' : 'Phạm vi mô phỏng' }}</small>
         </div>
 
         <div class="ac-search">
-          {{ props.screen === 'B' ? 'Hồ sơ người thụ hưởng' : 'Dữ liệu mẫu trong trình duyệt' }}
+          {{ props.live || props.screen === 'B' ? 'Dữ liệu theo quyền truy cập' : 'Dữ liệu mẫu trong trình duyệt' }}
         </div>
 
         <div class="ac-user">
@@ -214,6 +222,9 @@ const displayName = props.actorName || props.accountName;
 </template>
 
 <style scoped>
+a.ac-nav-item { text-decoration: none; box-sizing: border-box; }
+.ac-nav-item:focus-visible { outline: 3px solid #2d6a4f; outline-offset: 2px; }
+.ac-nav-pending { font-size: 12px; color: #68756e; cursor: default; }
 * {
   box-sizing: border-box;
 }
@@ -596,5 +607,10 @@ const displayName = props.actorName || props.accountName;
   .ac-reports .ac-user {
     margin-left: auto;
   }
+}
+@media (max-width: 760px) {
+  .ac-live .ac-sidebar nav { display: flex; flex-wrap: wrap; gap: 4px; }
+  .ac-live .ac-sidebar .ac-nav-item { width: auto; min-height: 44px; }
+  .ac-live .ac-sidebar .ac-group-label { width: 100%; }
 }
 </style>

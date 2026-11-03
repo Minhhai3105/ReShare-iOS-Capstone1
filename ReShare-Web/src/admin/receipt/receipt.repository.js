@@ -1,3 +1,4 @@
+import { protectedFetch } from '../protected-fetch.js'
 import { auth } from '../auth/firebase'
 import { demoReceiptAdapter } from './receipt.demo'
 import { unitLabel } from '../shared/units.js'
@@ -45,7 +46,7 @@ async function request(path, body, method = 'POST') {
   const token = await user.getIdToken()
   let response
   try {
-    response = await fetch(`${apiBase}/v1/admin/${path}`, {
+    response = await protectedFetch(`${apiBase}/v1/admin/${path}`, {
       method,
       headers: {
         Authorization: `Bearer ${token}`,
