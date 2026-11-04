@@ -8,6 +8,7 @@ import { ADMIN_ROUTE, USER_ROLE } from '../../auth/auth.constants'
 import { resolveQueueAccess } from '../../donations/donation.service'
 import {
   INVENTORY_ERROR,
+  INVENTORY_IS_MOCK,
   UNIT_LABEL,
   VOUCHER_STATUS_LABEL,
   fetchDistributionVoucher,
@@ -22,7 +23,7 @@ const STATE_MESSAGE = {
   [INVENTORY_ERROR.server]: { icon: 'cloud-off', title: 'Không tải được phiếu xuất', text: 'Máy chủ hoặc kết nối mạng đang gặp sự cố. Vui lòng thử lại.' },
 }
 // Dữ liệu mẫu ở dev dùng mã hồ sơ giả, không có trên hệ thống thật nên không mở liên kết hồ sơ.
-const IS_SAMPLE_DATA = import.meta.env.DEV
+const IS_SAMPLE_DATA = INVENTORY_IS_MOCK
 
 const route = useRoute()
 const router = useRouter()

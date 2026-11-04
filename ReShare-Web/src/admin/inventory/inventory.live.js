@@ -1,4 +1,5 @@
 // Nguồn dữ liệu tồn kho thật (bản build): gọi inventory-api (US14) và distribution-history-api (US17).
+import { quantityBase, quantityFromBase } from '../shared/quantity.js'
 // Tách khỏi inventory.service.js và nhận fetch/getToken từ ngoài để test bằng node, không cần Firebase.
 // Trả đúng hình dữ liệu mà các màn kho đang dùng với dữ liệu mẫu, nên view không phải sửa.
 
@@ -76,7 +77,11 @@ export function createLiveInventorySource({ apiBase, getToken, fetchImpl = (...a
       // Chỉ tính tồn trước/sau khi có đủ lịch sử; lịch sử bị cắt trang thì tổng sẽ sai.
       const history = detail && !detail.nextCursor ? [...detail.movements].sort(byTime) : null
       const index = history ? history.findIndex((movement) => movement.voucherId === voucher.id) : -1
-      const stockBefore = index < 0 ? null : history.slice(0, index).reduce((sum, movement) => sum + movement.quantity, 0)
+      const unit = unitId || detail?.item.unitId || ''
+      const bases = index < 0 ? [] : history.slice(0, index + 1).map(movement => quantityBase(movement.quantity, unit, { signed: true, allowZero: true }))
+      const beforeBase = bases.some(value => value === null) ? null : bases.slice(0, -1).reduce((sum, value) => sum + value, 0)
+      const valid = index >= 0 && beforeBase !== null && Number.isSafeInteger(beforeBase) && Number.isSafeInteger(beforeBase + bases.at(-1))
+      const stockBefore = valid ? quantityFromBase(beforeBase, unit) : null
       return {
         inventoryItemId,
         itemName: detail?.item.itemName || inventoryItemId,
@@ -84,7 +89,7 @@ export function createLiveInventorySource({ apiBase, getToken, fetchImpl = (...a
         stockEntryId: detail?.item.stockEntryId || '',
         quantity,
         stockBefore,
-        stockAfter: index < 0 ? null : stockBefore + history[index].quantity,
+        stockAfter: valid ? quantityFromBase(beforeBase + bases.at(-1), unit) : null,
       }
     })
     return {

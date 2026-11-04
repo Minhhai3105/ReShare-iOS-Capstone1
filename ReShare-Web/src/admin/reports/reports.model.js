@@ -1,4 +1,5 @@
 import { unitLabel } from '../shared/units.js'
+import { quantityBase, quantityFromBase } from '../shared/quantity.js'
 
 export const REPORT_TIMEZONE = 'Asia/Ho_Chi_Minh'
 export const REPORT_TYPES = [
@@ -51,8 +52,13 @@ export function calculateReports(data, filters, assignment) {
   const summary = REPORT_TYPES.map((type) => {
     const records = rows.filter((row) => row.type === type.id)
     const byUnit = new Map()
-    for (const row of records) byUnit.set(row.unit, (byUnit.get(row.unit) || 0) + row.quantity)
-    return { ...type, count: records.length, quantities: Array.from(byUnit, ([unit, quantity]) => ({ unit, quantity })) }
+    for (const row of records) {
+      const base = quantityBase(row.quantity, row.unit, { allowZero: true })
+      const sum = (byUnit.get(row.unit) || 0) + base
+      if (base === null || !Number.isSafeInteger(sum)) throw new Error('Số lượng báo cáo không đúng quy tắc đơn vị; cần đối soát dữ liệu nguồn.')
+      byUnit.set(row.unit, sum)
+    }
+    return { ...type, count: records.length, quantities: Array.from(byUnit, ([unit, base]) => ({ unit, quantity: quantityFromBase(base, unit) })) }
   })
   const days = [...new Set(rows.map((row) => reportDay(row.timestamp)))].sort()
   const series = days.map((day) => ({ day, counts: Object.fromEntries(REPORT_TYPES.map((type) => [type.id, rows.filter((row) => reportDay(row.timestamp) === day && row.type === type.id).length])) }))

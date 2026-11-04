@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import InventoryLayout from '../InventoryLayout.vue'
 import AuthIcon from '../../auth/components/AuthIcon.vue'
@@ -10,16 +10,18 @@ import {
   CONDITION_LABEL,
   DONATION_DETAIL_ROUTE,
   INVENTORY_ERROR,
+  INVENTORY_IS_MOCK,
   MOVEMENT_TYPE_LABEL,
   UNIT_LABEL,
   fetchInventoryItem,
   formatDateTime,
   getAccessibleWarehouses,
   getItemSources,
+  subscribeInventory,
 } from '../inventory.service'
 
 // Nhãn demo (Sandbox, Demo, Xem thử, Prototype) chỉ hiện khi chạy dữ liệu mẫu ở dev, không hiện trên bản production.
-const IS_SAMPLE_DATA = import.meta.env.DEV
+const IS_SAMPLE_DATA = INVENTORY_IS_MOCK
 
 const STATE_MESSAGE = {
   [INVENTORY_ERROR.notConfigured]: { icon: 'server', title: 'Chưa kết nối nguồn tồn kho', text: 'Phiên bản này chưa có dữ liệu tồn kho chính thức từ hệ thống, nên chưa xem được chi tiết vật phẩm.' },
@@ -40,6 +42,29 @@ const data = ref(null)
 const errorStatus = ref(null)
 const isLoading = ref(true)
 let latestRequestId = 0
+let stopSync = () => {}
+let syncGeneration = 0
+let refreshPending = false
+const syncError = ref(false)
+
+async function startSync() {
+  const generation = ++syncGeneration
+  stopSync(); stopSync = () => {}
+  if (document.visibilityState === 'hidden' || !item.value) return
+  const stop = await subscribeInventory(access.value, item.value.warehouseId, () => {
+    if (generation === syncGeneration) {
+      syncError.value = false
+      if (isLoading.value) refreshPending = true
+      else load({ preserve: true })
+    }
+  }, error => {
+    if (generation !== syncGeneration) return
+    syncError.value = true
+    if ([401, 403].includes(error.status)) { latestRequestId += 1; refreshPending = false; data.value = null; isLoading.value = false; errorStatus.value = INVENTORY_ERROR.forbidden }
+  }).catch(() => { syncError.value = true; return () => {} })
+  if (generation === syncGeneration) stopSync = stop
+  else stop()
+}
 
 const access = computed(() => resolveQueueAccess(staffAssignment.value))
 const item = computed(() => data.value?.item ?? null)
@@ -70,12 +95,12 @@ const donationParams = computed(() => ({ donationId: item.value?.donationId }))
 const sources = computed(() => getItemSources(item.value))
 const unitLabel = computed(() => (item.value ? UNIT_LABEL[item.value.unitId] || item.value.unitId || '—' : '—'))
 
-async function load() {
+async function load({ preserve = false } = {}) {
   const requestId = ++latestRequestId
   isLoading.value = true
   errorStatus.value = null
   // Đổi vật phẩm hoặc phân công thì không giữ dữ liệu của lần xem trước.
-  data.value = null
+  if (!preserve) data.value = null
   try {
     const nextData = await fetchInventoryItem(access.value, route.params.itemId)
     if (requestId === latestRequestId) data.value = nextData
@@ -84,15 +109,20 @@ async function load() {
     data.value = null
     errorStatus.value = error.status ?? INVENTORY_ERROR.server
   } finally {
-    if (requestId === latestRequestId) isLoading.value = false
+    if (requestId === latestRequestId) {
+      isLoading.value = false
+      if (refreshPending) { refreshPending = false; load({ preserve: true }) }
+    }
   }
 }
 
 const formatCode = (code) => (code ? code.toUpperCase() : '—')
 const formatQuantity = (quantity) => (quantity > 0 ? `+${quantity}` : `${quantity}`)
 
-watch([() => route.params.itemId, staffAssignment], load, { immediate: true })
-onBeforeUnmount(() => { latestRequestId += 1 })
+watch([() => route.params.itemId, staffAssignment], () => load(), { immediate: true })
+watch([() => item.value?.warehouseId, staffAssignment], startSync)
+onMounted(() => { document.addEventListener('visibilitychange', startSync) })
+onBeforeUnmount(() => { latestRequestId += 1; syncGeneration += 1; stopSync(); document.removeEventListener('visibilitychange', startSync) })
 </script>
 
 <template>
@@ -101,6 +131,7 @@ onBeforeUnmount(() => { latestRequestId += 1 })
     :selected-warehouse-id="item?.warehouseId ?? (isSystemAdmin ? '' : warehouses[0]?.id ?? '')"
     @select-warehouse="(warehouseId) => router.push({ name: ADMIN_ROUTE.inventory, query: { warehouseId: warehouseId || undefined } })"
   >
+    <p v-if="syncError && !IS_SAMPLE_DATA" role="status">Đồng bộ tự động đang gián đoạn; hệ thống sẽ thử kết nối lại.</p>
     <nav class="detail-crumbs">
       <span><AuthIcon name="archive" :size="16" /><RouterLink :to="{ name: ADMIN_ROUTE.inventory }">Kho hàng</RouterLink> / <b>Chi tiết vật phẩm</b></span>
       <RouterLink :to="{ name: ADMIN_ROUTE.inventory, query: item ? { warehouseId: item.warehouseId } : {} }" class="detail-back">
@@ -111,7 +142,7 @@ onBeforeUnmount(() => { latestRequestId += 1 })
     <section v-if="IS_SAMPLE_DATA" class="inv-sandbox">
       <AuthIcon name="flask" :size="26" />
       <div>
-        <span class="inv-chip inv-chip--solid">Môi trường thử nghiệm (Sandbox Node)</span>
+        <span class="inv-chip inv-chip--solid">Dữ liệu mẫu cục bộ</span>
         <span class="mono detail-node">Node ID: WH-SGN-02 // HCH-DEMO</span>
         <p>Dữ liệu kho dưới đây thuộc phạm vi <strong>{{ scopeName }}</strong>. Dữ liệu thử nghiệm quy trình, không can thiệp luồng phân phối thực tế.</p>
       </div>

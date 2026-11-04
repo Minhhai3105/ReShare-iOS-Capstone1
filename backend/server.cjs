@@ -7,15 +7,18 @@ const { ApiError, createImageApi } = require('./image-api.cjs');
 const { createStaffApi } = require('./staff-api.cjs');
 const { ApiError: ContactApiError, createContactApi } = require('./contact-api.cjs');
 const { createDonationReviewApi } = require('./donation-review-api.cjs');
+const { createDonationResubmitApi } = require('./donation-resubmit-api.cjs');
 const { createReceiptApi } = require('./receipt-api.cjs');
 const { createStockIntakeApi } = require('./stock-intake-api.cjs');
 const { createInventoryApi } = require('./inventory-api.cjs');
+const { createInventoryEvents } = require('./inventory-events.cjs');
 const { createDistributionHistoryApi } = require('./distribution-history-api.cjs');
 const { createDistributionApi } = require('./distribution-api.cjs');
 const { createReportsApi } = require('./reports-api.cjs');
 const { createBeneficiariesApi } = require('./beneficiaries-api.cjs');
 const { createDashboardApi } = require('./dashboard-api.cjs');
 const { errorBody } = require('./error-body.cjs');
+const { createReservationExpiry } = require('./p2p-reservation-expiry.cjs');
 
 const {
   CLOUDINARY_CLOUD_NAME,
@@ -42,9 +45,11 @@ const api = createImageApi({
 const staffApi = createStaffApi({ db, auth: getAuth(), verifyToken });
 const contactApi = createContactApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const donationReviewApi = createDonationReviewApi({ db, auth: getAuth(), verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
+const donationResubmitApi = createDonationResubmitApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const receiptApi = createReceiptApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const stockIntakeApi = createStockIntakeApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const inventoryApi = createInventoryApi({ db, auth: getAuth(), verifyToken });
+const inventoryEvents = createInventoryEvents({ db, verifyToken });
 const distributionHistoryApi = createDistributionHistoryApi({ db, auth: getAuth(), verifyToken });
 const distributionApi = createDistributionApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const reportsApi = createReportsApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
@@ -57,6 +62,7 @@ const server = http.createServer(async (request, response) => {
   const pathname = new URL(request.url, 'http://localhost').pathname;
   const isAdminApi = pathname.startsWith('/v1/admin/');
   const isDonationAdminPath = pathname.startsWith('/v1/admin/donations');
+  const isDonationResubmitPath = /^\/v1\/donations\/[^/]+\/resubmit$/.test(pathname);
   const isReceiptPath = /^\/v1\/admin\/donations\/[^/]+\/receipt$/.test(pathname);
   const isStockIntakePath = /^\/v1\/admin\/donations\/[^/]+\/stock-in$/.test(pathname) ||
     /^\/v1\/admin\/stock-entries\/[^/]+$/.test(pathname);
@@ -104,11 +110,15 @@ const server = http.createServer(async (request, response) => {
       response.end();
       return;
     }
+    if (request.method === 'GET' && pathname === '/v1/admin/inventory/events') {
+      await inventoryEvents.open(request, response, responseHeaders);
+      return;
+    }
 
     let raw = '';
     for await (const chunk of request) {
       raw += chunk;
-      if (Buffer.byteLength(raw, 'utf8') > (isContactPath ? 32 * 1024 : 8192)) {
+      if (Buffer.byteLength(raw, 'utf8') > ((isContactPath || isDonationResubmitPath) ? 32 * 1024 : 8192)) {
         throw new ApiError(413, 'Request too large');
       }
     }
@@ -120,6 +130,7 @@ const server = http.createServer(async (request, response) => {
     // Thứ tự quan trọng: receipt và stock-in là path con của /v1/admin/donations nên
     // phải đứng trước isDonationAdminPath; isAdminApi là nhánh bắt tất cả cuối cùng.
     const handler = isContactPath ? contactApi
+      : isDonationResubmitPath ? donationResubmitApi
       : isReceiptPath ? receiptApi
       : isStockIntakePath ? stockIntakeApi
       : isInventoryPath ? inventoryApi
@@ -143,3 +154,7 @@ const server = http.createServer(async (request, response) => {
 });
 
 server.listen(Number(process.env.PORT || 3000), '0.0.0.0');
+// Chỉ chạy khi backend được vận hành; cold start/sleep phải được kiểm chứng ở môi trường demo.
+const reservationExpiry = createReservationExpiry({ db });
+reservationExpiry.start();
+server.on('close', () => reservationExpiry.stop());

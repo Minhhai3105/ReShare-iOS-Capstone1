@@ -1,6 +1,7 @@
 const { AggregateField } = require('firebase-admin/firestore');
 const { ApiError } = require('./image-api.cjs');
 const { warehouseQueries } = require('./scoped-pagination.cjs');
+const { aggregateQuantity } = require('./quantity.cjs');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const UNIT_IDS = ['piece', 'kg', 'bag', 'box', 'set'];
@@ -89,8 +90,12 @@ function createDashboardApi({ db, verifyToken }) {
       Promise.all([...UNIT_IDS, null].map(sumStock)),
     ]);
     const knownUnits = stockValues.slice(0, UNIT_IDS.length);
-    const stockByUnit = UNIT_IDS.map((unitId, index) => [unitId, knownUnits[index]]);
-    stockByUnit.push(['other', stockValues.at(-1) - knownUnits.reduce((a, b) => a + b, 0)]);
+    let stockByUnit;
+    try { stockByUnit = UNIT_IDS.map((unitId, index) => [unitId, aggregateQuantity(knownUnits[index], unitId)]); }
+    catch { throw new ApiError(409, 'Số lượng tổng hợp không đúng quy tắc đơn vị; cần đối soát.', 'RECONCILIATION_REQUIRED'); }
+    const rawOther = stockValues.at(-1) - knownUnits.reduce((a, b) => a + b, 0);
+    const tolerance = Math.max(1, Math.abs(stockValues.at(-1)), ...knownUnits.map(Math.abs)) * Number.EPSILON * 32;
+    stockByUnit.push(['other', Math.abs(rawOther) <= tolerance ? 0 : rawOther]);
     return {
       scope: { warehouseId: warehouseId || null, from: fromText || null, to: toText || null },
       metrics: {

@@ -35,6 +35,13 @@ test('Cloudinary record requires three distinct image IDs from a server-owned ba
     await assertFails(donor.doc(`donations/${recordId}`).set({ ...donation, quantity: 0 }));
     await assertFails(donor.doc(`donations/${recordId}`).set({ ...donation, quantity: '2' }));
     await assertFails(donor.doc(`donations/${recordId}`).set({ ...donation, unitId: 'unknown' }));
+    await assertFails(donor.doc(`donations/${recordId}`).set({ ...donation, quantity: 1.5, unitId: 'piece' }));
+    await assertFails(donor.doc(`donations/${recordId}`).set({ ...donation, quantity: 1.0001, unitId: 'kg' }));
+    await assertFails(donor.doc(`donations/${recordId}`).set({ ...donation, quantity: 0.00100000000001, unitId: 'kg' }));
+    for (const quantity of [0.001, 0.035, 1.125]) {
+      await assertSucceeds(donor.doc(`donations/${recordId}`).set({ ...donation, quantity, unitId: 'kg' }));
+      await env.withSecurityRulesDisabled(context => context.firestore().doc(`donations/${recordId}`).delete());
+    }
     const { quantity, ...withoutQuantity } = donation;
     await assertFails(donor.doc(`donations/${recordId}`).set(withoutQuantity));
     const { unitId, ...withoutUnit } = donation;
@@ -395,6 +402,10 @@ test('địa chỉ nhận đồ P2P chỉ người đăng và người đang gi�
     // Giờ hẹn không được ghi lên bài công khai; giờ đã chốt phải là mốc thời gian.
     await assertFails(accept(alice, { pickupTime }, {}));
     await assertFails(accept(alice, {}, { proposedPickupTime: 'mai 9h' }));
+    const forgedDeadline = new Date(deadline.getTime() + 60_000);
+    await assertFails(accept(alice, { reservationDeadline: forgedDeadline }, { reservationDeadline: forgedDeadline }));
+    await assertFails(alice.doc('catalog_items/item-pii').update({ status: 'reserved', reservedChatId: 'pii-chat', reservedRequesterId: 'bob',
+      reservationDeadline: deadline, donorHandoverConfirmed: false, requesterHandoverConfirmed: false }));
     await assertSucceeds(accept(alice, {}, {}));
 
     // Sau khi được giữ đồ: người được giữ đọc được, người khác vẫn không.

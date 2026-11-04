@@ -479,8 +479,7 @@ struct DonationDetailsView: View {
     private var declaredQuantity: Double? {
         let input = quantityText.trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: ",", with: ".")
-        guard let quantity = Double(input), quantity.isFinite, quantity > 0 else { return nil }
-        return quantity
+        return DonationQuantity.amount(input, unitId: selectedUnit.rawValue)
     }
 
     // MARK: - Logic gửi đơn quyên góp 2 bước (Storage -> Firestore) với cơ chế phục hồi
@@ -489,7 +488,7 @@ struct DonationDetailsView: View {
               !itemTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               let quantity = declaredQuantity,
               didConfirmCategory else {
-            self.errorMessage = "Vui lòng chọn 3–6 ảnh, nhập tên, số lượng lớn hơn 0 và xác nhận danh mục."
+            self.errorMessage = "Vui lòng chọn 3–6 ảnh, nhập tên và xác nhận danh mục. Số đếm phải nguyên dương; kg tối đa 3 số lẻ."
             self.showErrorAlert = true
             return
         }
