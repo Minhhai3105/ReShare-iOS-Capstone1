@@ -40,6 +40,7 @@ test('BR03/BR04: resubmit reopens staff review and reservation expiry is atomic 
       });
       await t.test('Legacy images require replacement and an authorized batch recovers the same donation', async () => {
         const id = randomUUID(), uploadId = randomUUID(), owner = `${prefix}-legacy`;
+        paths.push(`donation_reviews/${id}`);
         const donation = await seed(`donations/${id}`, { id, donorId: owner, title: 'Legacy', description: '', category: 'books', condition: 'good',
           status: 'pending', reviewState: 'needs_information', version: 2 });
         const api = createDonationResubmitApi({ db, verifyToken: async () => ({ uid: owner }), serverTimestamp: () => FieldValue.serverTimestamp() });

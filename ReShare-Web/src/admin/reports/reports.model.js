@@ -62,6 +62,10 @@ export function calculateReports(data, filters, assignment) {
   })
   const days = [...new Set(rows.map((row) => reportDay(row.timestamp)))].sort()
   const series = days.map((day) => ({ day, counts: Object.fromEntries(REPORT_TYPES.map((type) => [type.id, rows.filter((row) => reportDay(row.timestamp) === day && row.type === type.id).length])) }))
-  const stock = data.inventory.filter(inScope).filter((row) => row.available > 0).map(projectInventory).map(withUnitLabel)
+  const stock = data.inventory.filter(inScope).map((row) => {
+    const base = quantityBase(row.available, row.unit, { allowZero: true })
+    if (base === null) throw new Error('Số lượng tồn kho không đúng quy tắc đơn vị; cần đối soát dữ liệu nguồn.')
+    return { ...projectInventory(row), available: quantityFromBase(base, row.unit) }
+  }).filter((row) => row.available > 0).map(withUnitLabel)
   return { rows, summary, series, stock, snapshotAt: data.snapshotAt, filters: { ...filters }, demo: true }
 }

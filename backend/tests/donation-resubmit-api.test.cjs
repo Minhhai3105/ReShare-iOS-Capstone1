@@ -6,7 +6,7 @@ function setup() {
   const images = ['a', 'b', 'c'].map(letter => { const id = `${letter.repeat(8)}-${letter.repeat(4)}-4${letter.repeat(3)}-8${letter.repeat(3)}-${letter.repeat(12)}`; return `donations/11111111-1111-4111-8111-111111111111/${id}`; });
   const documents = new Map([
     ['donations/11111111-1111-4111-8111-111111111111', { id: '11111111-1111-4111-8111-111111111111', donorId: 'owner', status: 'pending', reviewState: 'needs_information', version: 2,
-      warehouseId: 'warehouse-a', title: 'Old', description: '', category: 'books', condition: 'good', imageProvider: 'cloudinary', imagePublicIds: images }],
+      warehouseId: 'warehouse-a', title: 'Old', description: '', category: 'books', condition: 'good', quantity: 1, unitId: 'piece', imageProvider: 'cloudinary', imagePublicIds: images }],
     ['image_upload_batches/donation_11111111-1111-4111-8111-111111111111', { ownerUid: 'owner', assets: Object.fromEntries(images.map((id, i) => [i, id])) }],
   ]);
   const ref = key => ({ key, id: key.split('/').at(-1), get: async () => snapshot({ key }) });
@@ -137,4 +137,28 @@ test('Information -> resubmit -> approval keeps both timelines complete, private
   assert.equal([...documents.keys()].filter(key => key.startsWith('donation_resubmissions/')).length, 1);
   documents.get(`donation_reviews/${id}`).history = privateEvents.filter(event => event.action !== 'resubmit');
   assert.deepEqual((await review.get(id, headers)).body.donation.history.map(event => event.version), [2, 3, 4]);
+});
+
+test('Omitting quantity fields validates the stored pair and never rounds or reopens invalid legacy data', async () => {
+  for (const [quantity, unitId] of [[1.5, 'piece'], [1.0001, 'kg'], [undefined, 'piece'], [1, undefined], [-1, 'piece'], [0, 'piece']]) {
+    const { call, draft, documents } = setup();
+    Object.assign(documents.get('donations/11111111-1111-4111-8111-111111111111'), { quantity, unitId });
+    const { quantity: ignoredQuantity, unitId: ignoredUnit, ...body } = draft;
+    const before = structuredClone([...documents]);
+    await assert.rejects(call(body), { status: 400 });
+    assert.deepEqual([...documents], before);
+  }
+  const { call, draft, documents } = setup();
+  const stored = documents.get('donations/11111111-1111-4111-8111-111111111111');
+  Object.assign(stored, { quantity: '1.230', unitId: 'kg' });
+  const { quantity, unitId, ...body } = draft;
+  assert.equal((await call(body)).status, 200);
+  assert.equal(documents.get('donations/11111111-1111-4111-8111-111111111111').quantity, 1.23);
+});
+
+test('An upload ID without replacement images must still match the kept image batch', async () => {
+  const { call, draft, documents } = setup();
+  const before = structuredClone([...documents]);
+  await assert.rejects(call({ ...draft, imageUploadRecordId: '22222222-2222-4222-8222-222222222222' }), { status: 400, code: 'REPLACEMENT_IMAGES_REQUIRED' });
+  assert.deepEqual([...documents], before);
 });

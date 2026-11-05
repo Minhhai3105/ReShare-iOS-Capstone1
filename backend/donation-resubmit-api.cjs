@@ -1,7 +1,7 @@
 const { createHash } = require('node:crypto');
 const { ApiError, validateRecordId, validatePublicIds } = require('./image-api.cjs');
 const { runTransaction } = require('./firestore-transaction.cjs');
-const { quantityBase } = require('./quantity.cjs');
+const { canonicalUnit, quantityBase, quantityFromBase } = require('./quantity.cjs');
 const { publicHistory, mergeDonationHistory } = require('./donation-history.cjs');
 
 function createDonationResubmitApi({ db, verifyToken, serverTimestamp = () => new Date() }) {
@@ -25,7 +25,7 @@ function createDonationResubmitApi({ db, verifyToken, serverTimestamp = () => ne
         typeof fields.description !== 'string' || fields.description.length > 3000 ||
         !['clothing', 'books', 'household'].includes(fields.category) ||
         !['new', 'like_new', 'good', 'fair'].includes(fields.condition) ||
-        ((fields.quantity !== undefined || fields.unitId !== undefined) && quantityBase(fields.quantity, fields.unitId) === null)) {
+        ((Object.hasOwn(fields, 'quantity') || Object.hasOwn(fields, 'unitId')) && quantityBase(fields.quantity, fields.unitId) === null)) {
       throw new ApiError(400, 'Nội dung hoặc số lượng bổ sung không hợp lệ');
     }
     const donationId = match[1];
@@ -46,6 +46,10 @@ function createDonationResubmitApi({ db, verifyToken, serverTimestamp = () => ne
       }
       if (donation.status !== 'pending' || donation.reviewState !== 'needs_information') throw new ApiError(409, 'Đơn không còn chờ bổ sung thông tin');
       if ((donation.version || 1) !== body.expectedVersion) throw new ApiError(409, 'Đơn đã thay đổi; tải lại trước khi gửi');
+      const unitId = canonicalUnit(Object.hasOwn(fields, 'unitId') ? fields.unitId : donation.unitId);
+      const baseQuantity = quantityBase(Object.hasOwn(fields, 'quantity') ? fields.quantity : donation.quantity, unitId);
+      if (baseQuantity === null) throw new ApiError(400, 'Cần bổ sung số lượng hợp lệ: đơn vị đếm là số nguyên, kg tối đa 3 số lẻ');
+      const quantity = quantityFromBase(baseQuantity, unitId);
       const replacingImages = Object.hasOwn(fields, 'imagePublicIds');
       const images = replacingImages ? fields.imagePublicIds : donation.imagePublicIds;
       const uploadId = body.imageUploadRecordId || donation.imageUploadRecordId || donationId;
@@ -74,13 +78,13 @@ function createDonationResubmitApi({ db, verifyToken, serverTimestamp = () => ne
         publicMessage: 'Donor đã bổ sung thông tin và gửi duyệt lại.', timestamp: new Date().toISOString(), version };
       const review = reviewDoc.exists ? reviewDoc.data() : {};
       const history = [...mergeDonationHistory(donation.history, review.history), { ...publicEvent, actorUid: claims.uid }];
-      tx.update(donationRef, { ...fields, imagePublicIds: images, imageProvider: 'cloudinary', imageUploadRecordId: uploadId,
+      tx.update(donationRef, { ...fields, quantity, unitId, imagePublicIds: images, imageProvider: 'cloudinary', imageUploadRecordId: uploadId,
         donorConfirmedCategory: fields.category, reviewState: null, statusNote: publicEvent.publicMessage,
         version, resubmittedAt: at, history: publicHistory(history) });
       tx.set(reviewRef, { ...review, donationId, history });
       tx.set(auditRef, { donationId, donorId: claims.uid, requestFingerprint: fingerprint, version, createdAt: at,
         before: Object.fromEntries(editable.map(key => [key, donation[key] ?? null])),
-        after: { ...fields, imagePublicIds: images }, response });
+        after: { ...fields, quantity, unitId, imagePublicIds: images }, response });
       tx.update(batchRef, { attachedDonationId: donationId });
       return response;
     });
