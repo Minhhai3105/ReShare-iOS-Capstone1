@@ -5,6 +5,7 @@ import { decideDemoDonation, loadDemoDonation, statusLabels, steps } from './don
 import { assignDonationWarehouse, confirmDonationCategory, decideDonation, fetchQueueWarehouses, getAiAgreementSummary, getDonationForReview, getDonationImageUrl, resolveQueueAccess } from './donation.service'
 import { staffAssignment } from '../auth/auth.store'
 import { listWarehouses } from '../staff/staff.service'
+import { donationSender } from './donation-sender.js'
 
 // Auth belongs to the routed adapter; the shared view has no Firebase dependency.
 const props = defineProps({
@@ -80,7 +81,7 @@ function normalizeReviewDonation(record) {
   return {
     ...record,
     warehouseId: record.warehouseId || '',
-    donor: record.donor || { name: record.donorName || record.donorId || 'Người gửi', email: null },
+    donor: donationSender(record),
     version: record.version || 1,
     quantity: record.quantity == null ? 'Chưa có dữ liệu' : `${record.quantity} ${unitLabels[record.unitId] || record.unitId || ''}`.trim(),
     deliveryMethod: record.deliveryMethod || 'Chưa có dữ liệu',
@@ -360,7 +361,7 @@ watch(enlarged, async (value) => {
               <dl class="facts"><div><dt>Danh mục</dt><dd>{{ categoryName(donation.category) }}</dd></div><div><dt>Tình trạng khai báo</dt><dd>{{ conditionName(donation.condition) }}</dd></div><div><dt>Số lượng khai báo</dt><dd>{{ donation.quantity }}</dd></div><div><dt>Hình thức giao</dt><dd>{{ deliveryMethodName(donation.deliveryMethod) }}</dd></div></dl>
               <p class="description">{{ donation.description }}</p>
             </section>
-            <section class="card"><h2>Người tặng & xác nhận</h2><dl class="facts"><div><dt>Donor</dt><dd>{{ donation.donor.name }}</dd></div><div><dt>Email</dt><dd>{{ donation.donor.email }}</dd></div><div><dt>Ngày gửi</dt><dd>{{ formatDate(donation.createdAt) }}</dd></div><div><dt>Danh mục người gửi xác nhận</dt><dd>{{ donation.donorConfirmedCategory ? categoryName(donation.donorConfirmedCategory) : 'Chưa có xác nhận riêng' }}</dd></div></dl></section>
+            <section class="card"><h2>Người tặng & xác nhận</h2><dl class="facts"><div><dt>Họ và tên</dt><dd>{{ donation.donor.name }}</dd></div><div><dt>Email</dt><dd>{{ donation.donor.email || 'Chưa cập nhật email' }}</dd></div><div><dt>Mã tài khoản (UID)</dt><dd>{{ donation.donorId || 'Chưa có mã tài khoản' }}</dd></div><div><dt>Ngày gửi</dt><dd>{{ formatDate(donation.createdAt) }}</dd></div><div><dt>Danh mục người gửi xác nhận</dt><dd>{{ donation.donorConfirmedCategory ? categoryName(donation.donorConfirmedCategory) : 'Chưa có xác nhận riêng' }}</dd></div></dl></section>
             <section class="card">
               <h2>Đối chiếu danh mục AI</h2>
               <dl class="facts">
