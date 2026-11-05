@@ -1,4 +1,5 @@
 <script setup>
+import { quantityBase } from '../../shared/quantity.js'
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import AuthIcon from '../../auth/components/AuthIcon.vue'
@@ -56,7 +57,7 @@ const expectedWarehouseName = computed(() => donation.value?.expectedWarehouseNa
   options.value?.warehouses?.find((warehouse) => warehouse.id === donation.value?.expectedWarehouseId)?.name || '—')
 const selectedWarehouse = computed(() => allowedWarehouses.value.find((item) => item.id === form.warehouseId))
 const validForm = computed(() => !loadError.value && isApproved.value && selectedWarehouse.value &&
-  Number.isFinite(Number(form.quantity)) && Number(form.quantity) > 0 && form.unitId && form.conditionId)
+  quantityBase(form.quantity, form.unitId) !== null && form.conditionId)
 
 async function load() {
   loading.value = true
@@ -267,7 +268,7 @@ onMounted(load)
 
             <div class="field-pair">
               <label class="field"><span>Số lượng thực nhận <b>*</b></span>
-                <input v-model="form.quantity" type="number" min="0.000001" step="any" required placeholder="Nhập số lượng (> 0)" />
+                <input v-model="form.quantity" type="number" :min="form.unitId === 'kg' ? '0.001' : '1'" :step="form.unitId === 'kg' ? '0.001' : '1'" required placeholder="Số đếm nguyên; kg tối đa 3 số lẻ" />
                 <small>Ghi theo số lượng thực tế đã kiểm đếm.</small>
               </label>
               <label class="field"><span>Đơn vị tính <b>*</b></span>

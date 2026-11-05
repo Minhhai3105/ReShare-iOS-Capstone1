@@ -553,6 +553,28 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "catalog_items",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "donorHandoverConfirmed",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "requesterHandoverConfirmed",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "reservationDeadline",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []

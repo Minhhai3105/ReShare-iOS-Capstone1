@@ -17,7 +17,7 @@ let service
 let mock
 
 before(async () => {
-  server = await createServer({ root, logLevel: 'error', server: { middlewareMode: true }, appType: 'custom' })
+  server = await createServer({ root, logLevel: 'error', define: { 'import.meta.env.VITE_INVENTORY_SOURCE': JSON.stringify('mock') }, server: { middlewareMode: true }, appType: 'custom' })
   service = await server.ssrLoadModule('/src/admin/inventory/inventory.service.js')
   mock = await server.ssrLoadModule('/src/admin/inventory/inventory.mock.js')
 })

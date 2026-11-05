@@ -1,10 +1,12 @@
-// Lớp dữ liệu tồn kho. Khi dev dùng mock; bản build đọc API thật qua inventory.live.js
+// Lớp dữ liệu tồn kho. Dev và build mặc định đọc API; mock cần bật tường minh ở dev.
 // (inventory-api #47, distribution-history-api #48). Tên field giữ đúng như BE (itemName, conditionId,
 // unitId, quantityReceived, quantityAvailable, stockEntryId, inventoryItemId).
 import { ref } from 'vue'
 import { MOCK_WAREHOUSES, createMockInventory, getInventoryScenario } from './inventory.mock'
 import { createLiveInventorySource } from './inventory.live.js'
 import { normalizeText } from '../shared/text.js'
+import { inventoryMode } from './inventory.mode.js'
+import { watchInventoryEvents } from './inventory.events.js'
 
 export const INVENTORY_ERROR = Object.freeze({
   forbidden: 403,
@@ -61,8 +63,9 @@ export function getItemSources(item, live = !IS_MOCK) {
   ]
 }
 
-// Mock chỉ dùng khi dev; bản build không tham chiếu tới nên dữ liệu mẫu bị loại khỏi bundle.
-const IS_MOCK = import.meta.env.DEV
+// Mock chỉ dùng khi dev bật VITE_INVENTORY_SOURCE=mock; build có guard riêng trong Vite.
+export const INVENTORY_IS_MOCK = inventoryMode(import.meta.env) === 'mock'
+const IS_MOCK = INVENTORY_IS_MOCK
 const mock = IS_MOCK
   ? { ...createMockInventory(), warehouses: MOCK_WAREHOUSES, getScenario: getInventoryScenario }
   : { items: [], movements: [], vouchers: [], beneficiaries: [], warehouses: [], getScenario: () => 'normal' }
@@ -73,7 +76,26 @@ let liveWarehousesKey = ''
 let liveWarehousesLoad = null
 let live = null
 
+export async function subscribeInventory(access, warehouseId, onChange, onError) {
+  if (IS_MOCK || !access) return () => {}
+  if (import.meta.env.DEV && !import.meta.env.VITE_ADMIN_API_BASE_URL?.trim()) {
+    onError(createError(INVENTORY_ERROR.notConfigured)); return () => {}
+  }
+  const { auth } = await import('../auth/firebase.js')
+  return watchInventoryEvents({
+    apiBase: (import.meta.env.VITE_ADMIN_API_BASE_URL || 'https://reshare-ios-capstone1-1.onrender.com').replace(/\/$/, ''),
+    warehouseId,
+    getToken: async () => {
+      if (!auth.currentUser) throw createError(INVENTORY_ERROR.forbidden)
+      return auth.currentUser.getIdToken()
+    }, onChange, onError,
+  })
+}
+
 function liveSource() {
+  if (import.meta.env.DEV && !import.meta.env.VITE_ADMIN_API_BASE_URL?.trim()) {
+    throw createError(INVENTORY_ERROR.notConfigured)
+  }
   live ||= createLiveInventorySource({
     apiBase: (import.meta.env.VITE_ADMIN_API_BASE_URL || 'https://reshare-ios-capstone1-1.onrender.com').replace(/\/$/, ''),
     getToken: async () => {
@@ -154,9 +176,9 @@ function withStock(item) {
 /** @returns { items, counts: { all, in_stock, out_of_stock } } */
 export async function fetchInventory(access, { warehouseId, search, category, condition, stock }) {
   if (!IS_MOCK) {
-    const { items, counts } = await liveRequest(access, warehouseId,
+    const { items, counts, revision } = await liveRequest(access, warehouseId,
       (source) => source.listInventory({ warehouseId, search, category, condition, stock }))
-    return { items: items.map((item) => ({ ...item, warehouse: getWarehouseInfo(item.warehouseId) })), counts }
+    return { items: items.map((item) => ({ ...item, warehouse: getWarehouseInfo(item.warehouseId) })), counts, revision }
   }
   await simulateRequest(access)
   // AC2: từ chối khi request chỉ định kho ngoài phân công, kể cả sửa URL thủ công.
@@ -185,9 +207,9 @@ export async function fetchInventory(access, { warehouseId, search, category, co
 /** @returns { item, movements } — movements mới nhất trước. */
 export async function fetchInventoryItem(access, itemId) {
   if (!IS_MOCK) {
-    const { item, movements } = await liveRequest(access, '', (source) => source.getInventoryItem(itemId))
+    const { item, movements, revision } = await liveRequest(access, '', (source) => source.getInventoryItem(itemId))
     if (!canView(access, item.warehouseId)) throw createError(INVENTORY_ERROR.forbidden)
-    return { item: { ...item, warehouse: getWarehouseInfo(item.warehouseId) }, movements }
+    return { item: { ...item, warehouse: getWarehouseInfo(item.warehouseId) }, movements, revision }
   }
   await simulateRequest(access)
   const item = mock.items.find(({ id }) => id === itemId)

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import InventoryLayout from '../InventoryLayout.vue'
 import AuthIcon from '../../auth/components/AuthIcon.vue'
@@ -7,14 +7,18 @@ import { staffAssignment } from '../../auth/auth.store'
 import { ADMIN_ROUTE } from '../../auth/auth.constants'
 import { resolveQueueAccess } from '../../donations/donation.service'
 import { DONATION_CATEGORY_LABEL } from '../../donations/donation.constants'
+import { resolveInventoryScope } from '../inventory.scope.js'
+import { createInventorySyncState } from '../inventory.sync.js'
 import {
   CONDITION_LABEL,
   INVENTORY_ERROR,
+  INVENTORY_IS_MOCK,
   STOCK_FILTER,
   UNIT_LABEL,
   fetchInventory,
   formatDateTime,
   getAccessibleWarehouses,
+  subscribeInventory,
 } from '../inventory.service'
 
 const DEFAULT_FILTERS = { search: '', category: '', condition: '', stock: STOCK_FILTER.all }
@@ -33,7 +37,7 @@ const RULES = [
 const timeFormatter = new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
 
 // Dữ liệu mẫu chỉ có khi chạy dev (service chặn trên bản production); nhãn demo cũng chỉ hiện khi đó.
-const IS_SAMPLE_DATA = import.meta.env.DEV
+const IS_SAMPLE_DATA = INVENTORY_IS_MOCK
 const route = useRoute()
 const router = useRouter()
 const filters = reactive({ ...DEFAULT_FILTERS })
@@ -43,13 +47,53 @@ const isLoading = ref(false)
 const syncedAt = ref(null)
 let latestRequestId = 0
 let reloadTimer = null
+let stopSync = () => {}
+let syncGeneration = 0
+let refreshPending = false
+const revisionState = createInventorySyncState()
+const syncError = ref(false)
+
+async function startSync() {
+  const generation = ++syncGeneration
+  stopSync(); stopSync = () => {}
+  if (document.visibilityState === 'hidden') return
+  if (!warehouseScope.value.allowed) {
+    result.value = null
+    isLoading.value = false
+    errorStatus.value = INVENTORY_ERROR.forbidden
+    return
+  }
+  try {
+    const stop = await subscribeInventory(access.value, selectedWarehouseId.value, revision => {
+      if (generation !== syncGeneration) return
+      syncError.value = false
+      if (!revisionState.observe(revision)) return
+      if (isLoading.value) { refreshPending = true; return }
+      clearTimeout(reloadTimer)
+      reloadTimer = setTimeout(load, 50)
+    }, error => {
+      if (generation !== syncGeneration) return
+      syncError.value = true
+      if ([401, 403].includes(error.status)) {
+        latestRequestId += 1
+        refreshPending = false
+        revisionState.clear()
+        clearTimeout(reloadTimer)
+        isLoading.value = false
+        result.value = null
+        errorStatus.value = INVENTORY_ERROR.forbidden
+      }
+    })
+    if (generation === syncGeneration) stopSync = stop
+    else stop()
+  } catch { if (generation === syncGeneration) syncError.value = true }
+}
 
 const access = computed(() => resolveQueueAccess(staffAssignment.value))
 const warehouses = computed(() => getAccessibleWarehouses(access.value))
 // Kho đang xem nằm trên URL (?warehouseId=) để guard kiểm tra quyền khi sửa URL thủ công (AC2).
-const selectedWarehouseId = computed(() =>
-  route.query.warehouseId ?? (access.value?.isAllWarehouses ? '' : warehouses.value[0]?.id ?? ''),
-)
+const warehouseScope = computed(() => resolveInventoryScope(route.query.warehouseId, access.value))
+const selectedWarehouseId = computed(() => warehouseScope.value.warehouseId)
 const scopeName = computed(() =>
   warehouses.value.find(({ id }) => id === selectedWarehouseId.value)?.name ?? 'Tất cả kho',
 )
@@ -69,16 +113,22 @@ async function load() {
   isLoading.value = true
   errorStatus.value = null
   try {
+    if (!warehouseScope.value.allowed) throw { status: INVENTORY_ERROR.forbidden }
     const data = await fetchInventory(access.value, { ...filters, warehouseId: selectedWarehouseId.value })
     if (requestId !== latestRequestId) return
     result.value = data
+    revisionState.acknowledge(data.revision)
     syncedAt.value = new Date()
   } catch (error) {
     if (requestId !== latestRequestId) return
     result.value = null
+    revisionState.acknowledge(null)
     errorStatus.value = error.status ?? INVENTORY_ERROR.server
   } finally {
-    if (requestId === latestRequestId) isLoading.value = false
+    if (requestId === latestRequestId) {
+      isLoading.value = false
+      if (refreshPending) { refreshPending = false; if (revisionState.needsRefresh) { clearTimeout(reloadTimer); reloadTimer = setTimeout(load, 50) } }
+    }
   }
 }
 
@@ -96,21 +146,28 @@ function resetFilters() {
 }
 
 // Đổi kho hoặc phân công: xóa ngay dữ liệu phạm vi cũ và bỏ qua lần tải đang chạy của phạm vi đó.
-watch([selectedWarehouseId, staffAssignment], () => {
+watch([warehouseScope, staffAssignment], () => {
   latestRequestId += 1
   result.value = null
+  revisionState.clear()
+  refreshPending = false
   errorStatus.value = null
+  startSync()
 })
 
-watch([() => ({ ...filters }), selectedWarehouseId, staffAssignment], () => {
+watch([() => ({ ...filters }), warehouseScope, staffAssignment], () => {
   clearTimeout(reloadTimer)
   reloadTimer = setTimeout(load, 250)
 }, { immediate: true })
 
 onBeforeUnmount(() => {
+  syncGeneration += 1
+  stopSync()
+  document.removeEventListener('visibilitychange', startSync)
   clearTimeout(reloadTimer)
   latestRequestId += 1
 })
+onMounted(() => { startSync(); document.addEventListener('visibilitychange', startSync) })
 </script>
 
 <template>
@@ -118,7 +175,7 @@ onBeforeUnmount(() => {
     <section v-if="IS_SAMPLE_DATA" class="inv-sandbox">
       <AuthIcon name="flask" :size="30" />
       <div>
-        <strong>Môi trường thử nghiệm (Sandbox Node)</strong> <span class="inv-chip">Độc lập vật lý</span>
+        <strong>Dữ liệu mẫu cục bộ</strong> <span class="inv-chip">Phát triển giao diện</span>
         <p>
           Dữ liệu kho dưới đây thuộc phạm vi <strong>{{ scopeName }}</strong>. Không tác động đến các luồng
           intake thực tế tại trung tâm phân phối chính.
@@ -138,6 +195,7 @@ onBeforeUnmount(() => {
     </header>
 
     <section class="inv-card inventory-filters" aria-label="Bộ lọc">
+      <p v-if="syncError && !IS_SAMPLE_DATA" role="status">Đồng bộ tự động đang gián đoạn. Hệ thống sẽ thử kết nối lại; bạn có thể tải lại dữ liệu.</p>
       <div class="inventory-filters__top">
         <div class="inventory-tabs" role="tablist">
           <button

@@ -4,6 +4,7 @@ import AdminIcon from '../AdminIcon.vue'
 import brandLogo from '../auth/assets/reshare-logo.png'
 import { canDistribute, createDemoDistributionRepository, newRequestKey, validateDistribution } from './distribution.repository.js'
 import { mapLqError } from '../lq-errors.js'
+import { quantityBase, quantityFromBase } from '../shared/quantity.js'
 
 const props = defineProps({
   assignment: Object,
@@ -54,7 +55,13 @@ const draft = computed(() => ({ quantity: quantity.value, beneficiaryId: benefic
 const errors = computed(() => validateDistribution(draft.value, item.value, beneficiaries.value))
 const authorized = computed(() => canDistribute(props.assignment, warehouseId.value))
 const valid = computed(() => authorized.value && !Object.keys(errors.value).length)
-const stockAfter = computed(() => item.value && !errors.value.quantity ? item.value.available - Number(quantity.value) : null)
+const stockAfter = computed(() => {
+  if (!item.value || errors.value.quantity) return null
+  const unit = item.value.unitId || item.value.unit
+  const available = quantityBase(item.value.available, unit, { allowZero: true })
+  const requested = quantityBase(quantity.value, unit)
+  return available === null || requested === null ? null : quantityFromBase(available - requested, unit)
+})
 const actorName = computed(() => props.actor?.displayName || props.actor?.email || 'Chưa xác định nhân sự')
 const roleName = computed(() => props.assignment?.role === 'system_admin' ? 'System Admin' : 'Warehouse Admin')
 const menu = [
@@ -218,7 +225,7 @@ const formatTime = (value) => new Intl.DateTimeFormat('vi-VN', {
 
           <form v-if="!result" id="distribution-form" class="d-card d-form" @submit.prevent="askToConfirm">
             <div class="d-form-title"><div><h2>Thông tin phân phối &amp; Bàn giao</h2><p>Điền đầy đủ thông tin để cấp chứng từ xuất kho có thẩm quyền</p></div><small class="d-required">(*) Trường bắt buộc nhập</small></div>
-            <div class="d-field"><label for="distribution-quantity">Số lượng phân phối <span class="d-required">*</span></label><small class="d-field-rule">Quy tắc: ≤ Số lượng còn</small><div class="d-quantity"><input id="distribution-quantity" v-model="quantity" type="text" inputmode="numeric" required placeholder="Nhập số lượng xuất..." :disabled="saving" :aria-invalid="quantity !== '' && !!errors.quantity" aria-describedby="quantity-help quantity-error" /><span>Đơn vị: {{ item?.unit || '—' }}</span></div><p id="quantity-help" class="d-help">Chỉ nhập số nguyên dương, không vượt tồn khả dụng hiện tại. Không nhập số âm.</p><p v-if="quantity !== '' && errors.quantity" id="quantity-error" class="d-error" role="alert">{{ errors.quantity }}</p></div>
+            <div class="d-field"><label for="distribution-quantity">Số lượng phân phối <span class="d-required">*</span></label><small class="d-field-rule">Quy tắc: ≤ Số lượng còn</small><div class="d-quantity"><input id="distribution-quantity" v-model="quantity" type="text" :inputmode="item?.unitId === 'kg' || item?.unit === 'kg' ? 'decimal' : 'numeric'" required placeholder="Nhập số lượng xuất..." :disabled="saving" :aria-invalid="quantity !== '' && !!errors.quantity" aria-describedby="quantity-help quantity-error" /><span>Đơn vị: {{ item?.unit || '—' }}</span></div><p id="quantity-help" class="d-help">Đơn vị đếm dùng số nguyên dương; kg tối đa 3 số lẻ. Không vượt tồn khả dụng.</p><p v-if="quantity !== '' && errors.quantity" id="quantity-error" class="d-error" role="alert">{{ errors.quantity }}</p></div>
             <div class="d-field"><label for="distribution-beneficiary">Người thụ hưởng <span class="d-required">*</span></label><select id="distribution-beneficiary" v-model="beneficiaryId" required :disabled="saving" aria-describedby="beneficiary-help"><option value="" disabled>Chọn người thụ hưởng từ danh sách đã thẩm định...</option><option v-for="entry in beneficiaries" :key="entry.id" :value="entry.id">{{ entry.name }} · {{ entry.area }}</option></select><p id="beneficiary-help" class="d-help"><em>{{ preview ? 'Hồ sơ mẫu đã được duyệt trước khi bàn giao vật phẩm.' : 'Hồ sơ người thụ hưởng đã được thẩm định và phê duyệt.' }}</em></p><div class="d-note"><AdminIcon name="shield" /><p><b>Phân quyền bảo mật khu vực:</b> Chỉ hiển thị hồ sơ đã duyệt trong phạm vi kho đang chọn. Không tạo hồ sơ người thụ hưởng tại màn này.</p></div></div>
             <div class="d-field"><label for="distribution-note">Ghi chú bàn giao <span class="d-optional">(Tùy chọn)</span></label><small class="d-field-rule">{{ note.length }}/500 ký tự</small><textarea id="distribution-note" v-model="note" maxlength="500" :disabled="saving" rows="4" placeholder="Ghi chú bổ sung về mục đích hỗ trợ, đợt thiện nguyện, tình trạng gói quà hoặc lưu ý khi bàn giao cho người thụ hưởng..." /></div>
             <label class="d-handover"><input v-model="handedOver" type="checkbox" :disabled="saving" required /><span><b>Tôi xác nhận hàng đã được bàn giao thực tế cho người thụ hưởng (hoặc đại diện hợp pháp).</b><small>{{ preview ? 'Chỉ ghi nhận xuất kho sau khi hoàn tất giao nhận vật lý. Trong bản demo, xác nhận này chỉ mô phỏng quy trình.' : 'Chỉ ghi nhận xuất kho sau khi hoàn tất giao nhận vật lý.' }}</small></span></label>

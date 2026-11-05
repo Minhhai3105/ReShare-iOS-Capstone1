@@ -3,6 +3,8 @@ const { createHash } = require('node:crypto');
 const { runTransaction } = require('./firestore-transaction.cjs');
 const { assertCurrentStaffAccess } = require('./staff-access.cjs');
 const { DEFAULT_MAX_DOCS, readUnion, readInStock } = require('./bounded-reads.cjs');
+const { canonicalUnit, quantityBase, quantityFromBase } = require('./quantity.cjs');
+const { recordInventoryUpdate } = require('./inventory-updates.cjs');
 
 function createDistributionApi({ db, verifyToken, serverTimestamp, maxDocs = DEFAULT_MAX_DOCS }) {
   if (!db || !verifyToken) throw new Error('Distribution API configuration is incomplete');
@@ -62,8 +64,11 @@ function createDistributionApi({ db, verifyToken, serverTimestamp, maxDocs = DEF
     let distributedBefore = null;
     let issue = null;
 
-    if (Number.isSafeInteger(itemData.quantityDistributed) && itemData.quantityDistributed >= 0) {
-      distributedBefore = itemData.quantityDistributed;
+    const receivedBase = quantityBase(received, unit);
+    const availableBase = quantityBase(currentAvailable, unit, { allowZero: true });
+    const counterBase = quantityBase(itemData.quantityDistributed, unit, { allowZero: true });
+    if (counterBase !== null) {
+      distributedBefore = counterBase;
     } else {
       // Mục tồn cũ chưa có bộ đếm: cộng lại từ movement xuất phân phối. Không suy từ
       // quantityReceived − quantityAvailable, vì phép trừ đó tính cả hàng hỏng/điều chỉnh
@@ -73,26 +78,28 @@ function createDistributionApi({ db, verifyToken, serverTimestamp, maxDocs = DEF
       let sum = 0;
       const valid = movements.docs.every(doc => {
         const movement = doc.data();
-        if (movement.warehouseId !== warehouseId || movement.unitId !== unit ||
-            !Number.isSafeInteger(movement.quantity) || movement.quantity >= 0) return false;
-        sum -= movement.quantity;
+        const movementBase = quantityBase(movement.quantity, unit, { signed: true });
+        if (movement.warehouseId !== warehouseId || canonicalUnit(movement.unitId) !== canonicalUnit(unit) ||
+            movementBase === null || movementBase >= 0 || !Number.isSafeInteger(sum - movementBase)) return false;
+        sum -= movementBase;
         return true;
       });
       // Đối soát chéo với tồn: hiện chỉ nhập kho đặt và xuất kho giảm tồn, nên nhận − đã xuất
       // phải đúng bằng tồn còn lại. Lệch nghĩa là có biến động không ghi sổ — không đoán.
-      if (valid && Number.isSafeInteger(received) && received - sum === currentAvailable) {
+      if (valid && receivedBase !== null && receivedBase - sum === availableBase) {
         distributedBefore = sum;
       } else {
         issue = 'LEGACY_DISTRIBUTION_UNRECONCILED';
       }
     }
 
-    const quantityDistributed = distributedBefore === null ? null : distributedBefore + quantity;
-    if (quantityDistributed !== null && Number.isSafeInteger(received) && quantityDistributed > received) {
+    const distributedBase = distributedBefore === null ? null : distributedBefore + quantityBase(quantity, unit);
+    if (distributedBase !== null && !Number.isSafeInteger(distributedBase)) return { quantityDistributed: null, issue: 'DISTRIBUTED_EXCEEDS_RECEIVED' };
+    const quantityDistributed = distributedBase === null ? null : quantityFromBase(distributedBase, unit);
+    if (distributedBase !== null && receivedBase !== null && distributedBase > receivedBase) {
       return { quantityDistributed: null, issue: 'DISTRIBUTED_EXCEEDS_RECEIVED' };
     }
-    const fullyDistributed = quantityDistributed !== null && Number.isSafeInteger(received) &&
-      received > 0 && quantityDistributed === received;
+    const fullyDistributed = distributedBase !== null && receivedBase !== null && distributedBase === receivedBase;
     if (!fullyDistributed) return { quantityDistributed, issue };
 
     // Trước khi báo donor "đã trao tặng", đối chiếu chuỗi nguồn: donation ↔ phiếu thực nhận
@@ -111,7 +118,7 @@ function createDistributionApi({ db, verifyToken, serverTimestamp, maxDocs = DEF
       donation.warehouseId === warehouseId && receipt.warehouseId === warehouseId &&
       donation.actualReceiptId === receiptId && receipt.donationId === donationId &&
       donation.stockEntryId === itemData.stockEntryId && receipt.stockEntryId === itemData.stockEntryId &&
-      receipt.quantity === received);
+      canonicalUnit(receipt.unitId || unit) === canonicalUnit(unit) && quantityBase(receipt.quantity, unit) === receivedBase);
     if (!linked) return { quantityDistributed, issue: 'DONATION_LINK_MISMATCH' };
     if (donation.status !== 'in_stock') return { quantityDistributed, issue: 'DONATION_STATUS_UNEXPECTED' };
     return { quantityDistributed, issue, donationRef, donationVersion: donation.version || 1 };
@@ -164,10 +171,11 @@ function createDistributionApi({ db, verifyToken, serverTimestamp, maxDocs = DEF
             unitId: unit,
             location: d.location || '',
             sourceReceipt: d.sourceReceipt || d.receiptId || '',
+            conditionId: d.conditionId || '',
             version: typeof d.version === 'number' ? d.version : 1,
           };
         })
-        .filter(item => allowedIds.has(item.warehouseId));
+        .filter(item => allowedIds.has(item.warehouseId) && item.conditionId !== 'damaged');
 
       // 3. Fetch Beneficiaries — chỉ hồ sơ đã duyệt (dữ liệu cũ đánh dấu bằng approved: true).
       const beneficiaries = (await readUnion([
@@ -216,8 +224,8 @@ function createDistributionApi({ db, verifyToken, serverTimestamp, maxDocs = DEF
 
       const rawQuantity = body?.quantity;
       const quantity = Number(rawQuantity);
-      if (!/^\d+$/.test(String(rawQuantity || '')) || !Number.isSafeInteger(quantity) || quantity <= 0) {
-        throw new ApiError(400, 'Số lượng phải là số nguyên dương.', 'VALIDATION', { errors: { quantity: 'Số lượng phải là số nguyên dương.' } });
+      if (quantityBase(rawQuantity, 'kg') === null) {
+        throw new ApiError(400, 'Số lượng phải dương và tối đa 3 chữ số thập phân.', 'VALIDATION', { errors: { quantity: 'Số lượng phải dương và tối đa 3 chữ số thập phân.' } });
       }
 
       if (body?.handedOver !== true) {
@@ -319,6 +327,12 @@ function createDistributionApi({ db, verifyToken, serverTimestamp, maxDocs = DEF
         const categoryId = itemData.category || itemData.categoryId || 'other';
         const unit = itemData.unitId || itemData.unit || 'chiếc';
 
+        if (itemData.conditionId === 'damaged') throw new ApiError(409, 'Không phân phối hàng hư hỏng; cần đối soát.', 'STOCK_CONFLICT');
+        const requestedBase = quantityBase(quantity, unit);
+        const availableBase = quantityBase(currentAvailable, unit, { allowZero: true });
+        if (requestedBase === null) throw new ApiError(400, 'Số lượng không đúng quy tắc đơn vị.', 'VALIDATION', { errors: { quantity: 'Đơn vị đếm dùng số nguyên; kg tối đa 3 số lẻ.' } });
+        if (availableBase === null) throw new ApiError(409, 'Số lượng tồn không hợp lệ; cần đối soát.', 'STOCK_CONFLICT');
+
         const itemProjection = {
           id: itemId,
           name: itemName,
@@ -342,7 +356,7 @@ function createDistributionApi({ db, verifyToken, serverTimestamp, maxDocs = DEF
           );
         }
 
-        if (quantity > currentAvailable) {
+        if (requestedBase > availableBase) {
           throw new ApiError(
             409,
             `Chỉ còn ${currentAvailable} ${unit}. Vui lòng điều chỉnh số lượng.`,
@@ -352,7 +366,7 @@ function createDistributionApi({ db, verifyToken, serverTimestamp, maxDocs = DEF
         }
 
         const before = currentAvailable;
-        const after = before - quantity;
+        const after = quantityFromBase(availableBase - requestedBase, unit);
         const newVersion = currentVersion + 1;
         const progress = await readDonationProgress(transaction, {
           itemId, itemData, warehouseId, unit, currentAvailable, quantity,
@@ -360,6 +374,7 @@ function createDistributionApi({ db, verifyToken, serverTimestamp, maxDocs = DEF
 
         const timestamp = new Date().toISOString();
         const serverNow = now();
+        recordInventoryUpdate(transaction, db, warehouseId, serverNow);
 
         const voucherData = {
           id: voucherId,
