@@ -11,6 +11,22 @@ const staff = { active: true, role: 'warehouse_admin', warehouseIds: ['hai-chau'
 const filters = { from: '2025-05-01', to: '2025-05-31', warehouseId: '', categoryId: '' }
 const counts = (report) => report.summary.map((entry) => entry.count)
 
+test('Stock validates every in-scope quantity before zero filtering and normalizes valid kg values', () => {
+  for (const [available, unit] of [[1.5, 'piece'], [0.0001, 'kg'], [0.1 + 0.2, 'kg'], [-1, 'piece'], [Infinity, 'piece'], [1, 'unknown']]) {
+    const data = structuredClone(reportFixtures)
+    data.inventory = [{ id: 'bad-stock', warehouseId: 'hai-chau', categoryId: 'clothing', available, unit }]
+    assert.throws(() => calculateReports(data, filters, admin), /tồn kho.*đối soát/)
+  }
+  const data = structuredClone(reportFixtures)
+  data.inventory = [{ id: 'kg', warehouseId: 'hai-chau', categoryId: 'clothing', available: '1.230', unit: 'kg' },
+    { id: 'empty', warehouseId: 'hai-chau', categoryId: 'clothing', available: 0, unit: 'piece' },
+    { id: 'outside', warehouseId: 'son-tra', categoryId: 'clothing', available: 1.5, unit: 'piece' }]
+  const report = calculateReports(data, filters, staff)
+  assert.equal(report.stock.length, 1)
+  assert.equal(report.stock[0].available, 1.23)
+  assert.equal(report.stock[0].unit, 'kg')
+});
+
 // Independent CSV parser so escaping and exported cells are checked by round trip.
 function parseCsv(text) {
   const rows = []; let row = []; let cell = ''; let quoted = false

@@ -4,9 +4,10 @@ import AuthIcon from '../auth/components/AuthIcon.vue'
 import logoUrl from '../auth/assets/reshare-logo.png'
 import { currentUser, staffAssignment } from '../auth/auth.store'
 import { ADMIN_ROUTE, USER_ROLE, USER_ROLE_LABEL } from '../auth/auth.constants'
+import { INVENTORY_IS_MOCK } from './inventory.service'
 
 // Nhãn demo (Sandbox, Demo, Xem thử, Prototype) chỉ hiện khi chạy dữ liệu mẫu ở dev, không hiện trên bản production.
-const IS_SAMPLE_DATA = import.meta.env.DEV
+const IS_SAMPLE_DATA = INVENTORY_IS_MOCK
 
 const props = defineProps({
   warehouses: { type: Array, default: () => [] },
@@ -89,7 +90,13 @@ const currentYear = new Date().getFullYear()
         </div>
       </header>
 
-      <main class="inv-content"><slot /></main>
+      <main class="inv-content">
+        <section v-if="IS_SAMPLE_DATA" class="inv-mock-warning" role="alert">
+          <strong>ĐANG DÙNG DỮ LIỆU MẪU</strong>
+          <p>Các màn kho này không đọc dữ liệu kho từ máy chủ. Không dùng kết quả này để nghiệm thu nhập hoặc phân phối thực tế.</p>
+        </section>
+        <slot />
+      </main>
 
       <footer class="inv-footer">
         <span v-if="IS_SAMPLE_DATA">Bản xem thử – chưa kết nối máy chủ kho</span>
@@ -127,6 +134,8 @@ const currentYear = new Date().getFullYear()
 :where(.inv) :where(button, input, select) { font: inherit; color: inherit; }
 .inv .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
 .inv i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--inv-green); flex-shrink: 0; }
+.inv-mock-warning { padding: 14px 18px; border: 2px solid #b91c1c; border-radius: 10px; background: #fef2f2; color: #991b1b; }
+.inv-mock-warning p { margin-top: 4px; }
 
 .inv-sidebar { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 18px; padding: 20px 16px; background: #fff; border-right: 1px solid var(--inv-border); overflow-y: auto; }
 .inv-brand { display: flex; align-items: center; gap: 12px; }
