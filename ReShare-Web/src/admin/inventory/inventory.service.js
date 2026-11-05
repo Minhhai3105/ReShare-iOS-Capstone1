@@ -176,9 +176,9 @@ function withStock(item) {
 /** @returns { items, counts: { all, in_stock, out_of_stock } } */
 export async function fetchInventory(access, { warehouseId, search, category, condition, stock }) {
   if (!IS_MOCK) {
-    const { items, counts } = await liveRequest(access, warehouseId,
+    const { items, counts, revision } = await liveRequest(access, warehouseId,
       (source) => source.listInventory({ warehouseId, search, category, condition, stock }))
-    return { items: items.map((item) => ({ ...item, warehouse: getWarehouseInfo(item.warehouseId) })), counts }
+    return { items: items.map((item) => ({ ...item, warehouse: getWarehouseInfo(item.warehouseId) })), counts, revision }
   }
   await simulateRequest(access)
   // AC2: từ chối khi request chỉ định kho ngoài phân công, kể cả sửa URL thủ công.
@@ -207,9 +207,9 @@ export async function fetchInventory(access, { warehouseId, search, category, co
 /** @returns { item, movements } — movements mới nhất trước. */
 export async function fetchInventoryItem(access, itemId) {
   if (!IS_MOCK) {
-    const { item, movements } = await liveRequest(access, '', (source) => source.getInventoryItem(itemId))
+    const { item, movements, revision } = await liveRequest(access, '', (source) => source.getInventoryItem(itemId))
     if (!canView(access, item.warehouseId)) throw createError(INVENTORY_ERROR.forbidden)
-    return { item: { ...item, warehouse: getWarehouseInfo(item.warehouseId) }, movements }
+    return { item: { ...item, warehouse: getWarehouseInfo(item.warehouseId) }, movements, revision }
   }
   await simulateRequest(access)
   const item = mock.items.find(({ id }) => id === itemId)

@@ -56,14 +56,15 @@ export function createLiveInventorySource({ apiBase, getToken, fetchImpl = (...a
     const count = (value) => (all.nextCursor ? `${value}+` : value)
     return {
       items: tab.items,
+      revision: all.revision,
       counts: { all: count(all.items.length), in_stock: count(inStock), out_of_stock: count(all.items.length - inStock) },
     }
   }
 
   /** @returns { item, movements } — movements mới nhất trước, như API trả. */
   async function getInventoryItem(itemId) {
-    const { item, movements } = await itemDetail(itemId)
-    return { item, movements: movements.map(movementFrom) }
+    const { item, movements, revision } = await itemDetail(itemId)
+    return { item, movements: movements.map(movementFrom), revision }
   }
 
   /** @returns { voucher, beneficiary, lines } — tồn trước/sau tính từ lịch sử biến động của từng vật phẩm. */

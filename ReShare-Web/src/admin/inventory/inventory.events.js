@@ -1,4 +1,5 @@
 // fetch streaming cho phép gửi Bearer header; token không đi vào URL/log truy cập.
+import { inventoryRevision } from './inventory.sync.js'
 const SESSION_ERRORS = new Set([
   'auth/invalid-user-token', 'auth/user-token-expired', 'auth/user-disabled',
   'auth/user-not-found', 'auth/user-signed-out', 'auth/null-user',
@@ -24,6 +25,7 @@ export function watchInventoryEvents({ apiBase, warehouseId, getToken, onChange,
       connectedAt = Date.now()
       const decoder = new TextDecoder()
       let pending = ''
+      let lastRevision = null
       while (!controller.signal.aborted) {
         const { value, done } = await reader.read()
         if (done) throw new Error('Kết nối đồng bộ kho đã ngắt')
@@ -32,8 +34,15 @@ export function watchInventoryEvents({ apiBase, warehouseId, getToken, onChange,
         while ((end = pending.indexOf('\n\n')) >= 0) {
           const message = pending.slice(0, end)
           pending = pending.slice(end + 2)
-          if (message.includes('event: access_lost')) throw Object.assign(new Error('Quyền kho đã thay đổi'), { status: 403 })
-          if (message.includes('event: inventory')) onChange()
+          const lines = message.split('\n')
+          const event = lines.find(line => line.startsWith('event:'))?.slice(6).trim()
+          if (event === 'access_lost') throw Object.assign(new Error('Quyền kho đã thay đổi'), { status: 403 })
+          if (event === 'inventory') {
+            const data = JSON.parse(lines.filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n'))
+            const revision = inventoryRevision(data.revision)
+            if (revision === null) throw new Error('Revision đồng bộ kho không hợp lệ')
+            if (revision !== lastRevision) { lastRevision = revision; onChange(revision) }
+          }
         }
       }
     } catch (error) {

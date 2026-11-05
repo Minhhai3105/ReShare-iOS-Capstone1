@@ -8,6 +8,7 @@ import { ADMIN_ROUTE } from '../../auth/auth.constants'
 import { resolveQueueAccess } from '../../donations/donation.service'
 import { DONATION_CATEGORY_LABEL } from '../../donations/donation.constants'
 import { resolveInventoryScope } from '../inventory.scope.js'
+import { createInventorySyncState } from '../inventory.sync.js'
 import {
   CONDITION_LABEL,
   INVENTORY_ERROR,
@@ -49,6 +50,7 @@ let reloadTimer = null
 let stopSync = () => {}
 let syncGeneration = 0
 let refreshPending = false
+const revisionState = createInventorySyncState()
 const syncError = ref(false)
 
 async function startSync() {
@@ -62,9 +64,10 @@ async function startSync() {
     return
   }
   try {
-    const stop = await subscribeInventory(access.value, selectedWarehouseId.value, () => {
+    const stop = await subscribeInventory(access.value, selectedWarehouseId.value, revision => {
       if (generation !== syncGeneration) return
       syncError.value = false
+      if (!revisionState.observe(revision)) return
       if (isLoading.value) { refreshPending = true; return }
       clearTimeout(reloadTimer)
       reloadTimer = setTimeout(load, 50)
@@ -74,6 +77,7 @@ async function startSync() {
       if ([401, 403].includes(error.status)) {
         latestRequestId += 1
         refreshPending = false
+        revisionState.clear()
         clearTimeout(reloadTimer)
         isLoading.value = false
         result.value = null
@@ -113,15 +117,17 @@ async function load() {
     const data = await fetchInventory(access.value, { ...filters, warehouseId: selectedWarehouseId.value })
     if (requestId !== latestRequestId) return
     result.value = data
+    revisionState.acknowledge(data.revision)
     syncedAt.value = new Date()
   } catch (error) {
     if (requestId !== latestRequestId) return
     result.value = null
+    revisionState.acknowledge(null)
     errorStatus.value = error.status ?? INVENTORY_ERROR.server
   } finally {
     if (requestId === latestRequestId) {
       isLoading.value = false
-      if (refreshPending) { refreshPending = false; clearTimeout(reloadTimer); reloadTimer = setTimeout(load, 50) }
+      if (refreshPending) { refreshPending = false; if (revisionState.needsRefresh) { clearTimeout(reloadTimer); reloadTimer = setTimeout(load, 50) } }
     }
   }
 }
@@ -143,6 +149,7 @@ function resetFilters() {
 watch([warehouseScope, staffAssignment], () => {
   latestRequestId += 1
   result.value = null
+  revisionState.clear()
   refreshPending = false
   errorStatus.value = null
   startSync()

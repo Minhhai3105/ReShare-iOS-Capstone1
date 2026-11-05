@@ -35,6 +35,19 @@ test('Stopping an event subscription aborts the connection and prevents reconnec
 
 const flush = () => new Promise(resolve => setImmediate(resolve))
 
+test('SSE parses revision payloads and deduplicates repeated events within a connection', async () => {
+  const revisions = []
+  const stop = watchInventoryEvents({ apiBase: 'https://example.test', getToken: async () => 'token',
+    onChange: revision => revisions.push(revision), onError() {},
+    fetchImpl: async () => ({ ok: true, body: new ReadableStream({ start(controller) {
+      for (const revision of ['stable-a', 'stable-a', 'stable-b']) controller.enqueue(new TextEncoder().encode(`event: inventory\ndata: ${JSON.stringify({ revision })}\n\n`))
+    } }) }),
+  })
+  await flush()
+  stop()
+  assert.deepEqual(revisions, ['stable-a', 'stable-b'])
+});
+
 test('Network failures back off to 30 seconds and stopping cancels the pending retry', async t => {
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 })
   t.mock.method(Math, 'random', () => 0.5)

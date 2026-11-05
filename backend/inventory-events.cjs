@@ -1,4 +1,5 @@
 const { ApiError } = require('./image-api.cjs');
+const { inventoryRevision } = require('./inventory-revision.cjs');
 
 // Một listener revision cho mỗi phạm vi đang có người xem, chia sẻ giữa các kết nối.
 function createInventoryEvents({ db, verifyToken, heartbeatMs = 15000, recheckMs = 60000 }) {
@@ -16,7 +17,9 @@ function createInventoryEvents({ db, verifyToken, heartbeatMs = 15000, recheckMs
       const updates = db.collection('warehouse_inventory_updates');
       const reference = scope === 'all_warehouses' ? updates : updates.doc(scope);
       source.unsubscribe = reference.onSnapshot(snapshot => {
-        source.revision = scope === 'all_warehouses' ? (source.revision || 0) + 1 : snapshot.exists ? snapshot.data().revision || 0 : 0;
+        const revision = inventoryRevision(scope, snapshot);
+        if (revision === source.revision) return;
+        source.revision = revision;
         for (const subscriber of [...source.clients]) subscriber.onChange(source.revision);
       }, error => {
         for (const subscriber of [...source.clients]) subscriber.onError(error);

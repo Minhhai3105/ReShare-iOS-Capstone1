@@ -6,6 +6,7 @@ import AuthIcon from '../../auth/components/AuthIcon.vue'
 import { staffAssignment } from '../../auth/auth.store'
 import { ADMIN_ROUTE, USER_ROLE, USER_ROLE_LABEL } from '../../auth/auth.constants'
 import { resolveQueueAccess } from '../../donations/donation.service'
+import { createInventorySyncState } from '../inventory.sync.js'
 import {
   CONDITION_LABEL,
   DONATION_DETAIL_ROUTE,
@@ -45,22 +46,24 @@ let latestRequestId = 0
 let stopSync = () => {}
 let syncGeneration = 0
 let refreshPending = false
+const revisionState = createInventorySyncState()
 const syncError = ref(false)
 
 async function startSync() {
   const generation = ++syncGeneration
   stopSync(); stopSync = () => {}
   if (document.visibilityState === 'hidden' || !item.value) return
-  const stop = await subscribeInventory(access.value, item.value.warehouseId, () => {
+  const stop = await subscribeInventory(access.value, item.value.warehouseId, revision => {
     if (generation === syncGeneration) {
       syncError.value = false
+      if (!revisionState.observe(revision)) return
       if (isLoading.value) refreshPending = true
       else load({ preserve: true })
     }
   }, error => {
     if (generation !== syncGeneration) return
     syncError.value = true
-    if ([401, 403].includes(error.status)) { latestRequestId += 1; refreshPending = false; data.value = null; isLoading.value = false; errorStatus.value = INVENTORY_ERROR.forbidden }
+    if ([401, 403].includes(error.status)) { latestRequestId += 1; refreshPending = false; revisionState.clear(); data.value = null; isLoading.value = false; errorStatus.value = INVENTORY_ERROR.forbidden }
   }).catch(() => { syncError.value = true; return () => {} })
   if (generation === syncGeneration) stopSync = stop
   else stop()
@@ -103,15 +106,16 @@ async function load({ preserve = false } = {}) {
   if (!preserve) data.value = null
   try {
     const nextData = await fetchInventoryItem(access.value, route.params.itemId)
-    if (requestId === latestRequestId) data.value = nextData
+    if (requestId === latestRequestId) { revisionState.acknowledge(nextData.revision); data.value = nextData }
   } catch (error) {
     if (requestId !== latestRequestId) return
     data.value = null
+    revisionState.acknowledge(null)
     errorStatus.value = error.status ?? INVENTORY_ERROR.server
   } finally {
     if (requestId === latestRequestId) {
       isLoading.value = false
-      if (refreshPending) { refreshPending = false; load({ preserve: true }) }
+      if (refreshPending) { refreshPending = false; if (revisionState.needsRefresh) load({ preserve: true }) }
     }
   }
 }
@@ -119,7 +123,13 @@ async function load({ preserve = false } = {}) {
 const formatCode = (code) => (code ? code.toUpperCase() : '—')
 const formatQuantity = (quantity) => (quantity > 0 ? `+${quantity}` : `${quantity}`)
 
-watch([() => route.params.itemId, staffAssignment], () => load(), { immediate: true })
+watch([() => route.params.itemId, staffAssignment], () => {
+  revisionState.clear()
+  refreshPending = false
+  syncGeneration += 1
+  stopSync()
+  load()
+}, { immediate: true })
 watch([() => item.value?.warehouseId, staffAssignment], startSync)
 onMounted(() => { document.addEventListener('visibilitychange', startSync) })
 onBeforeUnmount(() => { latestRequestId += 1; syncGeneration += 1; stopSync(); document.removeEventListener('visibilitychange', startSync) })

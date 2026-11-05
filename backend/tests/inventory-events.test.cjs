@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 const { createInventoryEvents } = require('../inventory-events.cjs');
+const { inventoryRevision } = require('../inventory-revision.cjs');
 
 function setup() {
   const values = new Map([['staff_assignments/staff', { active: true, role: 'warehouse_admin', warehouseIds: ['a'] }]]);
@@ -43,8 +44,12 @@ test('Two viewers share one revision listener; every revision notifies both and 
     await s.api.open(s.request('a'), first); await s.api.open(s.request('a'), second); await s.flush();
     assert.equal(s.listeners.get('warehouse_inventory_updates/wh_a').size, 1);
     s.values.set('warehouse_inventory_updates/wh_a', { revision: 7 }); s.emit('warehouse_inventory_updates/wh_a');
-    assert.ok(first.messages.some(message => message.includes('"revision":7')));
-    assert.ok(second.messages.some(message => message.includes('"revision":7')));
+    const revision = inventoryRevision('wh_a', { exists: true, data: () => ({ revision: 7 }) });
+    assert.ok(first.messages.some(message => message.includes(JSON.stringify({ revision }))));
+    assert.ok(second.messages.some(message => message.includes(JSON.stringify({ revision }))));
+    const count = first.messages.length;
+    s.emit('warehouse_inventory_updates/wh_a');
+    assert.equal(first.messages.length, count, 'An identical snapshot does not notify viewers twice');
     first.end(); assert.equal(s.listeners.get('warehouse_inventory_updates/wh_a').size, 1);
     second.end(); assert.equal(s.listeners.get('warehouse_inventory_updates/wh_a').size, 0);
   } finally { first.end(); second.end(); }
