@@ -1,0 +1,87 @@
+{
+  "desktop": {
+    "width": 1440,
+    "height": 1000
+  },
+  "mobile": {
+    "documentWidth": 376,
+    "focus": true,
+    "height": 844,
+    "menu": {
+      "bottom": 773.5,
+      "height": 320,
+      "left": 38,
+      "right": 338,
+      "top": 453.5
+    },
+    "viewport": 376
+  },
+  "flipAbove": {
+    "above": true,
+    "menuBottom": 317,
+    "menuTop": 12,
+    "triggerTop": 325,
+    "viewportHeight": 640
+  },
+  "resizeBelow": {
+    "below": true,
+    "menuBottom": 701.5,
+    "menuTop": 381.5,
+    "triggerBottom": 373.5,
+    "viewportHeight": 1000
+  },
+  "results": [
+    {
+      "case": "Mouse selects status and updates rows",
+      "pass": true
+    },
+    {
+      "case": "Arrows keep DOM focus; Escape cancels without changing filter",
+      "pass": true
+    },
+    {
+      "case": "Home and Enter select pending",
+      "pass": true
+    },
+    {
+      "case": "Tab commits active option and moves to next control",
+      "pass": true
+    },
+    {
+      "case": "End boundary, Vietnamese typeahead and repeated-letter cycling",
+      "pass": true
+    },
+    {
+      "case": "Outside click closes without committing hovered option",
+      "pass": true
+    },
+    {
+      "case": "Only one menu open; warehouse value reaches existing filter",
+      "pass": true
+    },
+    {
+      "case": "Category uses unchanged filter values",
+      "pass": true
+    },
+    {
+      "case": "Sort and reset preserve original behavior",
+      "pass": true
+    },
+    {
+      "case": "Long warehouse list is bounded, keyboard active option visible, long label wraps",
+      "pass": true
+    },
+    {
+      "case": "Empty/disabled controls and disabled option keyboard behavior",
+      "pass": true
+    },
+    {
+      "case": "376px responsive: panel remains inside iframe viewport and selection filters rows",
+      "pass": true
+    },
+    {
+      "case": "640px viewport flips menu above; resize to 1000px repositions it below while open",
+      "pass": true
+    }
+  ]
+}
