@@ -3,6 +3,13 @@ import FirebaseAuth
 
 @MainActor
 enum DonationResubmissionService {
+    struct APIError: LocalizedError {
+        let status: Int
+        let code: String?
+        let message: String
+        nonisolated var errorDescription: String? { message }
+    }
+
     struct Request: Encodable {
         let title: String
         let description: String
@@ -18,9 +25,7 @@ enum DonationResubmissionService {
 
     static func submit(donationId: String, request body: Request) async throws {
         guard let user = Auth.auth().currentUser else { throw CloudinaryImageError.signedOut }
-        let raw = (Bundle.main.object(forInfoDictionaryKey: "RESHARE_IMAGE_API_BASE_URL") as? String)
-            ?? "https://reshare-ios-capstone1-1.onrender.com"
-        guard let baseURL = URL(string: raw), baseURL.scheme == "https", baseURL.host != nil else {
+        guard let baseURL = ReShareAPIConfiguration.configuredBaseURL() else {
             throw CloudinaryImageError.missingConfiguration
         }
         var request = URLRequest(url: baseURL.appendingPathComponent("v1/donations/\(donationId)/resubmit"))
@@ -32,9 +37,9 @@ enum DonationResubmissionService {
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw CloudinaryImageError.invalidServerResponse }
         guard (200...299).contains(http.statusCode) else {
-            let message = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["message"] as? String
-            throw NSError(domain: "ReShare.DonationResubmit", code: http.statusCode,
-                userInfo: [NSLocalizedDescriptionKey: message ?? "Không gửi được thông tin bổ sung (HTTP \(http.statusCode))."])
+            let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            throw APIError(status: http.statusCode, code: payload?["code"] as? String,
+                message: payload?["message"] as? String ?? "Không gửi được thông tin bổ sung (HTTP \(http.statusCode)).")
         }
         guard let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any], payload["success"] as? Bool == true else {
             throw CloudinaryImageError.invalidServerResponse

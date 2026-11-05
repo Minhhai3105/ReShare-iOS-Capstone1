@@ -31,6 +31,27 @@ test('BR03/BR04: resubmit reopens staff review and reservation expiry is atomic 
         await review.handle('POST', `/v1/admin/donations/${id}/decide`, { authorization: 'Bearer admin' }, { action: 'approve', expectedVersion: 3 });
         assert.equal((await db.doc(`donations/${id}`).get()).data().status, 'approved');
       });
+      await t.test('Legacy images require replacement and an authorized batch recovers the same donation', async () => {
+        const id = randomUUID(), uploadId = randomUUID(), owner = `${prefix}-legacy`;
+        const donation = await seed(`donations/${id}`, { id, donorId: owner, title: 'Legacy', description: '', category: 'books', condition: 'good',
+          status: 'pending', reviewState: 'needs_information', version: 2 });
+        const api = createDonationResubmitApi({ db, verifyToken: async () => ({ uid: owner }), serverTimestamp: () => FieldValue.serverTimestamp() });
+        const body = { title: 'Legacy clarified', description: 'New photos', category: 'books', condition: 'good', quantity: 1, unitId: 'piece',
+          expectedVersion: 2, idempotencyKey: `${prefix}-legacy-retry` };
+        const submit = value => api.handle('POST', `/v1/donations/${id}/resubmit`, { authorization: 'Bearer donor' }, value);
+        await assert.rejects(submit(body), { status: 400, code: 'REPLACEMENT_IMAGES_REQUIRED' });
+        assert.equal((await donation.get()).data().version, 2);
+        const imagePublicIds = [1, 2, 3].map(() => `donations/${uploadId}/${randomUUID()}`);
+        const batch = await seed(`image_upload_batches/donation_${uploadId}`, { ownerUid: owner, assets: Object.fromEntries(imagePublicIds.map((image, i) => [i, image])) });
+        const replacement = { ...body, imagePublicIds, imageUploadRecordId: uploadId };
+        assert.equal((await submit(replacement)).status, 200);
+        assert.equal((await submit(replacement)).body.idempotentReplay, true);
+        assert.equal((await donation.get()).data().version, 3);
+        assert.equal((await batch.get()).data().attachedDonationId, id);
+        const audits = await db.collection('donation_resubmissions').where('donationId', '==', id).get();
+        paths.push(...audits.docs.map(doc => doc.ref.path));
+        assert.equal(audits.size, 1);
+      });
       await t.test('Expired holds release once; one-sided handover and a future reservation remain untouched', async () => {
         const now = Date.now();
         const items = [];

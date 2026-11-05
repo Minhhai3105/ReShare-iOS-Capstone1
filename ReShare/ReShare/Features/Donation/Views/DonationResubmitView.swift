@@ -19,6 +19,7 @@ struct DonationResubmitView: View {
     @State private var pendingRequest: DonationResubmissionService.Request?
     @State private var saving = false
     @State private var loadingPhotos = false
+    @State private var replacementImagesRequired: Bool
     @State private var error: String?
 
     init(item: DonationItem) {
@@ -30,12 +31,13 @@ struct DonationResubmitView: View {
         _unit = State(initialValue: DonationUnit(rawValue: item.unitId ?? "piece") ?? .piece)
         _quantity = State(initialValue: item.quantity.map { String($0) } ?? "1")
         _openedVersion = State(initialValue: item.version ?? 1)
+        _replacementImagesRequired = State(initialValue: item.imageProvider != "cloudinary" || !(3...6).contains(item.imagePublicIds?.count ?? 0))
     }
 
     private var valid: Bool {
         !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && title.utf16.count <= 120 && notes.utf16.count <= 3000 &&
         DonationQuantity.amount(quantity, unitId: unit.rawValue) != nil &&
-        (selectedPhotos.isEmpty || (3...6).contains(photos.count)) && !loadingPhotos
+        (selectedPhotos.isEmpty ? !replacementImagesRequired : (3...6).contains(photos.count) && photos.count == selectedPhotos.count) && !loadingPhotos
     }
 
     var body: some View {
@@ -61,13 +63,19 @@ struct DonationResubmitView: View {
                     PhotosPicker(selection: $selectedPhotos, maxSelectionCount: 6, matching: .images) {
                         Text(selectedPhotos.isEmpty ? "Chọn 3–6 ảnh để thay bộ ảnh hiện tại" : "Đã chọn \(photos.count)/\(selectedPhotos.count) ảnh")
                     }
-                    if selectedPhotos.isEmpty {
+                    if replacementImagesRequired {
+                        Text("Bộ ảnh hiện tại không đủ điều kiện gửi lại. Vui lòng chọn 3–6 ảnh mới để thay thế.")
+                            .font(.caption).foregroundStyle(.orange)
+                    } else if selectedPhotos.isEmpty {
                         Text("Giữ nguyên bộ ảnh hiện tại nếu chỉ cần bổ sung nội dung.").font(.caption)
-                    } else {
+                    }
+                    if !selectedPhotos.isEmpty {
                         ScrollView(.horizontal) {
                             HStack { ForEach(photos.indices, id: \.self) { Image(uiImage: photos[$0]).resizable().scaledToFill().frame(width: 72, height: 72).clipped() } }
                         }
-                        Button("Giữ lại ảnh hiện tại") { selectedPhotos = [] }
+                        if !replacementImagesRequired {
+                            Button("Giữ lại ảnh hiện tại") { selectedPhotos = [] }
+                        }
                     }
                 }
                 if let error { Section { Text(error).foregroundStyle(.red) } }
@@ -118,7 +126,14 @@ struct DonationResubmitView: View {
                 pendingRequest = request
                 try await DonationResubmissionService.submit(donationId: item.id, request: request)
                 dismiss()
-            } catch { self.error = error.localizedDescription }
+            } catch {
+                if let apiError = error as? DonationResubmissionService.APIError, apiError.code == "REPLACEMENT_IMAGES_REQUIRED" {
+                    replacementImagesRequired = true
+                    pendingRequest = nil
+                    requestKey = UUID().uuidString
+                }
+                self.error = error.localizedDescription
+            }
         }
     }
 }

@@ -44,18 +44,27 @@ function createDonationResubmitApi({ db, verifyToken, serverTimestamp = () => ne
       }
       if (donation.status !== 'pending' || donation.reviewState !== 'needs_information') throw new ApiError(409, 'Đơn không còn chờ bổ sung thông tin');
       if ((donation.version || 1) !== body.expectedVersion) throw new ApiError(409, 'Đơn đã thay đổi; tải lại trước khi gửi');
-      const images = fields.imagePublicIds || donation.imagePublicIds;
+      const replacingImages = Object.hasOwn(fields, 'imagePublicIds');
+      const images = replacingImages ? fields.imagePublicIds : donation.imagePublicIds;
       const uploadId = body.imageUploadRecordId || donation.imageUploadRecordId || donationId;
-      validateRecordId('donation', uploadId);
-      validatePublicIds(images, `donations/${uploadId}`);
-      if (images.length < 3) {
-        throw new ApiError(400, 'Cần 3–6 ảnh thuộc cùng lần tải được cấp quyền');
+      const replacementRequired = () => new ApiError(400,
+        'Bộ ảnh hiện tại không đủ điều kiện gửi lại. Vui lòng chọn 3–6 ảnh mới để thay thế.', 'REPLACEMENT_IMAGES_REQUIRED');
+      try {
+        validateRecordId('donation', uploadId);
+        validatePublicIds(images, `donations/${uploadId}`);
+        if (images.length < 3) throw new ApiError(400, 'Cần 3–6 ảnh thuộc cùng lần tải được cấp quyền');
+      } catch (error) {
+        if (!replacingImages && error instanceof ApiError) throw replacementRequired();
+        throw error;
       }
       const batchRef = db.collection('image_upload_batches').doc(`donation_${uploadId}`);
       const batch = await tx.get(batchRef);
       if (!batch.exists || batch.data().ownerUid !== claims.uid ||
           (batch.data().attachedDonationId && batch.data().attachedDonationId !== donationId) ||
-          !images.every(id => Object.values(batch.data().assets || {}).includes(id))) throw new ApiError(403, 'Ảnh chưa được cấp quyền cho donor');
+          !images.every(id => Object.values(batch.data().assets || {}).includes(id))) {
+        if (!replacingImages) throw replacementRequired();
+        throw new ApiError(403, 'Ảnh chưa được cấp quyền cho donor');
+      }
       const version = body.expectedVersion + 1;
       const at = serverTimestamp();
       const response = { donation: { id: donationId, status: 'pending', reviewState: null, version }, idempotentReplay: false };

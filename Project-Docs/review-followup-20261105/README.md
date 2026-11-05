@@ -11,7 +11,7 @@ Ngày 05/11/2026. Nhánh `codex/document-review-followup-20261105`, tách từ `
 - Worker mỗi phút khi backend hoạt động: hết giờ hẹn + 2 giờ và cả hai chưa xác nhận thì transaction mở lại item, xóa reservation, hủy lịch và ghi một message ổn định. Một bên đã xác nhận được giữ đối soát; Rules ràng buộc reservation với lịch accepted và deadline đúng.
 - Native XCTest cho file quantity dùng chung; không thêm dependency hoặc thay framework/SDK.
 
-## Kiểm tra cuối
+## Kiểm tra CR01 ban đầu (011ce79)
 
 | Lớp | Kết quả | Phạm vi |
 | --- | --- | --- |
@@ -44,7 +44,7 @@ Worker không chạy đúng lịch khi backend ngủ/ngừng. Revision listener 
 
 Report/block/moderation, tranh chấp qua Admin và xóa tài khoản/retention chỉ được đưa vào backlog phát hành đề xuất, chưa triển khai. CR01 mới được nhóm trưởng chấp thuận; mentor còn chờ review. Điểm tiếp nhận/hub hằng số trên iOS chưa được xác nhận là dữ liệu vận hành.
 
-Ngoài phạm vi sửa hiện tại: `backend/server.cjs` vẫn parse `new URL(request.url, ...)` trước khối xử lý lỗi. Cần xử lý riêng malformed URL/liveness trước khi kết luận sẵn sàng vận hành. Không sửa lan trong đợt này.
+Đợt CR01 ban đầu để lại malformed URL/liveness để review riêng. Bản vá tiếp theo đã bổ sung phản hồi 400, backoff SSE, phục hồi ảnh legacy và cấu hình local; xem [kết quả xử lý review Gemini](GEMINI_FIXES_VI.md). Log và số test ở bảng trên là lịch sử của 011ce79; kết quả bản vá mới được ghi riêng.
 
 ## Quy tắc review
 

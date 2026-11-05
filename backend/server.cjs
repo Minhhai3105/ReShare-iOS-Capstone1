@@ -59,7 +59,14 @@ const adminWebOrigins = new Set((process.env.ADMIN_WEB_ORIGINS || '')
   .split(',').map(origin => origin.trim()).filter(Boolean));
 
 const server = http.createServer(async (request, response) => {
-  const pathname = new URL(request.url, 'http://localhost').pathname;
+  let pathname;
+  try {
+    pathname = new URL(request.url, 'http://localhost').pathname;
+  } catch {
+    response.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    response.end(JSON.stringify({ message: 'Invalid request URL' }));
+    return;
+  }
   const isAdminApi = pathname.startsWith('/v1/admin/');
   const isDonationAdminPath = pathname.startsWith('/v1/admin/donations');
   const isDonationResubmitPath = /^\/v1\/donations\/[^/]+\/resubmit$/.test(pathname);
