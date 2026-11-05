@@ -3,6 +3,7 @@ import PhotosUI
 
 struct DonationResubmitView: View {
     let item: DonationItem
+    let onResubmitted: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var title: String
     @State private var notes: String
@@ -22,8 +23,9 @@ struct DonationResubmitView: View {
     @State private var replacementImagesRequired: Bool
     @State private var error: String?
 
-    init(item: DonationItem) {
+    init(item: DonationItem, onResubmitted: @escaping () -> Void = {}) {
         self.item = item
+        self.onResubmitted = onResubmitted
         _title = State(initialValue: item.title)
         _notes = State(initialValue: item.description)
         _category = State(initialValue: item.category)
@@ -125,6 +127,7 @@ struct DonationResubmitView: View {
                     imageUploadRecordId: uploaded.isEmpty ? nil : uploadId)
                 pendingRequest = request
                 try await DonationResubmissionService.submit(donationId: item.id, request: request)
+                onResubmitted()
                 dismiss()
             } catch {
                 if let apiError = error as? DonationResubmissionService.APIError, apiError.code == "REPLACEMENT_IMAGES_REQUIRED" {
