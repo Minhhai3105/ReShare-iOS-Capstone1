@@ -2,6 +2,7 @@ const { createHash } = require('node:crypto');
 const { ApiError, validateRecordId, validatePublicIds } = require('./image-api.cjs');
 const { runTransaction } = require('./firestore-transaction.cjs');
 const { quantityBase } = require('./quantity.cjs');
+const { publicHistory, mergeDonationHistory } = require('./donation-history.cjs');
 
 function createDonationResubmitApi({ db, verifyToken, serverTimestamp = () => new Date() }) {
   const editable = ['title', 'description', 'category', 'condition', 'quantity', 'unitId', 'imagePublicIds'];
@@ -33,8 +34,9 @@ function createDonationResubmitApi({ db, verifyToken, serverTimestamp = () => ne
     const auditRef = db.collection('donation_resubmissions').doc(`rs_${hash(`${claims.uid}:${donationId}:${body.idempotencyKey}`).slice(0, 40)}`);
     const fingerprint = hash(JSON.stringify({ fields, version: body.expectedVersion, upload: body.imageUploadRecordId || null }));
     const donationRef = db.collection('donations').doc(donationId);
+    const reviewRef = db.collection('donation_reviews').doc(donationId);
     const result = await runTransaction(db, async tx => {
-      const [donationDoc, prior] = await Promise.all([tx.get(donationRef), tx.get(auditRef)]);
+      const [donationDoc, prior, reviewDoc] = await Promise.all([tx.get(donationRef), tx.get(auditRef), tx.get(reviewRef)]);
       if (!donationDoc.exists) throw new ApiError(404, 'Donation not found');
       const donation = donationDoc.data();
       if (donation.donorId !== claims.uid) throw new ApiError(403, 'Only the donor can resubmit this donation');
@@ -70,10 +72,12 @@ function createDonationResubmitApi({ db, verifyToken, serverTimestamp = () => ne
       const response = { donation: { id: donationId, status: 'pending', reviewState: null, version }, idempotentReplay: false };
       const publicEvent = { action: 'resubmit', fromStatus: 'pending', toStatus: 'pending', reviewState: null,
         publicMessage: 'Donor đã bổ sung thông tin và gửi duyệt lại.', timestamp: new Date().toISOString(), version };
-      const history = Array.isArray(donation.history) ? donation.history : [];
+      const review = reviewDoc.exists ? reviewDoc.data() : {};
+      const history = [...mergeDonationHistory(donation.history, review.history), { ...publicEvent, actorUid: claims.uid }];
       tx.update(donationRef, { ...fields, imagePublicIds: images, imageProvider: 'cloudinary', imageUploadRecordId: uploadId,
         donorConfirmedCategory: fields.category, reviewState: null, statusNote: publicEvent.publicMessage,
-        version, resubmittedAt: at, history: [...history, publicEvent] });
+        version, resubmittedAt: at, history: publicHistory(history) });
+      tx.set(reviewRef, { ...review, donationId, history });
       tx.set(auditRef, { donationId, donorId: claims.uid, requestFingerprint: fingerprint, version, createdAt: at,
         before: Object.fromEntries(editable.map(key => [key, donation[key] ?? null])),
         after: { ...fields, imagePublicIds: images }, response });

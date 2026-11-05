@@ -9,7 +9,7 @@ function setup() {
       warehouseId: 'warehouse-a', title: 'Old', description: '', category: 'books', condition: 'good', imageProvider: 'cloudinary', imagePublicIds: images }],
     ['image_upload_batches/donation_11111111-1111-4111-8111-111111111111', { ownerUid: 'owner', assets: Object.fromEntries(images.map((id, i) => [i, id])) }],
   ]);
-  const ref = key => ({ key, id: key.split('/').at(-1) });
+  const ref = key => ({ key, id: key.split('/').at(-1), get: async () => snapshot({ key }) });
   const snapshot = reference => ({ exists: documents.has(reference.key), data: () => structuredClone(documents.get(reference.key)) });
   const db = { collection: name => ({ doc: id => ref(`${name}/${id}`) }), runTransaction: async work => {
     const writes = [];
@@ -21,7 +21,7 @@ function setup() {
   const api = createDonationResubmitApi({ db, verifyToken: async token => ({ uid: token }), serverTimestamp: () => 'test-time' });
   const draft = { title: 'Books clarified', description: 'More information', category: 'books', condition: 'good', quantity: 3, unitId: 'piece', expectedVersion: 2, idempotencyKey: 'retry-key-123456789' };
   const call = (body = draft, owner = 'owner') => api.handle('POST', '/v1/donations/11111111-1111-4111-8111-111111111111/resubmit', { authorization: `Bearer ${owner}` }, body);
-  return { documents, draft, call, api };
+  return { documents, draft, call, api, db };
 }
 
 test('Only the owner can resubmit; private operational fields cannot be supplied', async () => {
@@ -112,4 +112,29 @@ test('Explicit invalid replacement fields cannot silently reuse old images', asy
   for (const imagePublicIds of [null, [], ['bad-public-id']]) {
     await assert.rejects(call({ ...draft, imagePublicIds }), { status: 400 });
   }
+});
+
+test('Information -> resubmit -> approval keeps both timelines complete, private and replay-safe', async () => {
+  const { createDonationReviewApi } = require('../donation-review-api.cjs');
+  const { documents, draft, call, db } = setup();
+  const id = '11111111-1111-4111-8111-111111111111';
+  Object.assign(documents.get(`donations/${id}`), { status: 'pending', reviewState: null, version: 1 });
+  documents.set('staff_assignments/staff', { active: true, role: 'warehouse_admin', warehouseIds: ['warehouse-a'] });
+  const review = createDonationReviewApi({ db, verifyToken: async () => ({ uid: 'staff' }), serverTimestamp: () => 'test-time' });
+  const headers = { authorization: 'Bearer staff' };
+  await review.handle('POST', `/v1/admin/donations/${id}/decide`, headers, { action: 'information', publicMessage: 'Clarify the item', internalNote: 'Private staff note', expectedVersion: 1 });
+  await call(draft);
+  await call(draft);
+  assert.deepEqual((await review.get(id, headers)).body.donation.history.map(event => event.version), [2, 3]);
+  await review.handle('POST', `/v1/admin/donations/${id}/decide`, headers, { action: 'approve', expectedVersion: 3 });
+  const publicEvents = documents.get(`donations/${id}`).history;
+  const privateEvents = documents.get(`donation_reviews/${id}`).history;
+  assert.deepEqual(publicEvents.map(event => event.action), ['information', 'resubmit', 'approve']);
+  assert.deepEqual(privateEvents.map(event => event.version), [2, 3, 4]);
+  assert.equal(privateEvents[0].internalNote, 'Private staff note');
+  assert.equal(privateEvents[1].actorUid, 'owner');
+  assert.ok(publicEvents.every(event => event.internalNote === undefined && event.actorUid === undefined));
+  assert.equal([...documents.keys()].filter(key => key.startsWith('donation_resubmissions/')).length, 1);
+  documents.get(`donation_reviews/${id}`).history = privateEvents.filter(event => event.action !== 'resubmit');
+  assert.deepEqual((await review.get(id, headers)).body.donation.history.map(event => event.version), [2, 3, 4]);
 });

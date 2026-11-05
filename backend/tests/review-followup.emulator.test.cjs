@@ -16,20 +16,27 @@ test('BR03/BR04: resubmit reopens staff review and reservation expiry is atomic 
       await t.test('Concurrent resubmission retries produce one revision and can be reviewed again', async () => {
         const id = randomUUID(), images = [1, 2, 3].map(() => `donations/${id}/${randomUUID()}`);
         await seed(`donations/${id}`, { id, donorId: `${prefix}-donor`, title: 'Before', description: '', category: 'books', condition: 'good',
-          status: 'pending', reviewState: 'needs_information', version: 2, imageProvider: 'cloudinary', imagePublicIds: images });
+          status: 'pending', version: 1, quantity: 1, unitId: 'piece', imageProvider: 'cloudinary', imagePublicIds: images });
         await seed(`image_upload_batches/donation_${id}`, { ownerUid: `${prefix}-donor`, assets: Object.fromEntries(images.map((image, i) => [i, image])) });
         await seed(`staff_assignments/${prefix}-admin`, { uid: `${prefix}-admin`, role: 'system_admin', active: true, warehouseIds: [] });
         const cfg = { db, verifyToken: async token => ({ uid: `${prefix}-${token}` }), serverTimestamp: () => FieldValue.serverTimestamp() };
         const api = createDonationResubmitApi(cfg);
+        const review = createDonationReviewApi(cfg);
+        paths.push(`donation_reviews/${id}`);
+        await review.handle('POST', `/v1/admin/donations/${id}/decide`, { authorization: 'Bearer admin' }, { action: 'information', publicMessage: 'Clarify', internalNote: 'Staff only', expectedVersion: 1 });
         const body = { title: 'After', description: 'Details added', category: 'books', condition: 'good', quantity: 2, unitId: 'piece', expectedVersion: 2, idempotencyKey: `${prefix}-same-retry` };
         const replies = await Promise.all([1, 2].map(() => api.handle('POST', `/v1/donations/${id}/resubmit`, { authorization: 'Bearer donor' }, body)));
         assert.equal(replies.filter(reply => reply.body.idempotentReplay).length, 1);
         const audits = await db.collection('donation_resubmissions').where('donationId', '==', id).get();
         paths.push(...audits.docs.map(doc => doc.ref.path));
         assert.equal(audits.size, 1);
-        const review = createDonationReviewApi(cfg);
         await review.handle('POST', `/v1/admin/donations/${id}/decide`, { authorization: 'Bearer admin' }, { action: 'approve', expectedVersion: 3 });
         assert.equal((await db.doc(`donations/${id}`).get()).data().status, 'approved');
+        const publicEvents = (await db.doc(`donations/${id}`).get()).data().history;
+        const privateEvents = (await db.doc(`donation_reviews/${id}`).get()).data().history;
+        assert.deepEqual(publicEvents.map(event => event.version), [2, 3, 4]);
+        assert.deepEqual(privateEvents.map(event => event.version), [2, 3, 4]);
+        assert.ok(publicEvents.every(event => event.internalNote === undefined && event.actorUid === undefined));
       });
       await t.test('Legacy images require replacement and an authorized batch recovers the same donation', async () => {
         const id = randomUUID(), uploadId = randomUUID(), owner = `${prefix}-legacy`;
