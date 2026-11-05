@@ -1,5 +1,11 @@
 # ReShare CR01 — implementation follow-up
 
+## Bản tổng hợp sau review a8d926e
+
+Các kết quả ở phần dưới là lịch sử của CR01 `011ce79`. Đọc [bản xử lý review tiếp theo](REVIEW_FOLLOWUP_VI.md) để xem timeline/audit, scope kho, refresh iOS, validation và tối ưu SSE đã sửa sau `a8d926e`. Các bước này được lưu thành năm commit riêng; gói tổng hợp ghi chính xác HEAD trong `SOURCE_EVIDENCE.json`.
+
+Bản kiểm tra mới: Rules 14/14, Backend 140/140 trên Firestore Emulator, Web 107/107, landing 1/1; Swift Package XCTest 7/7 ở từng cấu hình Debug và Release. Web build và app iOS Simulator Debug/Release đạt. Không cộng hai lượt XCTest thành 14 ca độc lập. Chưa merge/deploy hoặc nghiệm thu iPhone–Web live.
+
 Ngày 05/11/2026. Nhánh `codex/document-review-followup-20261105`, tách từ `dev / 547b797`. Thay đổi local để nhóm và Claude review; chưa merge, push hoặc deploy, chưa sửa dữ liệu live/Jira/Drive.
 
 ## Phạm vi và kết quả
