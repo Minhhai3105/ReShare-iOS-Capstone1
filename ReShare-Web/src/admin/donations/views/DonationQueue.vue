@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
-import AuthShell from '../../auth/components/AuthShell.vue'
+import AdminFrame from '../../layout/AdminFrame.vue'
+import { useInAdminShell } from '../../layout/adminShell'
 import AuthIcon from '../../auth/components/AuthIcon.vue'
 import AdminSelect from '../../shared/AdminSelect.vue'
 import { staffAssignment } from '../../auth/auth.store'
@@ -13,6 +14,8 @@ import {
   DONATION_STATUS,
   DONATION_STATUS_LABEL,
 } from '../donation.constants'
+
+const inShell = useInAdminShell()
 
 const SKELETON_ROWS = 6
 const STATUS_TONE = {
@@ -108,7 +111,7 @@ watch(staffAssignment, () => {
 </script>
 
 <template>
-  <AuthShell>
+  <AdminFrame>
     <div class="donation-queue">
       <header class="donation-queue__header">
         <div>
@@ -302,7 +305,7 @@ watch(staffAssignment, () => {
         </div>
       </aside>
     </div>
-  </AuthShell>
+  </AdminFrame>
 </template>
 
 <style scoped>

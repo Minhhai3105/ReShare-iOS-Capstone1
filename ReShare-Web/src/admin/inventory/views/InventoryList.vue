@@ -323,7 +323,6 @@ onMounted(() => { startSync(); document.addEventListener('visibilitychange', sta
         <section class="inv-card inventory-help">
           <span class="inventory-title__icon"><AuthIcon name="help-circle" :size="22" /></span>
           <div><strong>Cần trợ giúp nhập kho?</strong><p class="inventory-muted">Liên hệ giám sát viên ca trực</p></div>
-          <AuthIcon name="chevron-right" :size="20" />
         </section>
       </div>
     </div>

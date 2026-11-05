@@ -1,10 +1,13 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import AuthShell from '../auth/components/AuthShell.vue'
+import AdminFrame from '../layout/AdminFrame.vue'
+import { useInAdminShell } from '../layout/adminShell'
 import { ADMIN_ROUTE, USER_ROLE, USER_ROLE_LABEL } from '../auth/auth.constants'
 import { currentUser, signOut } from '../auth/auth.store'
 import { assignStaff, listStaff, listStaffAudit, listWarehouses, lookupAccount, revokeStaff } from './staff.service'
+
+const inShell = useInAdminShell()
 
 const router = useRouter()
 const staff = ref([])
@@ -180,9 +183,9 @@ onMounted(refresh)
 </script>
 
 <template>
-  <AuthShell>
+  <AdminFrame>
     <div class="staff-page">
-      <nav class="staff-page__nav" aria-label="Điều hướng quản trị">
+      <nav v-if="!inShell" class="staff-page__nav" aria-label="Điều hướng quản trị">
         <router-link :to="{ name: ADMIN_ROUTE.home }">Tổng quan</router-link>
         <span aria-hidden="true">/</span>
         <strong>Nhân sự & quyền</strong>
@@ -194,7 +197,7 @@ onMounted(refresh)
           <h1>Quản lý nhân sự</h1>
           <p>Cấp quyền theo vai trò và kho được phân công. Mỗi thay đổi đều có lịch sử.</p>
         </div>
-        <button type="button" class="auth-btn auth-btn--soft" @click="onSignOut">Đăng xuất</button>
+        <button v-if="!inShell" type="button" class="auth-btn auth-btn--soft" @click="onSignOut">Đăng xuất</button>
       </header>
 
       <p v-if="error" class="staff-alert staff-alert--error" role="alert">{{ error }}</p>
@@ -362,7 +365,7 @@ onMounted(refresh)
         </template>
       </section>
     </div>
-  </AuthShell>
+  </AdminFrame>
 </template>
 
 <style scoped>

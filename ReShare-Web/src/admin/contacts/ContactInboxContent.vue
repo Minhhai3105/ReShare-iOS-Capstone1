@@ -2,7 +2,11 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import AuthIcon from '../auth/components/AuthIcon.vue'
 
-const props = defineProps({ state: { type: Object, required: true } })
+const props = defineProps({
+  state: { type: Object, required: true },
+  // Trong khung quản trị, thanh vị trí của khung đã thay cho đường dẫn này.
+  showBreadcrumb: { type: Boolean, default: true },
+})
 const emit = defineEmits(['refresh', 'next', 'previous', 'select', 'home', 'login'])
 const detailOpen = ref(false)
 const detailHeading = ref(null)
@@ -36,7 +40,7 @@ async function backToList() {
 
 <template>
   <div class="contacts-page">
-    <nav class="contacts-breadcrumb" aria-label="Đường dẫn trang">
+    <nav v-if="showBreadcrumb" class="contacts-breadcrumb" aria-label="Đường dẫn trang">
       <slot name="navigation"><button type="button" @click="emit('home')">Tổng quan</button></slot>
       <span aria-hidden="true">/</span><span aria-current="page">Liên hệ</span>
     </nav>

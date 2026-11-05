@@ -2,6 +2,10 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import InventoryLayout from '../InventoryLayout.vue'
+import { useInAdminShell } from '../../layout/adminShell'
+
+// Trong khung quản trị nút Quay lại và thanh vị trí đã có ở thanh trên cùng.
+const inShell = useInAdminShell()
 import AuthIcon from '../../auth/components/AuthIcon.vue'
 import { staffAssignment } from '../../auth/auth.store'
 import { ADMIN_ROUTE, USER_ROLE } from '../../auth/auth.constants'
@@ -93,14 +97,14 @@ onBeforeUnmount(() => { latestRequestId += 1 })
     @select-warehouse="(warehouseId) => router.push({ name: ADMIN_ROUTE.inventory, query: { warehouseId: warehouseId || undefined } })"
   >
     <nav class="px-crumbs">
-      <span><AuthIcon name="dashboard" :size="16" />Hệ thống › Vận hành kho › <b>Quản lý kho hàng</b></span>
+      <span v-if="!inShell"><AuthIcon name="dashboard" :size="16" />Hệ thống › Vận hành kho › <b>Quản lý kho hàng</b></span>
       <button type="button" class="px-refresh" :disabled="isLoading" @click="load">
         Cập nhật: {{ loadedAt ? formatDateTime(loadedAt) : '—' }}<AuthIcon name="refresh" :size="16" />
       </button>
     </nav>
 
     <div class="px-chips">
-      <RouterLink :to="{ name: ADMIN_ROUTE.inventory, query: voucher ? { warehouseId: voucher.warehouseId } : {} }" class="inv-chip px-back">
+      <RouterLink :to="{ name: ADMIN_ROUTE.inventory, query: voucher ? { warehouseId: voucher.warehouseId } : {} }" v-if="!inShell" class="inv-chip px-back">
         <AuthIcon name="arrow-left" :size="16" />Quay lại kho hàng
       </RouterLink>
       <span class="inv-chip px-chip-blue"><AuthIcon name="warehouse" :size="15" />Phạm vi kho: {{ scopeName }}</span>

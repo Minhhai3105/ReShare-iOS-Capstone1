@@ -1,11 +1,14 @@
 <script setup>
 import { computed, onBeforeUnmount, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import AuthShell from '../auth/components/AuthShell.vue'
+import AdminFrame from '../layout/AdminFrame.vue'
+import { useInAdminShell } from '../layout/adminShell'
 import { ADMIN_ROUTE, USER_ROLE } from '../auth/auth.constants.js'
 import { currentUser, signOut, staffAssignment } from '../auth/auth.store.js'
 import ContactInboxContent from './ContactInboxContent.vue'
 import { useContactInbox } from './useContactInbox.js'
+
+const inShell = useInAdminShell()
 
 const router = useRouter()
 const inbox = useContactInbox()
@@ -24,10 +27,11 @@ async function loginAgain() {
 </script>
 
 <template>
-  <AuthShell>
+  <AdminFrame>
     <ContactInboxContent
       v-if="canRead"
       :state="inbox.state"
+      :show-breadcrumb="!inShell"
       @refresh="inbox.refresh"
       @next="inbox.next"
       @previous="inbox.previous"
@@ -44,7 +48,7 @@ async function loginAgain() {
       <p>Hộp thư này dành cho Quản trị hệ thống đang hoạt động.</p>
       <RouterLink :to="{ name: ADMIN_ROUTE.home }">Về tổng quan</RouterLink>
     </section>
-  </AuthShell>
+  </AdminFrame>
 </template>
 
 <style scoped>

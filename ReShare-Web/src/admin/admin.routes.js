@@ -9,162 +9,51 @@ import {
   staffAssignment,
 } from './auth/auth.store'
 
+const ADMIN_PAGE_META = Object.freeze({ requiresAuth: true, roles: ADMIN_ROLES })
+const SYSTEM_ADMIN_META = Object.freeze({ requiresAuth: true, roles: ['system_admin'] })
+
+// Các trang vận hành thật nằm trong một khung chung (AdminLayout): sidebar và thanh trên cùng không đổi khi chuyển trang.
+const adminPageRoutes = [
+  { path: '', name: ADMIN_ROUTE.home, component: () => import('./AdminHome.vue'), meta: ADMIN_PAGE_META },
+  { path: 'staff', name: ADMIN_ROUTE.staff, component: () => import('./staff/StaffManagement.vue'), meta: SYSTEM_ADMIN_META },
+  { path: 'contacts', name: ADMIN_ROUTE.contacts, component: () => import('./contacts/ContactInbox.vue'), meta: SYSTEM_ADMIN_META },
+  { path: 'donations', name: ADMIN_ROUTE.donationQueue, component: () => import('./donations/views/DonationQueue.vue'), meta: ADMIN_PAGE_META },
+  { path: 'donations/:donationId', name: 'admin-donation-detail', component: () => import('./donations/DonationDetailRoute.vue'), meta: ADMIN_PAGE_META },
+  { path: 'donations/:donationId/receipt', name: 'admin-donation-receipt', component: () => import('./receipt/views/ActualReceipt.vue'), meta: ADMIN_PAGE_META },
+  { path: 'donations/:donationId/stock-in', name: 'admin-donation-stock-in', component: () => import('./stockin/views/StockIn.vue'), meta: ADMIN_PAGE_META },
+  { path: 'stock-entries/:entryId', name: 'admin-stock-entry-detail', component: () => import('./stockin/views/StockEntryDetail.vue'), meta: ADMIN_PAGE_META },
+  { path: 'inventory', name: ADMIN_ROUTE.inventory, component: () => import('./inventory/views/InventoryList.vue'), meta: ADMIN_PAGE_META },
+  { path: 'inventory/:itemId', name: ADMIN_ROUTE.inventoryDetail, component: () => import('./inventory/views/InventoryDetail.vue'), meta: ADMIN_PAGE_META },
+  { path: 'inventory/distributions/:voucherId', name: ADMIN_ROUTE.distributionDetail, component: () => import('./inventory/views/DistributionDetail.vue'), meta: ADMIN_PAGE_META },
+  { path: 'beneficiaries', name: ADMIN_ROUTE.beneficiaryList, component: () => import('./beneficiaries/BeneficiaryList.vue'), meta: ADMIN_PAGE_META },
+  { path: 'beneficiaries/new', name: ADMIN_ROUTE.beneficiaryNew, component: () => import('./beneficiaries/BeneficiaryForm.vue'), meta: ADMIN_PAGE_META },
+  { path: 'beneficiaries/:beneficiaryId', name: ADMIN_ROUTE.beneficiaryDetail, component: () => import('./beneficiaries/BeneficiaryDetail.vue'), meta: ADMIN_PAGE_META },
+  { path: 'beneficiaries/:beneficiaryId/edit', name: ADMIN_ROUTE.beneficiaryEdit, component: () => import('./beneficiaries/BeneficiaryForm.vue'), meta: ADMIN_PAGE_META },
+  { path: 'distribution', name: 'admin-distribution', component: () => import('./distribution/DistributionRoute.vue'), meta: ADMIN_PAGE_META },
+  { path: 'reports', name: 'admin-reports', component: () => import('./reports/ReportsRoute.vue'), meta: ADMIN_PAGE_META },
+]
+
+// Route xem thử chỉ có khi chạy DEV: dùng dữ liệu mẫu, cố ý nằm ngoài khung để không lẫn với trang thật.
+const devPreviewRoutes = import.meta.env.DEV ? [
+  { path: '/admin/reports-preview', name: 'admin-reports-preview', component: () => import('./reports/ReportsPreviewRoute.vue'), meta: { ...ADMIN_PAGE_META, devPreview: true } },
+  { path: '/admin/distribution-preview', name: 'admin-distribution-preview', component: () => import('./distribution/DistributionPreviewRoute.vue'), meta: { ...ADMIN_PAGE_META, devPreview: true } },
+  { path: '/admin/warehouses/:warehouseId/donations/:donationId', name: 'admin-donation-detail-preview', component: () => import('./donations/DonationDetailRoute.vue'), meta: ADMIN_PAGE_META },
+  { path: '/admin/receipt-preview', name: 'admin-donation-receipt-preview', component: () => import('./receipt/views/ActualReceipt.vue'), meta: { ...ADMIN_PAGE_META, devPreview: true } },
+  { path: '/admin/stock-in-preview', name: 'admin-donation-stock-in-preview', component: () => import('./stockin/views/StockIn.vue'), meta: { ...ADMIN_PAGE_META, devPreview: true } },
+  { path: '/admin/stock-entry-preview', name: 'admin-stock-entry-preview', component: () => import('./stockin/views/StockEntryDetail.vue'), meta: { ...ADMIN_PAGE_META, devPreview: true } },
+  { path: '/admin/ai-review-preview', name: 'admin-ai-review-preview', component: () => import('./DonationAiReviewDemo.vue'), meta: ADMIN_PAGE_META },
+] : []
+
 export const adminRoutes = [
-  {
-    path: '/admin/reports',
-    name: 'admin-reports',
-    component: () => import('./reports/ReportsRoute.vue'),
-    meta: { requiresAuth: true, roles: ADMIN_ROLES },
-  },
-  {
-    path: '/admin/distribution',
-    name: 'admin-distribution',
-    component: () => import('./distribution/DistributionRoute.vue'),
-    meta: { requiresAuth: true, roles: ADMIN_ROLES },
-  },
-  ...(import.meta.env.DEV ? [{
-    path: '/admin/reports-preview',
-    name: 'admin-reports-preview',
-    component: () => import('./reports/ReportsPreviewRoute.vue'),
-    meta: { requiresAuth: true, roles: ADMIN_ROLES, devPreview: true },
-  }] : []),
-  ...(import.meta.env.DEV ? [{
-    path: '/admin/distribution-preview',
-    name: 'admin-distribution-preview',
-    component: () => import('./distribution/DistributionPreviewRoute.vue'),
-    meta: { requiresAuth: true, roles: ADMIN_ROLES, devPreview: true },
-  }] : []),
   { path: '/admin/login', name: ADMIN_ROUTE.login, component: () => import('./auth/views/AdminLogin.vue') },
-  {
-    path: '/admin/forgot-password',
-    name: ADMIN_ROUTE.forgotPassword,
-    component: () => import('./auth/views/AdminForgotPassword.vue'),
-  },
-  {
-    path: '/admin/403',
-    name: ADMIN_ROUTE.forbidden,
-    component: () => import('./auth/views/AdminForbidden.vue'),
-    meta: { requiresAuth: true },
-  },
-  {
-    path: '/admin/donations/:donationId',
-    name: 'admin-donation-detail',
-    component: () => import('./donations/DonationDetailRoute.vue'),
-    meta: { requiresAuth: true, roles: ADMIN_ROLES },
-  },
-  ...(import.meta.env.DEV ? [{
-    path: '/admin/warehouses/:warehouseId/donations/:donationId',
-    name: 'admin-donation-detail-preview',
-    component: () => import('./donations/DonationDetailRoute.vue'),
-    meta: { requiresAuth: true, roles: ADMIN_ROLES },
-  }] : []),
+  { path: '/admin/forgot-password', name: ADMIN_ROUTE.forgotPassword, component: () => import('./auth/views/AdminForgotPassword.vue') },
+  { path: '/admin/403', name: ADMIN_ROUTE.forbidden, component: () => import('./auth/views/AdminForbidden.vue'), meta: { requiresAuth: true } },
+  ...devPreviewRoutes,
   {
     path: '/admin',
-    name: ADMIN_ROUTE.home,
-    component: () => import('./AdminHome.vue'),
-    meta: { requiresAuth: true, roles: ADMIN_ROLES },
-  },
-  {
-    path: '/admin/staff',
-    name: ADMIN_ROUTE.staff,
-    component: () => import('./staff/StaffManagement.vue'),
-    meta: { requiresAuth: true, roles: ['system_admin'] },
-  },
-  {
-    path: '/admin/contacts',
-    name: ADMIN_ROUTE.contacts,
-    component: () => import('./contacts/ContactInbox.vue'),
-    meta: { requiresAuth: true, roles: ['system_admin'] },
-  },
-  {
-    path: '/admin/donations',
-    name: ADMIN_ROUTE.donationQueue,
-    component: () => import('./donations/views/DonationQueue.vue'),
-    meta: { requiresAuth: true, roles: ADMIN_ROLES },
-  },
-  {
-    path: '/admin/beneficiaries',
-    name: ADMIN_ROUTE.beneficiaryList,
-    component: () => import('./beneficiaries/BeneficiaryList.vue'),
-    meta: { requiresAuth: true, roles: ADMIN_ROLES },
-  },
-  {
-    path: '/admin/beneficiaries/new',
-    name: ADMIN_ROUTE.beneficiaryNew,
-    component: () => import('./beneficiaries/BeneficiaryForm.vue'),
-    meta: { requiresAuth: true, roles: ADMIN_ROLES },
-  },
-  {
-    path: '/admin/beneficiaries/:beneficiaryId',
-    name: ADMIN_ROUTE.beneficiaryDetail,
-    component: () => import('./beneficiaries/BeneficiaryDetail.vue'),
-    meta: { requiresAuth: true, roles: ADMIN_ROLES },
-  },
-  {
-    path: '/admin/beneficiaries/:beneficiaryId/edit',
-    name: ADMIN_ROUTE.beneficiaryEdit,
-    component: () => import('./beneficiaries/BeneficiaryForm.vue'),
-    meta: { requiresAuth: true, roles: ADMIN_ROLES },
-  },
-  ...(import.meta.env.DEV ? [{
-    path: '/admin/receipt-preview',
-    name: 'admin-donation-receipt-preview',
-    component: () => import('./receipt/views/ActualReceipt.vue'),
-    meta: { requiresAuth: true, roles: ADMIN_ROLES, devPreview: true },
-  }] : []),
-  {
-    path: '/admin/donations/:donationId/receipt',
-    name: 'admin-donation-receipt',
-    component: () => import('./receipt/views/ActualReceipt.vue'),
-    meta: { requiresAuth: true, roles: ADMIN_ROLES },
-  },
-  ...(import.meta.env.DEV ? [{
-    path: '/admin/stock-in-preview',
-    name: 'admin-donation-stock-in-preview',
-    component: () => import('./stockin/views/StockIn.vue'),
-    meta: { requiresAuth: true, roles: ADMIN_ROLES, devPreview: true },
-  }] : []),
-  {
-    path: '/admin/donations/:donationId/stock-in',
-    name: 'admin-donation-stock-in',
-    component: () => import('./stockin/views/StockIn.vue'),
-    meta: { requiresAuth: true, roles: ADMIN_ROLES },
-  },
-  ...(import.meta.env.DEV ? [{
-    path: '/admin/stock-entry-preview',
-    name: 'admin-stock-entry-preview',
-    component: () => import('./stockin/views/StockEntryDetail.vue'),
-    meta: { requiresAuth: true, roles: ADMIN_ROLES, devPreview: true },
-  }] : []),
-  {
-    path: '/admin/stock-entries/:entryId',
-    name: 'admin-stock-entry-detail',
-    component: () => import('./stockin/views/StockEntryDetail.vue'),
-    meta: { requiresAuth: true, roles: ADMIN_ROLES },
-  },
-  ...(import.meta.env.DEV ? [{
-    path: '/admin/ai-review-preview',
-    name: 'admin-ai-review-preview',
-    component: () => import('./DonationAiReviewDemo.vue'),
-    meta: { requiresAuth: true, roles: ADMIN_ROLES },
-  }] : []),
-  {
-    path: '/admin/inventory',
-    name: ADMIN_ROUTE.inventory,
-    component: () => import('./inventory/views/InventoryList.vue'),
-    meta: { requiresAuth: true, roles: ADMIN_ROLES },
-  },
-  {
-    path: '/admin/inventory/:itemId',
-    name: ADMIN_ROUTE.inventoryDetail,
-    component: () => import('./inventory/views/InventoryDetail.vue'),
-    meta: { requiresAuth: true, roles: ADMIN_ROLES },
-  },
-  {
-    path: '/admin/inventory/distributions/:voucherId',
-    name: ADMIN_ROUTE.distributionDetail,
-    component: () => import('./inventory/views/DistributionDetail.vue'),
-    meta: { requiresAuth: true, roles: ADMIN_ROLES },
+    component: () => import('./layout/AdminLayout.vue'),
+    meta: { requiresAuth: true },
+    children: adminPageRoutes,
   },
   { path: '/admin/:pathMatch(.*)*', redirect: () => ({ name: ADMIN_ROUTE.home, params: {} }) },
 ]

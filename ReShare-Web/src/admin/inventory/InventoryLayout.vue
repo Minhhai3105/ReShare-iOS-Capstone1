@@ -5,6 +5,7 @@ import logoUrl from '../auth/assets/reshare-logo.png'
 import { currentUser, staffAssignment } from '../auth/auth.store'
 import { ADMIN_ROUTE, USER_ROLE, USER_ROLE_LABEL } from '../auth/auth.constants'
 import { INVENTORY_IS_MOCK } from './inventory.service'
+import { useInAdminShell } from '../layout/adminShell'
 
 // Nhãn demo (Sandbox, Demo, Xem thử, Prototype) chỉ hiện khi chạy dữ liệu mẫu ở dev, không hiện trên bản production.
 const IS_SAMPLE_DATA = INVENTORY_IS_MOCK
@@ -14,6 +15,8 @@ const props = defineProps({
   selectedWarehouseId: { type: String, default: '' },
 })
 const emit = defineEmits(['select-warehouse'])
+// Trong khung quản trị: sidebar/topbar do AdminLayout vẽ; ô chọn kho chuyển vào đầu nội dung.
+const inShell = useInAdminShell()
 
 const NAV = [
   { label: 'Tổng quan', icon: 'dashboard', to: { name: ADMIN_ROUTE.home } },
@@ -34,8 +37,8 @@ const currentYear = new Date().getFullYear()
 </script>
 
 <template>
-  <div class="inv">
-    <aside class="inv-sidebar">
+  <div :class="['inv', { 'inv--embedded': inShell }]">
+    <aside v-if="!inShell" class="inv-sidebar">
       <div class="inv-brand">
         <img :src="logoUrl" alt="" />
         <div><strong>ReShare Portal</strong><small>Hệ thống điều phối vận hành</small></div>
@@ -80,7 +83,7 @@ const currentYear = new Date().getFullYear()
     </aside>
 
     <div class="inv-main">
-      <header class="inv-topbar">
+      <header v-if="!inShell" class="inv-topbar">
         <div class="inv-search"><AuthIcon name="search" :size="18" />Tìm kiện hàng, mã đơn, vật phẩm...<kbd>⌘K</kbd></div>
         <div class="inv-shift"><AuthIcon name="clock" :size="18" />Ca trực:<b>Sáng (08:00 - 16:30)</b></div>
         <span class="inv-bell"><AuthIcon name="bell" :size="20" /><i /></span>
@@ -95,10 +98,25 @@ const currentYear = new Date().getFullYear()
           <strong>ĐANG DÙNG DỮ LIỆU MẪU</strong>
           <p>Các màn kho này không đọc dữ liệu kho từ máy chủ. Không dùng kết quả này để nghiệm thu nhập hoặc phân phối thực tế.</p>
         </section>
+        <div v-if="inShell" class="inv-workbar">
+          <span class="inv-workbar__label"><AuthIcon name="warehouse" :size="16" />Kho làm việc</span>
+          <select
+            v-if="warehouses.length > 1"
+            :value="selectedWarehouseId"
+            aria-label="Chọn kho làm việc"
+            @change="emit('select-warehouse', $event.target.value)"
+          >
+            <option v-if="isSystemAdmin" value="">Tất cả kho</option>
+            <option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">{{ warehouse.name }}</option>
+          </select>
+          <strong v-else>{{ warehouses[0]?.name ?? '—' }}</strong>
+          <small>{{ selectedWarehouse?.area || 'Toàn bộ kho được phân quyền' }}</small>
+          <span v-if="IS_SAMPLE_DATA" class="inv-chip inv-chip--green">Demo</span>
+        </div>
         <slot />
       </main>
 
-      <footer class="inv-footer">
+      <footer v-if="!inShell" class="inv-footer">
         <span v-if="IS_SAMPLE_DATA">Bản xem thử – chưa kết nối máy chủ kho</span>
         <span>© {{ currentYear }} ReShare Circular Fashion Hub. Hệ thống điều phối nội bộ.</span>
         <span>Trung tâm trợ giúp vận hành</span>
@@ -148,6 +166,13 @@ const currentYear = new Date().getFullYear()
 .inv-workplace strong, .inv-workplace select { font-size: 17px; font-weight: 600; }
 .inv-workplace select { padding: 4px 6px; border: 1px solid var(--inv-border); border-radius: 8px; background: #fff; }
 .inv-workplace small { color: var(--inv-muted); }
+.inv--embedded { display: block; min-height: 0; background: transparent; }
+.inv--embedded .inv-content { padding: 0; }
+.inv-workbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 16px; border-radius: 12px; background: #fff; box-shadow: 0 1px 3px rgb(28 35 49 / 0.06); }
+.inv-workbar__label { display: inline-flex; align-items: center; gap: 6px; color: var(--inv-muted); font-size: 14px; }
+.inv-workbar select { min-height: 40px; padding: 6px 10px; border: 1px solid var(--inv-border); border-radius: 8px; background: #fff; font-weight: 600; }
+.inv-workbar strong { font-weight: 600; }
+.inv-workbar small { color: var(--inv-muted); }
 .inv-live { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; color: var(--inv-green); }
 .inv-nav-group { margin-top: 10px !important; padding: 0 10px 6px; font-size: 13px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--inv-muted); }
 .inv-nav { display: flex; align-items: center; gap: 14px; min-height: 46px; padding: 0 14px; border-radius: 10px; color: var(--inv-text); text-decoration: none; font-size: 16px; }

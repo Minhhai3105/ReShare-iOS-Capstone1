@@ -2,6 +2,10 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import InventoryLayout from '../InventoryLayout.vue'
+import { useInAdminShell } from '../../layout/adminShell'
+
+// Trong khung quản trị nút Quay lại và thanh vị trí đã có ở thanh trên cùng.
+const inShell = useInAdminShell()
 import AuthIcon from '../../auth/components/AuthIcon.vue'
 import { staffAssignment } from '../../auth/auth.store'
 import { ADMIN_ROUTE, USER_ROLE, USER_ROLE_LABEL } from '../../auth/auth.constants'
@@ -142,7 +146,7 @@ onBeforeUnmount(() => { latestRequestId += 1; syncGeneration += 1; stopSync(); d
     @select-warehouse="(warehouseId) => router.push({ name: ADMIN_ROUTE.inventory, query: { warehouseId: warehouseId || undefined } })"
   >
     <p v-if="syncError && !IS_SAMPLE_DATA" role="status">Đồng bộ tự động đang gián đoạn; hệ thống sẽ thử kết nối lại.</p>
-    <nav class="detail-crumbs">
+    <nav v-if="!inShell" class="detail-crumbs">
       <span><AuthIcon name="archive" :size="16" /><RouterLink :to="{ name: ADMIN_ROUTE.inventory }">Kho hàng</RouterLink> / <b>Chi tiết vật phẩm</b></span>
       <RouterLink :to="{ name: ADMIN_ROUTE.inventory, query: item ? { warehouseId: item.warehouseId } : {} }" class="detail-back">
         <AuthIcon name="arrow-left" :size="16" />Quay lại kho hàng

@@ -1,11 +1,14 @@
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
-import AuthShell from '../auth/components/AuthShell.vue'
+import AdminFrame from '../layout/AdminFrame.vue'
+import { useInAdminShell } from '../layout/adminShell'
 import { decideDemoDonation, loadDemoDonation, statusLabels, steps } from './donation.demo'
 import { assignDonationWarehouse, confirmDonationCategory, decideDonation, fetchQueueWarehouses, getAiAgreementSummary, getDonationForReview, getDonationImageUrl, resolveQueueAccess } from './donation.service'
 import { staffAssignment } from '../auth/auth.store'
 import { listWarehouses } from '../staff/staff.service'
 import { donationSender } from './donation-sender.js'
+
+const inShell = useInAdminShell()
 
 // Auth belongs to the routed adapter; the shared view has no Firebase dependency.
 const props = defineProps({
@@ -285,10 +288,10 @@ watch(enlarged, async (value) => {
 </script>
 
 <template>
-  <AuthShell :show-server-status="false">
+  <AdminFrame :show-server-status="false">
     <div class="donation-page">
       <p v-if="localPreview" class="eyebrow">PREVIEW LOCAL ĐỘC LẬP · KHÔNG CẦN ĐĂNG NHẬP</p>
-      <RouterLink v-else :to="{ name: 'admin-donation-queue' }">← Về hàng đợi</RouterLink>
+      <RouterLink v-else-if="!inShell" :to="{ name: 'admin-donation-queue' }">← Về hàng đợi</RouterLink>
       <header class="page-heading"><div><p class="eyebrow">THẨM ĐỊNH QUYÊN GÓP</p><h1>Chi tiết đơn quyên góp</h1></div><span v-if="localPreview" class="demo-tag">DEMO / MOCK · RC1D-67</span></header>
       <p v-if="localPreview" class="demo-notice">Dữ liệu và ảnh minh họa mock; quyết định chỉ lưu trong bộ nhớ và mất khi tải lại trang. Preview local không đọc/ghi Firebase hoặc gọi API thật.</p>
       <div v-if="localPreview" class="demo-controls">
@@ -425,7 +428,7 @@ watch(enlarged, async (value) => {
         <button autofocus @click="enlarged = false">Đóng ảnh</button><img :src="activeImage.url" :alt="activeImage.alt" />
       </dialog>
     </div>
-  </AuthShell>
+  </AdminFrame>
 </template>
 
 <style scoped>
