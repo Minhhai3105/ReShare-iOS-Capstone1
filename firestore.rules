@@ -99,6 +99,16 @@ service cloud.firestore {
         return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
       }
 
+      function reservationMatchesConversation() {
+        let chat = getAfter(/databases/$(database)/documents/conversations/$(request.resource.data.reservedChatId)).data;
+        return chat.itemId == itemId && chat.donorId == request.auth.uid
+          && chat.requesterId == request.resource.data.reservedRequesterId
+          && chat.get('isReserved', false) == true && chat.get('appointmentStatus', 'none') == 'accepted'
+          && chat.get('proposedPickupTime', null) is timestamp
+          && chat.get('reservationDeadline', null) == request.resource.data.reservationDeadline
+          && request.resource.data.reservationDeadline == chat.proposedPickupTime + duration.value(2, 'h');
+      }
+
       function canReserve() {
         return request.auth.uid == resource.data.donorId
           && resource.data.status in ['available', 'Sẵn sàng nhận đồ']
@@ -113,7 +123,8 @@ service cloud.firestore {
           && request.resource.data.reservedRequesterId != request.auth.uid
           && request.resource.data.get('reservationDeadline', null) is timestamp
           && request.resource.data.get('donorHandoverConfirmed', false) == false
-          && request.resource.data.get('requesterHandoverConfirmed', false) == false;
+          && request.resource.data.get('requesterHandoverConfirmed', false) == false
+          && reservationMatchesConversation();
       }
 
       function canCancel() {
@@ -253,6 +264,7 @@ service cloud.firestore {
           // đồng ý một thẻ đề xuất cũ hơn, nên không bắt trùng đề xuất mới nhất — giống hành vi trước đây).
           && request.resource.data.get('proposedPickupTime', null) is timestamp
           && request.resource.data.get('reservationDeadline', null) == item.get('reservationDeadline', null)
+          && request.resource.data.reservationDeadline == request.resource.data.proposedPickupTime + duration.value(2, 'h')
           && changed.hasOnly([
             'appointmentStatus', 'isReserved', 'proposedPickupTime',
             'reservationDeadline', 'donorHandoverConfirmed',
@@ -411,10 +423,13 @@ service cloud.firestore {
               (data.keys().hasAll(['quantity', 'unitId'])
                 && data.quantity is number
                 && data.quantity > 0
-                && data.unitId in ['piece', 'kg', 'bag', 'box', 'set']))
+                && data.unitId in ['piece', 'kg', 'bag', 'box', 'set']
+                && (data.unitId == 'kg'
+                  ? (data.quantity * 1000 <= 9007199254740991 && data.quantity == math.round(data.quantity * 1000) / 1000.0)
+                  : (data.quantity <= 9007199254740991 && data.quantity == math.floor(data.quantity)))))
           && data.createdAt is timestamp
           && data.imageProvider == 'cloudinary'
-          && !data.keys().hasAny(['warehouseId', 'warehouseName'])
+          && !data.keys().hasAny(['warehouseId', 'warehouseName', 'imageUploadRecordId', 'resubmittedAt'])
           && validCloudinaryImages('donation', donationId);
       }
 
@@ -447,6 +462,14 @@ service cloud.firestore {
     }
 
     match /donation_reviews/{donationId} {
+      allow read, write: if false;
+    }
+
+    match /donation_resubmissions/{revisionId} {
+      allow read, write: if false;
+    }
+
+    match /warehouse_inventory_updates/{scopeId} {
       allow read, write: if false;
     }
 

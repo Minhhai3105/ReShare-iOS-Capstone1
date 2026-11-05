@@ -91,7 +91,7 @@ function normalizeReviewDonation(record) {
     history: (record.history || []).map((event) => ({
       ...event,
       at: event.at || event.timestamp,
-      label: event.label || ({ approve: 'Đã duyệt', reject: 'Đã từ chối', information: 'Yêu cầu bổ sung' }[event.action] || 'Cập nhật trạng thái'),
+      label: event.label || ({ approve: 'Đã duyệt', reject: 'Đã từ chối', information: 'Yêu cầu bổ sung', resubmit: 'Đã bổ sung và gửi duyệt lại' }[event.action] || 'Cập nhật trạng thái'),
       actor: event.actor || event.actorEmail || event.actorUid || '',
       from: event.from || event.fromStatus || '',
       to: event.to || event.toStatus || '',

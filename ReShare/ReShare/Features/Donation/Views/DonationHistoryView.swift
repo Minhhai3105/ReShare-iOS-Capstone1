@@ -75,7 +75,7 @@ struct DonationHistoryView: View {
                     ScrollView {
                         VStack(spacing: 12) {
                             ForEach(filteredItems) { item in
-                                HistoryItemCard(item: item)
+                                HistoryItemCard(item: item, onResubmitted: { Task { await loadHistory() } })
                             }
                         }
                         .padding(.horizontal, 20)
@@ -148,7 +148,10 @@ struct DonationHistoryView: View {
 // MARK: - Card hiển thị 1 món đồ trong Lịch sử (Kèm Ảnh thật + Chấm trạng thái)
 struct HistoryItemCard: View {
     let item: DonationItem
+    var onResubmitted: () -> Void = {}
     @State private var protectedImageURL: URL?
+    @State private var showResubmit = false
+    @State private var didResubmit = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
@@ -189,7 +192,8 @@ struct HistoryItemCard: View {
                     .overlay(Circle().stroke(Color.white, lineWidth: 2))
                     .offset(x: -3, y: -3)
             }
-            .task(id: item.id) {
+            .task(id: "\(item.id)-\(item.imagePublicIds?.first ?? "")") {
+                protectedImageURL = nil
                 guard item.imageProvider == "cloudinary",
                       let publicId = item.imagePublicIds?.first else { return }
                 protectedImageURL = try? await CloudinaryImageService.shared.privateDonationImageURL(
@@ -257,6 +261,10 @@ struct HistoryItemCard: View {
                 }
 
                 // Hàng 4: Thời gian gửi & Trạm tiếp nhận
+                if item.status == .pending && item.reviewState == "needs_information" {
+                    Button("Bổ sung và gửi duyệt lại") { showResubmit = true }
+                        .font(.system(size: 12, weight: .semibold))
+                }
                 HStack {
                     HStack(spacing: 4) {
                         Image(systemName: "clock")
@@ -285,6 +293,12 @@ struct HistoryItemCard: View {
             RoundedRectangle(cornerRadius: 18)
                 .stroke(Color.black.opacity(0.08), lineWidth: 1)
         )
+        .sheet(isPresented: $showResubmit, onDismiss: {
+            if didResubmit {
+                didResubmit = false
+                onResubmitted()
+            }
+        }) { DonationResubmitView(item: item, onResubmitted: { didResubmit = true }) }
     }
 
     private var hubDisplayName: String {

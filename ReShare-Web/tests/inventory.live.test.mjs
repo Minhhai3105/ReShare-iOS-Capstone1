@@ -20,6 +20,16 @@ const item = (id, quantityAvailable, extra = {}) => ({
   id, warehouseId: 'wh_dn_02', itemName: `Vật phẩm ${id}`, unitId: 'piece', quantityAvailable, stockEntryId: `ste_${id}`, ...extra,
 })
 
+test('List carries the earliest revision across count/tab reads; detail preserves its snapshot revision', async () => {
+  const { source } = setup({
+    '/v1/admin/inventory?stock=all': [200, { items: [item('a', 2)], revision: 'before-count' }],
+    '/v1/admin/inventory?stock=in_stock': [200, { items: [item('a', 3)], revision: 'after-tab' }],
+    '/v1/admin/inventory/a': [200, { item: item('a', 3), movements: [], revision: 'detail-revision' }],
+  })
+  assert.equal((await source.listInventory({ stock: 'in_stock' })).revision, 'before-count')
+  assert.equal((await source.getInventoryItem('a')).revision, 'detail-revision')
+});
+
 test('Danh sách: gửi bộ lọc lên API, số đếm lấy từ "Tất cả", tab khác gọi riêng theo stock', async () => {
   const { source, calls } = setup({
     '/v1/admin/inventory?stock=all': [200, { items: [item('a', 2), item('b', 0), item('c', 1)], nextCursor: null }],

@@ -2,6 +2,7 @@ const { ApiError } = require('./image-api.cjs');
 const { FieldPath } = require('firebase-admin/firestore');
 const { cursorFor, readCursor, warehouseQueries, compareBy, mergedPage } = require('./scoped-pagination.cjs');
 const { staffEmails } = require('./staff-emails.cjs');
+const { readInventoryRevision } = require('./inventory-revision.cjs');
 
 const dateString = value => value?.toDate?.().toISOString() ||
   (value instanceof Date ? value.toISOString() : value || null);
@@ -63,6 +64,8 @@ function createInventoryApi({ db, auth, verifyToken }) {
     }
     if (warehouseId && !canRead(staff, warehouseId)) throw new ApiError(403, 'Warehouse access denied');
     if (staff.role === 'warehouse_admin' && !staff.warehouseIds.length) throw new ApiError(403, 'Warehouse assignment required');
+    // Read the revision BEFORE data so it is a safe lower bound for the returned snapshot.
+    const revision = await readInventoryRevision(db, warehouseId, staff.role === 'warehouse_admin' ? staff.warehouseIds : undefined);
     const filterKey = JSON.stringify({ kind: 'inventory', warehouseId, category, condition, stock, search });
     let cursor = await readCursor(db, 'inventory', url.searchParams.get('cursor'), filterKey,
       doc => canRead(staff, doc.data().warehouseId) &&
@@ -92,17 +95,23 @@ function createInventoryApi({ db, auth, verifyToken }) {
       more = consumed < page.docs.length || page.hasMore;
       if (!more) break;
     }
-    return { items, nextCursor: more ? cursorFor(cursor, filterKey) : null };
+    return { items, nextCursor: more ? cursorFor(cursor, filterKey) : null, revision };
   }
 
   async function detail(itemId, url, staff) {
     // Không khoá theo tiền tố inv_rcp_: list() trả về mọi ID trong collection, nên
     // detail() chặt hơn sẽ làm FE mở được dòng trong danh sách lại nhận 400.
     if (!/^[A-Za-z0-9_-]{1,120}$/.test(itemId)) throw new ApiError(400, 'Invalid inventory ID');
-    const doc = await db.collection('inventory').doc(itemId).get();
+    const reference = db.collection('inventory').doc(itemId);
+    let doc = await reference.get();
     if (!doc.exists) throw new ApiError(404, 'Inventory item not found');
+    const warehouseId = doc.data().warehouseId;
+    if (!canRead(staff, warehouseId)) throw new ApiError(403, 'Warehouse access denied');
+    const revision = await readInventoryRevision(db, warehouseId);
+    doc = await reference.get();
+    if (!doc.exists) throw new ApiError(404, 'Inventory item not found');
+    if (doc.data().warehouseId !== warehouseId) throw new ApiError(409, 'Inventory scope changed; reload');
     const item = itemFrom(doc);
-    if (!canRead(staff, item.warehouseId)) throw new ApiError(403, 'Warehouse access denied');
     const limit = integer(url.searchParams.get('limit'), 25, 50);
     if (limit < 1 || url.searchParams.has('offset')) throw new ApiError(400, 'Invalid pagination');
     const filterKey = JSON.stringify({ kind: 'inventory-movements', itemId });
@@ -119,6 +128,7 @@ function createInventoryApi({ db, auth, verifyToken }) {
       item, movements: movements.map(movement => (movement.actorEmail || !emails.has(movement.actorUid)
         ? movement : { ...movement, actorEmail: emails.get(movement.actorUid) })),
       nextCursor: page.hasMore ? cursorFor(page.docs.at(-1), filterKey) : null,
+      revision,
     };
   }
 

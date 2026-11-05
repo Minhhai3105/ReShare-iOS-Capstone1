@@ -1,6 +1,8 @@
 const { ApiError } = require('./image-api.cjs');
 const { runTransaction } = require('./firestore-transaction.cjs');
 const { assertCurrentStaffAccess } = require('./staff-access.cjs');
+const { quantityBase } = require('./quantity.cjs');
+const { recordInventoryUpdate } = require('./inventory-updates.cjs');
 const dateString = value => value?.toDate?.().toISOString() ||
   (value instanceof Date ? value.toISOString() : value || null);
 
@@ -98,8 +100,15 @@ function createStockIntakeApi({ db, verifyToken, serverTimestamp }) {
         }
         throw new ApiError(409, 'Stock intake data is inconsistent');
       }
+      if (receipt.conditionId === 'damaged') {
+        throw new ApiError(409, 'Hàng hư hỏng chỉ lưu thực nhận, không được nhập kho phân phối');
+      }
+      if (quantityBase(receipt.quantity, receipt.unitId) === null) {
+        throw new ApiError(409, 'Số lượng thực nhận không đáp ứng quy tắc đơn vị; cần đối soát');
+      }
       if (donation.status !== 'received') throw new ApiError(409, 'Donation is not ready for stock intake');
       const timestamp = now();
+      recordInventoryUpdate(tx, db, warehouseId, timestamp);
       tx.set(inventoryRef, {
         id: inventoryRef.id, receiptId, donationId: receipt.donationId, warehouseId,
         itemName: donation.title || '', category: donation.category || '',

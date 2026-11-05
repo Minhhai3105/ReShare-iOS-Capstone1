@@ -3,6 +3,7 @@ const { FieldValue } = require('firebase-admin/firestore');
 const { runTransaction } = require('./firestore-transaction.cjs');
 const { assertCurrentStaffAccess } = require('./staff-access.cjs');
 const { staffEmails } = require('./staff-emails.cjs');
+const { publicHistory, mergeDonationHistory } = require('./donation-history.cjs');
 
 function donationSender(data, profile = {}) {
   const name = [profile.displayName, data.donorName]
@@ -11,15 +12,6 @@ function donationSender(data, profile = {}) {
     name: name?.trim() || 'Chưa cập nhật tên',
     email: typeof profile.email === 'string' && profile.email.trim() ? profile.email.trim() : null,
   };
-}
-
-function publicHistory(history) {
-  if (!Array.isArray(history)) return [];
-  return history.map(entry => Object.fromEntries(
-    ['action', 'fromStatus', 'toStatus', 'reviewState', 'timestamp', 'publicMessage', 'version']
-      .filter(key => entry && entry[key] !== undefined)
-      .map(key => [key, entry[key]])
-  ));
 }
 
 function createDonationReviewApi({ db, auth, verifyToken, serverTimestamp }) {
@@ -134,9 +126,7 @@ function createDonationReviewApi({ db, auth, verifyToken, serverTimestamp }) {
       }
       const data = doc.data();
       const reviewDoc = await transaction.get(reviewRef);
-      const previousReviews = reviewDoc.exists && Array.isArray(reviewDoc.data().history)
-        ? reviewDoc.data().history
-        : (Array.isArray(data.history) ? data.history : []);
+      const previousReviews = mergeDonationHistory(data.history, reviewDoc.exists ? reviewDoc.data().history : []);
 
       // Warehouse authorization check
       const assignedWarehouse = data.warehouseId;
@@ -183,7 +173,7 @@ function createDonationReviewApi({ db, auth, verifyToken, serverTimestamp }) {
         statusNote: cleanPublicMessage || null,
         reviewedAt: (serverTimestamp ? serverTimestamp() : new Date()),
         version: nextVersion,
-        history: [...publicHistory(data.history), publicHistory([historyEntry])[0]],
+        history: publicHistory([...previousReviews, historyEntry]),
       };
 
       // Firestore returns a complete document to its donor. Remove legacy private fields.
@@ -334,7 +324,7 @@ function createDonationReviewApi({ db, auth, verifyToken, serverTimestamp }) {
     const review = reviewDoc.exists ? reviewDoc.data() : {};
     const donorDoc = data.donorId ? await db.collection('users').doc(data.donorId).get() : null;
     const donor = donorDoc?.exists ? donorDoc.data() : {};
-    const history = review.history || data.history || [];
+    const history = mergeDonationHistory(data.history, review.history);
     const emails = await staffEmails(auth, [review.staffConfirmedBy, review.warehouseAssignedBy,
       ...history.map(entry => entry?.actorUid)]);
     return {

@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import AuthShell from '../../auth/components/AuthShell.vue'
 import AuthIcon from '../../auth/components/AuthIcon.vue'
+import AdminSelect from '../../shared/AdminSelect.vue'
 import { staffAssignment } from '../../auth/auth.store'
 import { resolveQueueAccess } from '../donation.service'
 import { QUEUE_VIEW_STATE, useDonationQueue } from '../useDonationQueue'
@@ -27,6 +28,9 @@ const hourFormatter = new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute
 const timeFormatter = new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
 const getAccess = () => resolveQueueAccess(staffAssignment.value)
+const statusOptions = [{ value: '', label: 'Tất cả' }, ...Object.entries(DONATION_STATUS_LABEL).map(([value, label]) => ({ value, label }))]
+const categoryOptions = [{ value: '', label: 'Tất cả' }, ...Object.entries(DONATION_CATEGORY_LABEL).map(([value, label]) => ({ value, label }))]
+const sortOptions = [{ value: DONATION_SORT.oldestFirst, label: 'Cũ nhất trước' }, { value: DONATION_SORT.newestFirst, label: 'Mới nhất trước' }]
 const {
   filters,
   result,
@@ -43,6 +47,10 @@ const {
 
 // Phạm vi đang áp dụng; cập nhật mỗi lần làm mới để phản ánh phân công mới.
 const access = ref(null)
+const warehouseOptions = computed(() => [
+  { value: '', label: access.value?.isAllWarehouses ? 'Tất cả kho' : 'Tất cả kho được giao' },
+  ...warehouses.value.map(warehouse => ({ value: warehouse.id, label: warehouse.name })),
+])
 const scopeLabel = computed(() => {
   if (!access.value) return 'Không có phạm vi kho'
   if (access.value.isAllWarehouses) return 'Tất cả kho (toàn hệ thống)'
@@ -142,31 +150,20 @@ watch(staffAssignment, () => {
             </span>
           </label>
 
-          <label class="queue-field">
-            <span class="queue-field__label">Trạng thái</span>
-            <select v-model="filters.status" class="queue-select">
-              <option value="">Tất cả</option>
-              <option v-for="(label, status) in DONATION_STATUS_LABEL" :key="status" :value="status">{{ label }}</option>
-            </select>
-          </label>
+          <div class="queue-field">
+            <label id="queue-status-label" for="queue-status" class="queue-field__label">Trạng thái</label>
+            <AdminSelect id="queue-status" v-model="filters.status" labelled-by="queue-status-label" :options="statusOptions" />
+          </div>
 
-          <label class="queue-field">
-            <span class="queue-field__label">Kho</span>
-            <select v-model="filters.warehouseId" class="queue-select">
-              <option value="">{{ access?.isAllWarehouses ? 'Tất cả kho' : 'Tất cả kho được giao' }}</option>
-              <option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">{{ warehouse.name }}</option>
-            </select>
-          </label>
+          <div class="queue-field">
+            <label id="queue-warehouse-label" for="queue-warehouse" class="queue-field__label">Kho</label>
+            <AdminSelect id="queue-warehouse" v-model="filters.warehouseId" labelled-by="queue-warehouse-label" :options="warehouseOptions" />
+          </div>
 
-          <label class="queue-field">
-            <span class="queue-field__label">Danh mục</span>
-            <select v-model="filters.category" class="queue-select">
-              <option value="">Tất cả</option>
-              <option v-for="(label, category) in DONATION_CATEGORY_LABEL" :key="category" :value="category">
-                {{ label }}
-              </option>
-            </select>
-          </label>
+          <div class="queue-field">
+            <label id="queue-category-label" for="queue-category" class="queue-field__label">Danh mục</label>
+            <AdminSelect id="queue-category" v-model="filters.category" labelled-by="queue-category-label" :options="categoryOptions" />
+          </div>
 
           <div class="queue-field">
             <span class="queue-field__label">Ngày gửi</span>
@@ -177,13 +174,10 @@ watch(staffAssignment, () => {
             </div>
           </div>
 
-          <label class="queue-field">
-            <span class="queue-field__label">Sắp xếp</span>
-            <select v-model="filters.sort" class="queue-select">
-              <option :value="DONATION_SORT.oldestFirst">Cũ nhất trước</option>
-              <option :value="DONATION_SORT.newestFirst">Mới nhất trước</option>
-            </select>
-          </label>
+          <div class="queue-field">
+            <label id="queue-sort-label" for="queue-sort" class="queue-field__label">Sắp xếp</label>
+            <AdminSelect id="queue-sort" v-model="filters.sort" labelled-by="queue-sort-label" :options="sortOptions" />
+          </div>
 
           <button type="button" class="auth-btn auth-btn--soft donation-queue__reset" :disabled="!hasActiveFilters" @click="resetFilters">
             <AuthIcon name="refresh" :size="18" />Xóa bộ lọc

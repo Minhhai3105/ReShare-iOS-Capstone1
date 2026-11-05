@@ -105,6 +105,12 @@ function createImageApi({ db, verifyToken, cloudinary, cloudName, apiKey, apiSec
     if (record.exists && publicIds.some(id => (record.data().imagePublicIds || []).includes(id))) {
       throw new ApiError(409, 'Image is attached to a published record');
     }
+    if (purpose === 'donation' && batch.data().attachedDonationId) {
+      const attached = await recordSnapshot('donation', batch.data().attachedDonationId);
+      if (attached.exists && publicIds.some(id => (attached.data().imagePublicIds || []).includes(id))) {
+        throw new ApiError(409, 'Image is attached to a resubmitted donation');
+      }
+    }
     for (const id of publicIds) {
       const result = await cloudinary.uploader.destroy(id, { resource_type: 'image', type: config.deliveryType, invalidate: true });
       if (!['ok', 'not found'].includes(result.result)) throw new ApiError(502, 'Cloudinary cleanup failed');
@@ -125,15 +131,17 @@ function createImageApi({ db, verifyToken, cloudinary, cloudName, apiKey, apiSec
   async function readAccess(uid, body) {
     const { donationId, publicId } = body;
     validateRecordId('donation', donationId);
-    validatePublicIds([publicId], `donations/${donationId}`);
     const donation = await recordSnapshot('donation', donationId);
     if (!donation.exists) throw new ApiError(404, 'Donation not found');
     const data = donation.data();
+    const uploadId = data.imageUploadRecordId || donationId;
+    validateRecordId('donation', uploadId);
+    validatePublicIds([publicId], `donations/${uploadId}`);
     if (data.donorId !== uid && !(await canStaffReadDonation(uid, data))) throw new ApiError(403, 'Access denied');
     if (data.imageProvider !== 'cloudinary' || !(data.imagePublicIds || []).includes(publicId)) {
       throw new ApiError(404, 'Image not attached to donation');
     }
-    const batch = await batchReference('donation', donationId).get();
+    const batch = await batchReference('donation', uploadId).get();
     if (!batch.exists || batch.data().ownerUid !== data.donorId ||
         !Object.values(batch.data().assets || {}).includes(publicId)) {
       throw new ApiError(403, 'Image upload was not authorized');
@@ -175,4 +183,4 @@ function createImageApi({ db, verifyToken, cloudinary, cloudName, apiKey, apiSec
   return { handle };
 }
 
-module.exports = { ApiError, createImageApi };
+module.exports = { ApiError, createImageApi, validateRecordId, validatePublicIds };

@@ -279,6 +279,7 @@
 				DEVELOPMENT_TEAM = YF2N55T299;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Configuration/Debug-Info.plist";
 				INFOPLIST_KEY_NSCameraUsageDescription = "ReShare cần dùng camera để chụp ảnh món đồ bạn muốn chia sẻ.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "ReShare cần truy cập kho ảnh để bạn chọn ảnh món đồ muốn chia sẻ.";
 				INFOPLIST_KEY_RESHARE_IMAGE_API_BASE_URL = "https://reshare-ios-capstone1-1.onrender.com";
@@ -315,6 +316,7 @@
 				DEVELOPMENT_TEAM = YF2N55T299;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Configuration/Release-Info.plist";
 				INFOPLIST_KEY_NSCameraUsageDescription = "ReShare cần dùng camera để chụp ảnh món đồ bạn muốn chia sẻ.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "ReShare cần truy cập kho ảnh để bạn chọn ảnh món đồ muốn chia sẻ.";
 				INFOPLIST_KEY_RESHARE_IMAGE_API_BASE_URL = "https://reshare-ios-capstone1-1.onrender.com";
