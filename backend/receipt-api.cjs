@@ -1,6 +1,7 @@
 const { ApiError } = require('./image-api.cjs');
 const { runTransaction } = require('./firestore-transaction.cjs');
 const { assertCurrentStaffAccess } = require('./staff-access.cjs');
+const { quantityBase } = require('./quantity.cjs');
 
 function createReceiptApi({ db, verifyToken, serverTimestamp }) {
   if (!db || !verifyToken) throw new Error('Receipt API configuration is incomplete');
@@ -68,6 +69,11 @@ function createReceiptApi({ db, verifyToken, serverTimestamp }) {
       const unitId = typeof body?.unitId === 'string' ? body.unitId.trim() : '';
       if (!['piece', 'kg', 'bag', 'box', 'set'].includes(unitId)) {
         throw new ApiError(400, 'unitId is required');
+      }
+      if (quantityBase(quantity, unitId) === null) {
+        throw new ApiError(400, unitId === 'kg'
+          ? 'Số kg phải lớn hơn 0 và tối đa 3 chữ số thập phân'
+          : 'Đơn vị đếm phải có số lượng nguyên dương');
       }
 
       const conditionId = typeof body?.conditionId === 'string' ? body.conditionId.trim() : '';

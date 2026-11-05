@@ -40,6 +40,18 @@ function setup() {
 
 function snapshot(data) { return { exists: data !== undefined, data: () => data }; }
 
+test('Resubmission images keep protected read access and cannot be cleaned up while attached', async () => {
+  const { documents, call, destroyed } = setup();
+  const revisionId = '22222222-2222-4222-8222-222222222222';
+  const publicId = `donations/${revisionId}/33333333-3333-4333-8333-333333333333`;
+  documents.set(`donations/${donationId}`, { donorId: 'donor', imageProvider: 'cloudinary', imageUploadRecordId: revisionId, imagePublicIds: [publicId] });
+  documents.set(`image_upload_batches/donation_${revisionId}`, { ownerUid: 'donor', assets: { image: publicId }, attachedDonationId: donationId });
+  assert.match((await call('/v1/images/read-access', 'donor', { donationId, publicId })).body.url, /^https:/);
+  await assert.rejects(call('/v1/images/read-access', 'other', { donationId, publicId }), { status: 403 });
+  await assert.rejects(call('/v1/images/cleanup', 'donor', { purpose: 'donation', recordId: revisionId, publicIds: [publicId] }), { status: 409 });
+  assert.equal(destroyed.length, 0);
+});
+
 test('intent is signed for the server-selected type and bound to its owner', async () => {
   const { call, documents } = setup();
   const request = { purpose: 'donation', recordId: donationId, clientImageId };

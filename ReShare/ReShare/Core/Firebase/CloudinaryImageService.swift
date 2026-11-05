@@ -291,11 +291,7 @@ final class CloudinaryImageService {
     private func backendRequest<Request: Encodable, Response: Decodable>(_ path: String, body: Request) async throws -> Response {
         let startedAt = Date()
         defer { logger.info("Image API \(path, privacy: .public): \(Date().timeIntervalSince(startedAt), privacy: .public)s") }
-        let rawBaseURL = (Bundle.main.object(forInfoDictionaryKey: "RESHARE_IMAGE_API_BASE_URL") as? String)
-            ?? "https://reshare-ios-capstone1-1.onrender.com"
-        guard let baseURL = URL(string: rawBaseURL),
-              baseURL.scheme == "https",
-              baseURL.host != nil else {
+        guard let baseURL = ReShareAPIConfiguration.configuredBaseURL() else {
             throw CloudinaryImageError.missingConfiguration
         }
         guard let user = Auth.auth().currentUser else { throw CloudinaryImageError.signedOut }

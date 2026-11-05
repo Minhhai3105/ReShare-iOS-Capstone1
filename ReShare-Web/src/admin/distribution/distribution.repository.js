@@ -1,6 +1,7 @@
 import { distributionFixtures } from './distribution.mock.js'
 import { mockError } from '../lq-errors.js'
 import { unitLabel } from '../shared/units.js'
+import { quantityBase, quantityFromBase } from '../shared/quantity.js'
 
 const clone = (value) => structuredClone(value)
 // API trả mã đơn vị (piece…); form chỉ dùng `unit` để hiển thị, `unitId` giữ nguyên mã gốc.
@@ -30,8 +31,8 @@ export function validateDistribution({ quantity, beneficiaryId, handedOver, note
   const errors = {}
   const amount = Number(quantity)
   if (!item) errors.item = 'Chọn vật phẩm trong kho được phân công.'
-  if (!/^\d+$/.test(String(quantity)) || !Number.isSafeInteger(amount) || amount <= 0) {
-    errors.quantity = 'Số lượng phải là số nguyên dương.'
+  if (quantityBase(quantity, item?.unitId || item?.unit || 'piece') === null) {
+    errors.quantity = (item?.unitId || item?.unit) === 'kg' ? 'Số kg phải dương và tối đa 3 chữ số thập phân.' : 'Số lượng phải là số nguyên dương.'
   } else if (item && amount > item.available) {
     errors.quantity = `Chỉ còn ${item.available} ${item.unit}. Vui lòng điều chỉnh số lượng.`
   }
@@ -101,7 +102,7 @@ export function createDemoDistributionRepository({ getAssignment, getActor }) {
     const voucher = {
       id: `DEMO-PX-${suffix}`, movementId: `DEMO-MOV-${suffix}`, itemId: item.id, itemName: item.name,
       quantity, unit: item.unit, warehouseId: item.warehouseId, beneficiaryId: draft.beneficiaryId,
-      actor: { id: actor.id, displayName: actor.displayName, email: actor.email }, timestamp, note: draft.note.trim(), before, after: before - quantity, demo: true,
+      actor: { id: actor.id, displayName: actor.displayName, email: actor.email }, timestamp, note: draft.note.trim(), before, after: quantityFromBase(quantityBase(before, item.unit, { allowZero: true }) - quantityBase(quantity, item.unit), item.unit), demo: true,
     }
     const movement = {
       id: voucher.movementId, voucherId: voucher.id, itemId: item.id, warehouseId: item.warehouseId,
