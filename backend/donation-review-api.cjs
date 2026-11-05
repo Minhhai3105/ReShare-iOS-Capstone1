@@ -4,6 +4,15 @@ const { runTransaction } = require('./firestore-transaction.cjs');
 const { assertCurrentStaffAccess } = require('./staff-access.cjs');
 const { staffEmails } = require('./staff-emails.cjs');
 
+function donationSender(data, profile = {}) {
+  const name = [profile.displayName, data.donorName]
+    .find(value => typeof value === 'string' && value.trim() && value.trim() !== data.donorId);
+  return {
+    name: name?.trim() || 'Chưa cập nhật tên',
+    email: typeof profile.email === 'string' && profile.email.trim() ? profile.email.trim() : null,
+  };
+}
+
 function publicHistory(history) {
   if (!Array.isArray(history)) return [];
   return history.map(entry => Object.fromEntries(
@@ -281,6 +290,37 @@ function createDonationReviewApi({ db, auth, verifyToken, serverTimestamp }) {
     } };
   }
 
+  async function senders(headers, body) {
+    const staff = await authenticateStaff(headers);
+    const ids = body?.donationIds;
+    if (!Array.isArray(ids) || ids.length < 1 || ids.length > 10 || new Set(ids).size !== ids.length ||
+        !ids.every(id => typeof id === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(id))) {
+      throw new ApiError(400, 'Provide 1 to 10 unique donation IDs');
+    }
+    // Keep the assignment, donation scope and private profiles in one consistent read.
+    const result = await runTransaction(db, async transaction => {
+      const assignment = await transaction.get(db.collection('staff_assignments').doc(staff.uid));
+      const access = assignment.exists ? assignment.data() : {};
+      if (access.active !== true || !['system_admin', 'warehouse_admin'].includes(access.role)) {
+        throw new ApiError(403, 'Active staff assignment required');
+      }
+      const docs = await Promise.all(ids.map(id => transaction.get(db.collection('donations').doc(id))));
+      if (docs.some(doc => !doc.exists)) throw new ApiError(404, 'Donation not found');
+      if (access.role === 'warehouse_admin' && docs.some(doc =>
+        !doc.data().warehouseId || !Array.isArray(access.warehouseIds) || !access.warehouseIds.includes(doc.data().warehouseId))) {
+        throw new ApiError(403, 'Forbidden: not your assigned warehouse');
+      }
+      const donorIds = [...new Set(docs.map(doc => doc.data().donorId).filter(id =>
+        typeof id === 'string' && id.length > 0 && id.length <= 128 && !id.includes('/')))];
+      const profiles = new Map(await Promise.all(donorIds.map(async id => {
+        const profile = await transaction.get(db.collection('users').doc(id));
+        return [id, profile.exists ? profile.data() : {}];
+      })));
+      return docs.map((doc, index) => ({ donationId: ids[index], donor: donationSender(doc.data(), profiles.get(doc.data().donorId)) }));
+    });
+    return { status: 200, body: { senders: result } };
+  }
+
   async function get(donationId, headers) {
     const staff = await authenticateStaff(headers);
     const doc = await db.collection('donations').doc(donationId).get();
@@ -303,10 +343,7 @@ function createDonationReviewApi({ db, auth, verifyToken, serverTimestamp }) {
         id: doc.id,
         ...data,
         createdAt: data.createdAt?.toDate?.().toISOString() || data.createdAt,
-        donor: {
-          name: donor.displayName || data.donorName || data.donorId || 'Người gửi',
-          email: donor.email || null,
-        },
+        donor: donationSender(data, donor),
         internalNote: review.internalNote || null,
         reviewedBy: review.reviewedBy || null,
         staffConfirmedCategory: review.staffConfirmedCategory || null,
@@ -326,6 +363,9 @@ function createDonationReviewApi({ db, auth, verifyToken, serverTimestamp }) {
   }
 
   async function handle(method, path, headers, body) {
+    if (path === '/v1/admin/donations/senders' && method === 'POST') {
+      return senders(headers, body);
+    }
     if (path === '/v1/admin/donations/ai-summary' && method === 'GET') {
       return aiSummary(headers);
     }
