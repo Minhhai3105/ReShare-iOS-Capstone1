@@ -1,6 +1,7 @@
 import { auth } from '../auth/firebase'
 import { demoReceiptAdapter } from './receipt.demo'
 import { unitLabel } from '../shared/units.js'
+import { donationSender } from '../donations/donation-sender.js'
 
 // Tình trạng người gửi tự khai báo trên iOS (ItemCondition), khác bộ tình trạng nghiệm thu tại kho.
 const DONOR_CONDITION_LABEL = Object.freeze({ new: 'Mới 100%', like_new: 'Như mới (95%)', good: 'Còn tốt', fair: 'Dùng được' })
@@ -71,7 +72,7 @@ export const liveReceiptAdapter = {
       id: data.id,
       status: data.status,
       itemName: data.title || data.itemName || 'Vật phẩm quyên góp',
-      donorName: data.donor?.name || data.donorName || data.donorId || 'Người gửi',
+      donorName: donationSender(data).name,
       declaredQuantity: data.quantity ?? 1,
       declaredUnitName: unitLabel(data.unitId) || data.unitName || data.unit || 'chiếc',
       expectedWarehouseId: data.warehouseId || '',

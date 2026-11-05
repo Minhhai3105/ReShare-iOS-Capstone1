@@ -5,6 +5,7 @@ import { db } from '../auth/firebase.js'
 import { auth } from '../auth/firebase.js'
 import { collection, doc, documentId, getDoc, getDocs, limit, orderBy, query as firestoreQuery, startAfter, where } from 'firebase/firestore'
 import { normalizeText } from '../shared/text.js'
+import { donationSender } from './donation-sender.js'
 
 function createQueueError(status) {
   return Object.assign(new Error(String(status)), { status })
@@ -58,7 +59,7 @@ export function processAndPaginateDonations(source, access, query) {
 
   const matchesScopeAndFilters = source.filter((donation) => {
     const createdTime = new Date(donation.createdAt).getTime()
-    const donorName = donation.donorName || donation.donorId || ''
+    const donorName = donationSender(donation).name
     const assignedWarehouse = donation.warehouseId
     return (
       (access.isAllWarehouses || (assignedWarehouse && access.warehouseIds.includes(assignedWarehouse))) &&
@@ -91,7 +92,8 @@ export function processAndPaginateDonations(source, access, query) {
   const page = Math.min(Math.max(1, query.page ?? 1), totalPages)
   const items = sorted.slice((page - 1) * DONATION_PAGE_SIZE, page * DONATION_PAGE_SIZE).map((donation) => ({
     ...donation,
-    donorName: donation.donorName || donation.donorId || 'Chưa có tên',
+    donorName: donationSender(donation).name,
+    donorEmail: donationSender(donation).email,
     warehouseName: donation.warehouseName || donation.warehouseId || null,
   }))
 
@@ -135,7 +137,7 @@ export async function fetchDonationQueue(access, query) {
       return {
         ...data,
         id: docSnap.id,
-        donorName: data.donorName || data.donorId || 'Chưa có tên',
+        donorName: donationSender(data).name,
         warehouseName: data.warehouseName || data.warehouseId || null,
         createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : String(data.createdAt || ''),
       }
@@ -155,7 +157,7 @@ export async function fetchDonationQueue(access, query) {
         (!query.status || item.status === query.status) &&
         (!query.dateFrom || new Date(item.createdAt) >= new Date(`${query.dateFrom}T00:00:00`)) &&
         (!query.dateTo || new Date(item.createdAt) <= new Date(`${query.dateTo}T23:59:59.999`))) : []
-      return { items, total: items.length, page: 1, pageSize: DONATION_PAGE_SIZE, totalPages: 1, hasMore: false, nextCursor: null, statusCounts: null }
+      return { items: await enrichDonationSenders(items), total: items.length, page: 1, pageSize: DONATION_PAGE_SIZE, totalPages: 1, hasMore: false, nextCursor: null, statusCounts: null }
     }
 
     const direction = query.sort === DONATION_SORT.newestFirst ? 'desc' : 'asc'
@@ -166,7 +168,7 @@ export async function fetchDonationQueue(access, query) {
     const snapshot = await getDocs(q)
     const pageDocs = snapshot.docs.slice(0, DONATION_PAGE_SIZE)
     return {
-      items: pageDocs.map(normalizeDoc), total: null, page: query.page || 1,
+      items: await enrichDonationSenders(pageDocs.map(normalizeDoc)), total: null, page: query.page || 1,
       pageSize: DONATION_PAGE_SIZE, totalPages: null,
       hasMore: snapshot.docs.length > DONATION_PAGE_SIZE,
       nextCursor: pageDocs.at(-1) || null, statusCounts: null,
@@ -179,6 +181,26 @@ export async function fetchDonationQueue(access, query) {
 }
 
 const reviewApiBase = (import.meta.env?.VITE_ADMIN_API_BASE_URL || 'https://reshare-ios-capstone1-1.onrender.com').replace(/\/$/, '')
+
+export async function enrichDonationSenders(items, load = ids => reviewRequest('/v1/admin/donations/senders', { donationIds: ids }, 'senders')) {
+  if (!items.length) return items
+  try {
+    const senders = await load(items.map(item => item.id))
+    if (!Array.isArray(senders) || senders.length !== items.length ||
+        new Set(senders.map(item => item?.donationId)).size !== items.length ||
+        !senders.every(item => items.some(donation => donation.id === item?.donationId) &&
+          typeof item?.donor?.name === 'string' && item.donor.name.trim() &&
+          (item.donor.email === null || typeof item.donor.email === 'string'))) throw createQueueError(DONATION_QUEUE_ERROR.server)
+    const byId = new Map(senders.map(item => [item.donationId, item.donor]))
+    return items.map(item => {
+      const donor = donationSender({ donorId: item.donorId, donor: byId.get(item.id) })
+      return { ...item, donorName: donor.name, donorEmail: donor.email }
+    })
+  } catch (error) {
+    if (error?.status) throw error
+    throw createQueueError(error?.code === 'FORBIDDEN' ? DONATION_QUEUE_ERROR.forbidden : DONATION_QUEUE_ERROR.network)
+  }
+}
 
 async function reviewRequest(path, body, responseField = 'donation') {
   const token = await auth.currentUser?.getIdToken()

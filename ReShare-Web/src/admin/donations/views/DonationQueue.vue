@@ -101,7 +101,10 @@ function refreshQueue() {
 
 onMounted(refreshQueue)
 // Phân công thay đổi giữa phiên (US02 AC3) thì tải lại theo phạm vi mới.
-watch(staffAssignment, refreshQueue)
+watch(staffAssignment, () => {
+  result.value = null
+  refreshQueue()
+}, { flush: 'sync' })
 </script>
 
 <template>
@@ -220,7 +223,10 @@ watch(staffAssignment, refreshQueue)
             <tbody v-else-if="viewState === QUEUE_VIEW_STATE.ready" :class="{ 'is-refreshing': isLoading }">
               <tr v-for="donation in result.items" :key="donation.id">
                 <td><RouterLink class="queue-code auth-mono" :to="{ name: 'admin-donation-detail', params: { donationId: donation.id } }">{{ formatDonationCode(donation.id) }}</RouterLink></td>
-                <td>{{ donation.donorName }}</td>
+                <td><div class="queue-table__sender">
+                  <span class="queue-table__title">{{ donation.donorName }}</span>
+                  <span class="queue-table__sub">{{ donation.donorEmail || 'Chưa cập nhật email' }}</span>
+                </div></td>
                 <td>
                   <span class="queue-table__title">{{ donation.title }}</span>
                   <span class="queue-table__sub">{{ DONATION_CATEGORY_LABEL[donation.category] }}</span>
@@ -534,6 +540,9 @@ watch(staffAssignment, refreshQueue)
   display: block;
   font-weight: 500;
 }
+
+.queue-table__sender { min-width: 180px; max-width: 280px; overflow-wrap: anywhere; }
+.queue-table__sender .queue-table__sub { display: block; margin-top: 4px; }
 
 .queue-table__nowrap {
   white-space: nowrap;

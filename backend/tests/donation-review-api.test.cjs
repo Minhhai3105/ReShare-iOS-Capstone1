@@ -2,8 +2,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createDonationReviewApi } = require('../donation-review-api.cjs');
 
-function setup({ auth } = {}) {
+function setup({ auth, beforeTransaction } = {}) {
   const documents = new Map();
+  const reads = [];
   const collection = (name) => ({
     orderBy(field, direction) {
       return {
@@ -28,6 +29,7 @@ function setup({ auth } = {}) {
         id,
         key,
         async get() {
+          reads.push(key);
           const val = documents.get(key);
           return { exists: val !== undefined, data: () => val };
         },
@@ -38,9 +40,11 @@ function setup({ auth } = {}) {
   const db = {
     collection,
     async runTransaction(work) {
+      beforeTransaction?.(documents);
       const writes = [];
       const result = await work({
         get: async (ref) => {
+          reads.push(ref.key);
           const val = documents.get(ref.key);
           return { exists: val !== undefined, data: () => val };
         },
@@ -114,8 +118,59 @@ function setup({ auth } = {}) {
     version: 1,
   });
 
-  return { api, documents };
+  return { api, documents, reads };
 }
+
+test('Sender summaries return real profile names/emails, deduplicate profiles and exclude private fields', async () => {
+  const { api, documents, reads } = setup();
+  documents.set('users/donor-1', { displayName: ' Nguyễn Minh Anh ', email: ' anh@example.invalid ', phoneNumber: 'PRIVATE_PHONE', address: 'PRIVATE_ADDRESS' });
+  const before = JSON.stringify([...documents]);
+  const result = await api.handle('POST', '/v1/admin/donations/senders', { authorization: 'Bearer admin-token' }, { donationIds: ['don-2', 'don-1'] });
+  assert.deepEqual(result.body.senders, ['don-2', 'don-1'].map(donationId => ({ donationId, donor: { name: 'Nguyễn Minh Anh', email: 'anh@example.invalid' } })));
+  assert.equal(reads.filter(path => path === 'users/donor-1').length, 1);
+  assert.equal(JSON.stringify([...documents]), before, 'A read must not modify donations or profiles');
+  const detail = await api.get('don-1', { authorization: 'Bearer wh-a-token' });
+  assert.deepEqual(detail.body.donation.donor, result.body.senders[0].donor);
+  assert.equal(detail.body.donation.donorId, 'donor-1');
+});
+
+test('Sender summaries handle missing/blank profiles and never use UID as a name', async () => {
+  const { api, documents } = setup();
+  const read = () => api.handle('POST', '/v1/admin/donations/senders', { authorization: 'Bearer wh-a-token' }, { donationIds: ['don-1'] });
+  assert.deepEqual((await read()).body.senders[0].donor, { name: 'Chưa cập nhật tên', email: null });
+  documents.get('donations/don-1').donorName = 'Tên lưu trên đơn';
+  documents.set('users/donor-1', { displayName: '  ', email: ' ' });
+  assert.equal((await read()).body.senders[0].donor.name, 'Tên lưu trên đơn');
+  documents.get('donations/don-1').donorName = 'donor-1';
+  documents.get('users/donor-1').displayName = 'donor-1';
+  assert.equal((await read()).body.senders[0].donor.name, 'Chưa cập nhật tên');
+  assert.equal((await api.get('don-1', { authorization: 'Bearer wh-a-token' })).body.donation.donor.name, 'Chưa cập nhật tên');
+});
+
+test('Sender summaries reject unauthorized, mixed-scope, unassigned and missing donations before reading profiles', async () => {
+  const { api, reads } = setup();
+  const call = (token, donationIds) => api.handle('POST', '/v1/admin/donations/senders', { authorization: token ? `Bearer ${token}` : '' }, { donationIds });
+  for (const token of ['', 'bad-token', 'donor-token', 'admin-inactive-token']) {
+    await assert.rejects(call(token, ['don-1']), { status: ['', 'bad-token'].includes(token) ? 401 : 403 });
+  }
+  await assert.rejects(call('wh-a-token', ['don-1', 'don-2']), { status: 403 });
+  await assert.rejects(call('wh-a-token', ['don-unassigned']), { status: 403 });
+  await assert.rejects(call('admin-token', ['missing']), { status: 404 });
+  assert.equal(reads.some(path => path.startsWith('users/')), false);
+  assert.equal((await call('admin-token', ['don-unassigned'])).status, 200);
+});
+
+test('Sender summaries validate bounded IDs and recheck assignment inside the transaction', async () => {
+  const { api } = setup();
+  for (const donationIds of [undefined, [], ['don-1', 'don-1'], ['../private'], ['a/b'], [null], Array.from({ length: 11 }, (_, i) => `don-${i}`)]) {
+    await assert.rejects(api.handle('POST', '/v1/admin/donations/senders', { authorization: 'Bearer admin-token' }, { donationIds }), { status: 400 });
+  }
+  for (const assignment of [{ active: false, role: 'system_admin' }, { active: true, role: 'warehouse_admin', warehouseIds: ['kho-b'] }]) {
+    const changed = setup({ beforeTransaction: documents => documents.set('staff_assignments/admin-1', assignment) });
+    await assert.rejects(changed.api.handle('POST', '/v1/admin/donations/senders', { authorization: 'Bearer admin-token' }, { donationIds: ['don-1'] }), { status: 403 });
+    assert.equal(changed.reads.some(path => path.startsWith('users/')), false);
+  }
+});
 
 test('US10: Authorized Warehouse Admin can approve pending donation in their warehouse without modifying inventory', async () => {
   const { api, documents } = setup();

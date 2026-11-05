@@ -5,8 +5,43 @@ import {
   fetchDonationQueue,
   fetchQueueWarehouses,
   processAndPaginateDonations,
+  enrichDonationSenders,
 } from '../src/admin/donations/donation.service.js';
+import { donationSender } from '../src/admin/donations/donation-sender.js';
 import { DONATION_STATUS, DONATION_PAGE_SIZE, DONATION_SORT } from '../src/admin/donations/donation.constants.js';
+
+test('Sender display prefers real names, handles missing data and keeps UID out of name labels', () => {
+  assert.deepEqual(donationSender({ donorId: 'uid', donor: { name: ' Nguyễn An ', email: ' an@example.invalid ' }, donorName: 'Old name' }), { name: 'Nguyễn An', email: 'an@example.invalid' });
+  assert.deepEqual(donationSender({ donorId: 'uid', donorName: 'uid' }), { name: 'Chưa cập nhật tên', email: null });
+  assert.equal(donationSender({ donorId: 'uid', donor: { name: ' ' }, donorName: 'Tên trên đơn' }).name, 'Tên trên đơn');
+  assert.equal(donationSender({ donorId: 'uid', donor: { name: 'uid' } }).name, 'Chưa cập nhật tên');
+  assert.deepEqual(donationSender({ donorId: 'uid' }), { name: 'Chưa cập nhật tên', email: null });
+});
+
+test('Sender enrichment uses one request for current page and matches records by donation ID', async () => {
+  const rows = [{ id: 'a', donorId: 'uid-a', donorName: 'uid-a' }, { id: 'b', donorId: 'uid-b' }];
+  let calls = 0;
+  const result = await enrichDonationSenders(rows, async ids => {
+    calls++; assert.deepEqual(ids, ['a', 'b']);
+    return [{ donationId: 'b', donor: { name: 'Chưa cập nhật tên', email: null } }, { donationId: 'a', donor: { name: 'Tên thật', email: 'an@example.invalid' } }];
+  });
+  assert.equal(calls, 1);
+  assert.equal(result[0].donorName, 'Tên thật');
+  assert.equal(result[0].donorEmail, 'an@example.invalid');
+  assert.equal(result[1].donorName, 'Chưa cập nhật tên');
+  assert.equal(rows[0].donorName, 'uid-a', 'Source records are not mutated');
+  assert.deepEqual(await enrichDonationSenders([], () => assert.fail('Empty page must not call API')), []);
+});
+
+test('Sender lookup errors and malformed responses do not silently fall back to UID', async () => {
+  for (const senders of [null, [], [{ donationId: 'other', donor: { name: 'wrong', email: null } }], [{ donationId: 'a', donor: { name: 'x', email: {} } }]]) {
+    await assert.rejects(enrichDonationSenders([{ id: 'a' }], async () => senders), { status: 500 });
+  }
+  await assert.rejects(enrichDonationSenders([{ id: 'a' }], async () => { throw { code: 'FORBIDDEN' }; }), { status: 403 });
+  await assert.rejects(enrichDonationSenders([{ id: 'a' }], async () => { throw new Error('offline'); }), { status: 'NETWORK_ERROR' });
+  const result = processAndPaginateDonations([{ id: 'a', donorId: 'uid-a', createdAt: '2026-11-05' }], { isAllWarehouses: true }, {});
+  assert.equal(result.items[0].donorName, 'Chưa cập nhật tên');
+});
 
 test('US09: resolveQueueAccess maps roles and warehouse scope correctly', () => {
   // System Admin
