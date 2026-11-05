@@ -362,6 +362,9 @@ onBeforeUnmount(() => {
           <RouterLink v-if="isSystemAdmin" :to="{ name: ADMIN_ROUTE.staff }" class="admin-ops__nav-link">
             <AuthIcon name="users" :size="17" />Nhân sự & phân quyền
           </RouterLink>
+          <RouterLink v-if="isSystemAdmin" :to="{ name: ADMIN_ROUTE.contacts }" class="admin-ops__nav-link">
+            <AuthIcon name="mail" :size="17" />Liên hệ từ landing
+          </RouterLink>
         </nav>
         <div class="admin-ops__sidebar-footer"><AuthIcon name="shield-check" :size="17" />{{ roleLabel }}</div>
       </aside>
