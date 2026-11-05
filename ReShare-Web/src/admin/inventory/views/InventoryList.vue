@@ -7,6 +7,7 @@ import { staffAssignment } from '../../auth/auth.store'
 import { ADMIN_ROUTE } from '../../auth/auth.constants'
 import { resolveQueueAccess } from '../../donations/donation.service'
 import { DONATION_CATEGORY_LABEL } from '../../donations/donation.constants'
+import { resolveInventoryScope } from '../inventory.scope.js'
 import {
   CONDITION_LABEL,
   INVENTORY_ERROR,
@@ -54,6 +55,12 @@ async function startSync() {
   const generation = ++syncGeneration
   stopSync(); stopSync = () => {}
   if (document.visibilityState === 'hidden') return
+  if (!warehouseScope.value.allowed) {
+    result.value = null
+    isLoading.value = false
+    errorStatus.value = INVENTORY_ERROR.forbidden
+    return
+  }
   try {
     const stop = await subscribeInventory(access.value, selectedWarehouseId.value, () => {
       if (generation !== syncGeneration) return
@@ -81,9 +88,8 @@ async function startSync() {
 const access = computed(() => resolveQueueAccess(staffAssignment.value))
 const warehouses = computed(() => getAccessibleWarehouses(access.value))
 // Kho đang xem nằm trên URL (?warehouseId=) để guard kiểm tra quyền khi sửa URL thủ công (AC2).
-const selectedWarehouseId = computed(() =>
-  route.query.warehouseId ?? (access.value?.isAllWarehouses ? '' : warehouses.value[0]?.id ?? ''),
-)
+const warehouseScope = computed(() => resolveInventoryScope(route.query.warehouseId, access.value))
+const selectedWarehouseId = computed(() => warehouseScope.value.warehouseId)
 const scopeName = computed(() =>
   warehouses.value.find(({ id }) => id === selectedWarehouseId.value)?.name ?? 'Tất cả kho',
 )
@@ -103,6 +109,7 @@ async function load() {
   isLoading.value = true
   errorStatus.value = null
   try {
+    if (!warehouseScope.value.allowed) throw { status: INVENTORY_ERROR.forbidden }
     const data = await fetchInventory(access.value, { ...filters, warehouseId: selectedWarehouseId.value })
     if (requestId !== latestRequestId) return
     result.value = data
@@ -133,7 +140,7 @@ function resetFilters() {
 }
 
 // Đổi kho hoặc phân công: xóa ngay dữ liệu phạm vi cũ và bỏ qua lần tải đang chạy của phạm vi đó.
-watch([selectedWarehouseId, staffAssignment], () => {
+watch([warehouseScope, staffAssignment], () => {
   latestRequestId += 1
   result.value = null
   refreshPending = false
@@ -141,7 +148,7 @@ watch([selectedWarehouseId, staffAssignment], () => {
   startSync()
 })
 
-watch([() => ({ ...filters }), selectedWarehouseId, staffAssignment], () => {
+watch([() => ({ ...filters }), warehouseScope, staffAssignment], () => {
   clearTimeout(reloadTimer)
   reloadTimer = setTimeout(load, 250)
 }, { immediate: true })
