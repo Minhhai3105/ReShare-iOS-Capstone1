@@ -53,9 +53,17 @@ const allowed = computed(() => {
 })
 const canDecide = computed(() => allowed.value && donation.value.status === 'pending'
   && donation.value.reviewState !== 'needs_information' && !conflict.value)
-const canAssignWarehouse = computed(() => !props.localPreview && isSystemAdmin.value && donation.value?.status === 'pending'
-  && donation.value.reviewState !== 'needs_information' && !donation.value.warehouseId)
+// Gán kho cho đơn chưa có kho đang chờ thẩm định, hoặc đơn đã duyệt mà chưa có kho (dữ liệu cũ bị kẹt).
+const canAssignWarehouse = computed(() => !props.localPreview && isSystemAdmin.value && !donation.value?.warehouseId
+  && (donation.value?.status === 'approved'
+    || (donation.value?.status === 'pending' && donation.value.reviewState !== 'needs_information')))
+// Duyệt khi chưa có kho thì không ai thực nhận được: backend chặn, giao diện khóa lựa chọn Duyệt.
+const needsWarehouseBeforeApprove = computed(() => !props.localPreview && !!donation.value && !donation.value.warehouseId)
+watch(needsWarehouseBeforeApprove, (blocked) => { if (blocked && action.value === 'approve') action.value = 'information' }, { immediate: true })
 const activeImage = computed(() => donation.value?.images?.[selectedImage.value])
+// Trạng thái tải của ảnh lớn: liên kết ký từ Cloudinary có thể chậm hoặc hết hạn.
+const mainImageState = ref('loading')
+watch(() => activeImage.value?.url, () => { mainImageState.value = 'loading' })
 const actionLabels = { approve: 'Duyệt donation', reject: 'Từ chối donation', information: 'Yêu cầu bổ sung' }
 const unitLabels = { piece: 'chiếc', kg: 'kg', bag: 'túi', box: 'thùng/hộp', set: 'bộ' }
 const categoryLabels = { clothing: 'Quần áo', books: 'Sách vở', household: 'Gia dụng' }
@@ -68,6 +76,7 @@ const messages = {
   NETWORK: 'Không thể kết nối. Dữ liệu và quyết định chưa được lưu; hãy thử lại.',
   NOT_FOUND: 'Không tìm thấy donation. Kiểm tra mã đơn hoặc quay về quản trị.',
   FORBIDDEN: 'Bạn không có quyền xử lý donation tại kho này.',
+  UNAUTHENTICATED: 'Phiên đăng nhập đã hết hạn. Hãy đăng xuất rồi đăng nhập lại.',
   CONFLICT: 'Donation đã được nhân sự khác xử lý hoặc đổi phiên bản. Tải trạng thái mới trước khi quyết định tiếp.',
   VALIDATION: 'Kiểm tra nội dung công khai và độ dài ghi chú.',
 }
@@ -237,6 +246,10 @@ async function submit() {
   if (submitting.value || !canDecide.value) return
   error.value = ''
   success.value = ''
+  if (action.value === 'approve' && needsWarehouseBeforeApprove.value) {
+    error.value = 'Cần gán kho trước khi duyệt.'
+    return
+  }
   if (action.value !== 'approve' && !publicMessage.value.trim()) {
     error.value = action.value === 'reject' ? 'Bắt buộc nhập lý do công khai cho donor.' : 'Bắt buộc nhập nội dung yêu cầu bổ sung cho donor.'
     return
@@ -344,7 +357,7 @@ watch(enlarged, async (value) => {
               </select>
               <button type="submit" :disabled="assigningWarehouse || !selectedWarehouseId">{{ assigningWarehouse ? 'Đang gán…' : 'Gán kho cho đơn' }}</button>
             </form>
-            <p v-else-if="!donation.warehouseId" class="notice">Chỉ gán được đơn chưa phân kho và đang chờ thẩm định.</p>
+            <p v-else-if="!donation.warehouseId" class="notice">Chỉ gán được đơn chưa có kho đang chờ thẩm định hoặc đã duyệt.</p>
             <p v-if="assignmentError" role="alert" class="notice error">{{ assignmentError }}</p>
             <p v-if="assignmentSuccess" role="status" class="notice success">{{ assignmentSuccess }}</p>
           </template>
@@ -352,9 +365,9 @@ watch(enlarged, async (value) => {
         <div class="detail-grid">
           <div class="details">
             <section class="card" aria-labelledby="item-title">
-              <p class="eyebrow">{{ donation.id }} · Kho {{ donation.warehouseId || (localPreview ? donation.hubId : 'chưa phân công') }}</p><h2 id="item-title">{{ donation.title }}</h2>
+              <p class="eyebrow">{{ donation.id }} · {{ donation.warehouseId ? warehouseName(donation.warehouseId) : (localPreview ? `Kho ${donation.hubId}` : 'Kho chưa phân công') }}</p><h2 id="item-title">{{ donation.title }}</h2>
               <figure v-if="activeImage" class="gallery">
-                <button class="main-image" aria-label="Phóng to ảnh đang chọn" @click="enlarged = true"><img :src="activeImage.url" :alt="activeImage.alt" /></button>
+                <button class="main-image" aria-label="Phóng to ảnh đang chọn" :disabled="mainImageState === 'error'" @click="enlarged = true"><img v-show="mainImageState !== 'error'" :src="activeImage.url" :alt="activeImage.alt" @load="mainImageState = 'loaded'" @error="mainImageState = 'error'" /><span v-if="mainImageState === 'loading'" class="main-image__status" role="status">Đang tải ảnh…</span><span v-else-if="mainImageState === 'error'" class="main-image__status main-image__status--error" role="alert">Không tải được ảnh này. Bấm “Tải lại dữ liệu” để lấy liên kết mới.</span></button>
                 <figcaption>Ảnh {{ selectedImage + 1 }}/{{ donation.images.length }} · Nhấn ảnh để phóng to</figcaption>
                 <div class="thumbnails"><button v-for="(photo, index) in donation.images" :key="photo.url" :aria-label="`Xem ảnh ${index + 1}`" :aria-pressed="selectedImage === index" @click="selectedImage = index"><img :src="photo.url" :alt="photo.alt" /></button></div>
               </figure>
@@ -409,7 +422,8 @@ watch(enlarged, async (value) => {
             <p v-if="!canDecide" class="notice">{{ conflict ? 'Cần tải phiên bản mới để tiếp tục.' : 'Trạng thái hiện tại không cho phép ra quyết định.' }}</p>
             <form @submit.prevent="submit">
               <fieldset :disabled="!canDecide || submitting"><legend>Chọn quyết định</legend>
-                <label v-for="(label, value) in actionLabels" :key="value" class="radio"><input v-model="action" type="radio" :value="value" name="decision" />{{ label }}</label>
+                <label v-for="(label, value) in actionLabels" :key="value" class="radio"><input v-model="action" type="radio" :value="value" name="decision" :disabled="value === 'approve' && needsWarehouseBeforeApprove" />{{ label }}</label>
+                <p v-if="needsWarehouseBeforeApprove && canDecide" class="notice">Cần gán kho ở khối “Phân kho xử lý” trước khi duyệt.</p>
                 <label for="public-message">{{ action === 'reject' ? 'Lý do từ chối công khai *' : action === 'information' ? 'Nội dung yêu cầu bổ sung *' : 'Lời nhắn công khai (tùy chọn)' }}</label>
                 <textarea id="public-message" v-model="publicMessage" :required="action !== 'approve'" maxlength="1000" rows="4" aria-describedby="public-help" />
                 <small id="public-help">Người gửi sẽ thấy nội dung này. {{ publicMessage.length }}/1000</small>
@@ -450,7 +464,9 @@ h1 { font-size: clamp(24px, 4vw, 34px); } h2 { font-size: 20px; margin-bottom: 1
 .detail-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr); gap: 24px; align-items: start; }
 .details { min-width: 0; } .decision { position: sticky; top: 20px; }
 .gallery { margin: 18px 0; } .gallery img { display: block; width: 100%; object-fit: contain; }
-.main-image { width: 100%; padding: 0; overflow: hidden; } .main-image img { max-height: 380px; }
+.main-image { position: relative; width: 100%; min-height: 220px; padding: 0; overflow: hidden; } .main-image img { max-height: 380px; }
+.main-image__status { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; background: #f3f5f8; color: #4b5464; font-size: 14px; text-align: center; }
+.main-image__status--error { position: static; min-height: 220px; background: #fff2f0; color: #8e2723; }
 figcaption { font-size: 13px; color: #596274; margin: 8px 0; }
 .thumbnails { display: flex; gap: 10px; } .thumbnails button { width: 90px; padding: 3px; }
 .thumbnails button[aria-pressed=true] { border: 2px solid #1f6b2c; }

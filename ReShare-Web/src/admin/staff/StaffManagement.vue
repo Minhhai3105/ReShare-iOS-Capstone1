@@ -243,7 +243,7 @@ onMounted(refresh)
             <li v-for="person in visibleStaff" :key="person.uid" class="staff-person">
               <div class="staff-person__identity">
                 <strong>{{ personName(person) }}</strong>
-                <span>{{ person.email || person.uid }}</span>
+                <span v-if="person.displayName">{{ person.email || person.uid }}</span>
               </div>
               <div class="staff-person__details">
                 <span :class="['staff-status', person.assignment?.active && !person.disabled ? 'staff-status--active' : 'staff-status--inactive']">

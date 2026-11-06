@@ -50,7 +50,10 @@ const hasActiveFilters = computed(() => Boolean(
 const roleLabel = computed(() => USER_ROLE_LABEL[staffAssignment.value?.role] || 'Quản trị viên')
 const assignedWarehousesLabel = computed(() => {
   if (isSystemAdmin.value) return 'Toàn hệ thống'
-  return staffAssignment.value?.warehouseIds?.join(', ') || 'Chưa được phân công kho'
+  const ids = staffAssignment.value?.warehouseIds || []
+  if (!ids.length) return 'Chưa được phân công kho'
+  // Hiện tên kho; chỉ dùng mã khi danh sách kho chưa tải được.
+  return ids.map((id) => warehouses.value.find((warehouse) => warehouse.id === id)?.name || id).join(', ')
 })
 const scopeLabel = computed(() => {
   if (!access.value) return 'Không xác định'
@@ -558,12 +561,12 @@ onBeforeUnmount(() => {
               </RouterLink>
               <RouterLink
                 v-if="isDemoBuild && demoWarehouse"
-                :to="{ name: 'admin-donation-detail', params: { warehouseId: demoWarehouse, donationId: 'demo-001' } }"
+                :to="{ name: 'admin-donation-detail-preview', params: { warehouseId: demoWarehouse, donationId: 'demo-001' } }"
                 class="auth-btn auth-btn--soft"
               >
                 <AuthIcon name="eye" />Xem trước donation (DEV)
               </RouterLink>
-              <button type="button" class="auth-btn auth-btn--soft" @click="onSignOutClick">
+              <button v-if="!inShell" type="button" class="auth-btn auth-btn--soft" @click="onSignOutClick">
                 <AuthIcon name="log-out" />Đăng xuất
               </button>
             </nav>

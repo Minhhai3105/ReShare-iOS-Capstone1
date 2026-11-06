@@ -257,8 +257,8 @@ watch(staffAssignment, () => {
 
         <div v-else-if="viewState === QUEUE_VIEW_STATE.error" class="queue-state queue-state--danger" role="alert">
           <span class="queue-state__icon"><AuthIcon name="cloud-off" :size="36" /></span>
-          <h2>{{ errorStatus === DONATION_QUEUE_ERROR.indexRequired ? 'Chưa có chỉ mục Firestore' : 'Không tải được danh sách' }}</h2>
-          <p>{{ errorStatus === DONATION_QUEUE_ERROR.indexRequired ? 'Bộ lọc này cần chỉ mục Firestore được triển khai. Hãy báo người quản trị hệ thống.' : 'Máy chủ hoặc kết nối mạng đang gặp sự cố. Vui lòng thử lại.' }}</p>
+          <h2>{{ errorStatus === DONATION_QUEUE_ERROR.indexRequired ? 'Chưa có chỉ mục Firestore' : errorStatus === DONATION_QUEUE_ERROR.unauthenticated ? 'Phiên đăng nhập đã hết hạn' : 'Không tải được danh sách' }}</h2>
+          <p>{{ errorStatus === DONATION_QUEUE_ERROR.indexRequired ? 'Bộ lọc này cần chỉ mục Firestore được triển khai. Hãy báo người quản trị hệ thống.' : errorStatus === DONATION_QUEUE_ERROR.unauthenticated ? 'Hãy đăng xuất rồi đăng nhập lại để tiếp tục.' : 'Máy chủ hoặc kết nối mạng đang gặp sự cố. Vui lòng thử lại.' }}</p>
           <button type="button" class="auth-btn auth-btn--primary" :disabled="isLoading" @click="refreshQueue">
             <AuthIcon :name="isLoading ? 'loader' : 'refresh'" :size="18" :class="{ 'auth-spin': isLoading }" />Thử lại
           </button>

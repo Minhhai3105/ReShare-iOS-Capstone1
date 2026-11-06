@@ -37,6 +37,8 @@ export const DONATION_SORT = Object.freeze({
 
 export const DONATION_QUEUE_ERROR = Object.freeze({
   forbidden: 403,
+  // Phiên đăng nhập hết hạn/không hợp lệ: khác với không có quyền theo kho.
+  unauthenticated: 401,
   server: 500,
   network: 'NETWORK_ERROR',
   indexRequired: 'INDEX_REQUIRED',

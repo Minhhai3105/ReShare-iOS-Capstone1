@@ -198,13 +198,14 @@ export async function enrichDonationSenders(items, load = ids => reviewRequest('
     })
   } catch (error) {
     if (error?.status) throw error
-    throw createQueueError(error?.code === 'FORBIDDEN' ? DONATION_QUEUE_ERROR.forbidden : DONATION_QUEUE_ERROR.network)
+    throw createQueueError(error?.code === 'FORBIDDEN' ? DONATION_QUEUE_ERROR.forbidden
+      : error?.code === 'UNAUTHENTICATED' ? DONATION_QUEUE_ERROR.unauthenticated : DONATION_QUEUE_ERROR.network)
   }
 }
 
 async function reviewRequest(path, body, responseField = 'donation') {
   const token = await auth.currentUser?.getIdToken()
-  if (!token) throw Object.assign(new Error('FORBIDDEN'), { code: 'FORBIDDEN' })
+  if (!token) throw Object.assign(new Error('UNAUTHENTICATED'), { code: 'UNAUTHENTICATED' })
   let response
   try {
     response = await fetch(`${reviewApiBase}${path}`, {
@@ -219,7 +220,7 @@ async function reviewRequest(path, body, responseField = 'donation') {
   if (!response.ok) {
     let payload
     try { payload = await response.json() } catch {}
-    const code = { 400: 'VALIDATION', 401: 'FORBIDDEN', 403: 'FORBIDDEN', 404: 'NOT_FOUND', 409: 'CONFLICT' }[response.status] || 'NETWORK'
+    const code = { 400: 'VALIDATION', 401: 'UNAUTHENTICATED', 403: 'FORBIDDEN', 404: 'NOT_FOUND', 409: 'CONFLICT' }[response.status] || 'NETWORK'
     const errorText = payload?.error || payload?.message
     throw Object.assign(new Error(errorText || code), { code, serverMessage: errorText })
   }

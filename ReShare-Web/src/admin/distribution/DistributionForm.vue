@@ -177,7 +177,7 @@ const formatTime = (value) => new Intl.DateTimeFormat('vi-VN', {
   <div :class="['distribution-shell', { 'distribution-shell--embedded': inShell }]">
     <header v-if="!inShell" class="d-topbar">
       <div class="d-brand"><img :src="brandLogo" alt="ReShare" /><b>ReShare <small>PORTAL</small></b><span><strong>ReShare Ops</strong><small>Hệ thống Điều phối Kho</small></span></div>
-      <div class="d-search"><AdminIcon name="search" /><span>Tìm kiếm vận đơn, kiện hàng, quyền góp</span><kbd>⌘K</kbd></div>
+      <div class="d-search"><AdminIcon name="search" /><span>Tìm kiếm vận đơn, kiện hàng, quyên góp</span><kbd>⌘K</kbd></div>
       <span class="d-shift"><AdminIcon name="clock" :size="16" />{{ preview ? 'Ca trực mẫu: Sáng (08:00 – 16:30)' : 'Ca trực vận hành: Sáng (08:00 – 16:30)' }}</span>
       <div class="d-profile"><span>{{ actorName }}<small>{{ roleName }}</small></span><i><AdminIcon name="user" /></i></div>
     </header>

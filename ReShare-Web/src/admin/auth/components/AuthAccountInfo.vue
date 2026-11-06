@@ -18,7 +18,8 @@ const roleLabel = computed(() => {
   <dl class="auth-account-info">
     <div>
       <dt>Họ tên</dt>
-      <dd>{{ user.displayName }}</dd>
+      <dd v-if="user.displayName && user.displayName !== user.email">{{ user.displayName }}</dd>
+      <dd v-else class="auth-account-info__empty">Chưa đặt tên hiển thị</dd>
     </div>
     <div>
       <dt>Email</dt>
@@ -61,6 +62,11 @@ const roleLabel = computed(() => {
   font-weight: 600;
   text-align: right;
   word-break: break-all;
+}
+
+.auth-account-info__empty {
+  color: var(--auth-text-tertiary);
+  font-style: italic;
 }
 
 .auth-account-info__role {
