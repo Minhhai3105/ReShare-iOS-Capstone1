@@ -9,16 +9,16 @@ import itemCheck from '../assets/ai-item-check.png'
         <span class="eyebrow eyebrow--light"><span class="eyebrow-dot"></span> CÔNG NGHỆ AI</span>
         <h2>Ảnh vật phẩm → AI phân tích →<br /><span>Gợi ý danh mục → Người dùng xác nhận hoặc chỉnh sửa</span></h2>
         <p>
-          Khi đăng món lên Kho đồ 0đ, AI gợi ý một trong ba danh mục từ ảnh.
-          Người đăng kiểm tra và có thể chọn lại trước khi gửi.
+          Khi quyên góp hoặc đăng món lên Kho đồ 0đ, AI trên điện thoại gợi ý một trong ba danh mục từ ảnh.
+          Người dùng kiểm tra và có thể chọn lại trước khi gửi.
         </p>
         <ul class="ai-points">
           <li><span>✓</span> Phân loại ảnh thành Sách vở, Quần áo hoặc Gia dụng</li>
-          <li><span>✓</span> Gợi ý danh mục khi đăng món ở Kho đồ 0đ</li>
+          <li><span>✓</span> Gợi ý danh mục khi quyên góp và khi đăng món ở Kho đồ 0đ</li>
           <li><span>✓</span> Người dùng có thể chọn lại danh mục</li>
           <li><span>✓</span> Tên và tình trạng món đồ do người dùng nhập</li>
         </ul>
-        <span class="ai-disclaimer">AI là công cụ hỗ trợ và đang được phát triển theo phạm vi dự án.</span>
+        <span class="ai-disclaimer">AI chỉ gợi ý; danh mục cuối cùng luôn do người dùng xác nhận.</span>
       </div>
       <div class="ai-visual">
         <div class="ai-photo">

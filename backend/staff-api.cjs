@@ -18,6 +18,23 @@ function createStaffApi({ db, auth, verifyToken }) {
     return claims.uid;
   }
 
+  // Danh sách kho cần cho cả màn nghiệp vụ của Warehouse Admin (form thực nhận), không chỉ màn phân quyền,
+  // nên chỉ đòi nhân sự đang hoạt động. Phạm vi vẫn lấy từ staff_assignments, không tin dữ liệu từ client.
+  async function requireActiveStaff(headers) {
+    const match = /^Bearer (\S+)$/.exec(headers.authorization || '');
+    if (!match) throw new ApiError(401, 'Sign in required');
+    let claims;
+    try { claims = await verifyToken(match[1]); }
+    catch { throw new ApiError(401, 'Invalid session'); }
+    if (!claims?.uid) throw new ApiError(401, 'Invalid session');
+    const assignment = await db.collection('staff_assignments').doc(claims.uid).get();
+    const data = assignment.exists ? assignment.data() : null;
+    if (data?.active !== true || !['system_admin', 'warehouse_admin'].includes(data.role)) {
+      throw new ApiError(403, 'Active staff access required');
+    }
+    return { role: data.role, warehouseIds: Array.isArray(data.warehouseIds) ? data.warehouseIds : [] };
+  }
+
   function assignmentData(snapshot) {
     if (!snapshot?.exists) return null;
     const data = snapshot.data();
@@ -41,16 +58,21 @@ function createStaffApi({ db, auth, verifyToken }) {
   }
 
   async function handle(method, path, headers, body) {
+    // System Admin nhận mọi kho đang hoạt động; Warehouse Admin chỉ nhận kho đang hoạt động được giao.
+    if (method === 'GET' && path === '/v1/admin/warehouses') {
+      const staff = await requireActiveStaff(headers);
+      const snapshot = await db.collection('warehouses').where('status', '==', 'active').limit(100).get();
+      const docs = staff.role === 'system_admin'
+        ? snapshot.docs
+        : snapshot.docs.filter(doc => staff.warehouseIds.includes(doc.id));
+      return { status: 200, body: { warehouses: docs.map(doc => ({ id: doc.id, name: doc.data().name || doc.id })) } };
+    }
     const routes = {
       'GET /v1/admin/staff': async () => {
         const snapshot = await db.collection('staff_assignments').limit(100).get();
         return { staff: await Promise.all(snapshot.docs.map(async doc => ({
           ...await accountData(doc.id), assignment: assignmentData(doc),
         }))) };
-      },
-      'GET /v1/admin/warehouses': async () => {
-        const snapshot = await db.collection('warehouses').where('status', '==', 'active').limit(100).get();
-        return { warehouses: snapshot.docs.map(doc => ({ id: doc.id, name: doc.data().name || doc.id })) };
       },
       'GET /v1/admin/staff/audit': async () => {
         const snapshot = await db.collection('staff_assignment_audit').orderBy('createdAt', 'desc').limit(50).get();
