@@ -7,6 +7,10 @@ import { currentUser, staffAssignment, canAccessWarehouse } from '../../auth/aut
 import { ADMIN_ROUTE } from '../../auth/auth.constants'
 import { demoReceiptRepository, RECEIPT_ERROR, receiptRepository } from '../receipt.repository'
 import brandLogo from '../../auth/assets/reshare-logo.png'
+import { useInAdminShell } from '../../layout/adminShell'
+
+// Trong khung quản trị: không vẽ topbar/sidebar/footer riêng; route xem thử ở DEV giữ nguyên.
+const inShell = useInAdminShell()
 
 const route = useRoute()
 const isDemoPreview = import.meta.env.DEV && route.meta.devPreview === true
@@ -153,23 +157,23 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="admin-shell">
-    <header class="topbar">
+  <div :class="inShell ? 'admin-embedded' : 'admin-shell'">
+    <header v-if="!inShell" class="topbar">
       <div class="brand"><img class="brand-logo" :src="brandLogo" alt="" /><strong>ReShare</strong><span class="brand-tag">PORTAL</span><span class="brand-caption">Hệ thống điều phối vận hành</span></div>
       <div class="topbar__warehouse"><AuthIcon name="warehouse" :size="18" /><span><strong>{{ selectedWarehouse?.name || 'Chưa chọn kho' }}</strong><small>{{ isDemoPreview ? 'Kho minh họa' : 'Kho thực nhận' }}</small></span></div>
       <span v-if="isDemoPreview" class="topbar__demo">Dữ liệu demo</span>
       <div class="topbar__profile"><span class="profile-avatar">NV</span><span><strong>{{ currentUser?.displayName || currentUser?.email || 'Nhân sự' }}</strong><small>{{ staffAssignment?.role || 'Chưa có quyền' }}</small></span></div>
     </header>
 
-    <aside class="sidebar">
+    <aside v-if="!inShell" class="sidebar">
       <p class="sidebar__label">VẬN HÀNH KHO &amp; XỬ LÝ</p>
       <RouterLink :to="backRoute"><AuthIcon name="dashboard" />Tổng quan</RouterLink>
       <span class="sidebar__label sidebar__label--second">Ghi nhận thực nhận</span>
     </aside>
 
-    <main class="admin-main">
+    <main :class="['admin-main', { 'admin-main--embedded': inShell }]">
     <div class="receipt-page">
-      <div class="breadcrumbs"><RouterLink :to="backRoute">‹ Về tổng quan</RouterLink><span>Yêu cầu quyên góp</span><b>›</b><strong>Ghi nhận thực nhận</strong></div>
+      <div v-if="!inShell" class="breadcrumbs"><RouterLink :to="backRoute">‹ Về tổng quan</RouterLink><span>Yêu cầu quyên góp</span><b>›</b><strong>Ghi nhận thực nhận</strong></div>
 
       <div v-if="isDemoPreview" class="receipt-notice receipt-notice--demo" role="status">
         <AuthIcon name="info" /><div><strong>MÔI TRƯỜNG XEM THỬ <span>•</span> Dữ liệu mô phỏng quy trình tiếp nhận thực tế</strong>
@@ -331,7 +335,7 @@ onMounted(load)
       </div>
     </div>
     </main>
-    <footer class="admin-footer"><span>ReShare · Hệ thống điều phối nội bộ</span></footer>
+    <footer v-if="!inShell" class="admin-footer"><span>ReShare · Hệ thống điều phối nội bộ</span></footer>
   </div>
 </template>
 
@@ -352,4 +356,6 @@ onMounted(load)
 @media(max-width:1150px){.receipt-columns{grid-template-columns:1fr}.side-stack{grid-template-columns:1fr 1fr}.safety-card{grid-column:1/-1}.brand-logo{width:36px}.brand-caption{max-width:60px}}
 @media(max-width:1000px){.brand{min-width:auto;padding-right:10px}.topbar__warehouse{min-width:145px}.topbar__warehouse span:nth-child(2){display:grid}.topbar__profile>span:nth-child(2){display:none}.topbar__search{display:none}.topbar__active{display:inline-flex}.topbar__shift{display:flex}}
 @media(max-width:760px){.sticky-actions{left:auto;right:auto;bottom:10px;width:100%}.admin-footer{display:none}.topbar__shift{display:none}.receipt-status-block{justify-items:start;margin:0 0 0 54px}.side-stack{grid-template-columns:1fr}.safety-card{grid-column:auto}}
+
+.admin-embedded{color:#182235;font:14px/1.45 'Be Vietnam Pro',system-ui,-apple-system,'Segoe UI',sans-serif}.admin-embedded *{box-sizing:border-box}.admin-main--embedded{min-height:0;margin-left:0;padding:0}.admin-embedded .sticky-actions{left:calc(var(--admin-shell-offset,0px) + 24px);right:24px}@media(max-width:900px){.admin-embedded .sticky-actions{left:12px;right:12px}}.admin-embedded .admin-main--embedded{padding-bottom:84px}
 </style>

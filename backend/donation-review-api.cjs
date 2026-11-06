@@ -68,8 +68,10 @@ function createDonationReviewApi({ db, auth, verifyToken, serverTimestamp }) {
       if (donation.warehouseId) {
         throw new ApiError(409, 'Donation is already assigned to a warehouse');
       }
-      if (donation.status !== 'pending') {
-        throw new ApiError(409, `Donation must be pending to assign warehouse (current status: ${donation.status})`);
+      // Đơn đã duyệt mà chưa có kho (dữ liệu tạo trước khi chặn duyệt-không-kho) vẫn phải gán được,
+      // nếu không sẽ kẹt: không ai thực nhận hay nhập kho được.
+      if (!['pending', 'approved'].includes(donation.status)) {
+        throw new ApiError(409, `Donation must be pending or approved to assign warehouse (current status: ${donation.status})`);
       }
       if (donation.reviewState === 'needs_information') {
         throw new ApiError(409, 'Donation is awaiting information from donor');
@@ -147,6 +149,10 @@ function createDonationReviewApi({ db, auth, verifyToken, serverTimestamp }) {
       }
       if (expectedVersion !== undefined && (data.version || 1) !== expectedVersion) {
         throw new ApiError(409, 'Donation was updated by another staff member. Please reload before deciding.');
+      }
+      // Duyệt mà chưa có kho thì không ai thực nhận được; buộc gán kho trước.
+      if (action === 'approve' && !assignedWarehouse) {
+        throw new ApiError(409, 'Assign a warehouse before approving this donation.');
       }
 
       const nextVersion = (data.version || 1) + 1;

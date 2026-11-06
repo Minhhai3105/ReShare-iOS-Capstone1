@@ -1,7 +1,8 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import AuthShell from './auth/components/AuthShell.vue'
+import AdminFrame from './layout/AdminFrame.vue'
+import { useInAdminShell } from './layout/adminShell'
 import AuthIcon from './auth/components/AuthIcon.vue'
 import AuthAccountInfo from './auth/components/AuthAccountInfo.vue'
 import logoUrl from './auth/assets/reshare-logo.png'
@@ -35,6 +36,8 @@ const metricError = ref(null)
 const warehouseDialog = ref(null)
 const access = computed(() => resolveQueueAccess(staffAssignment.value))
 const isSystemAdmin = computed(() => access.value?.isAllWarehouses === true)
+// Trong khung quản trị: sidebar và thanh trên cùng do AdminLayout vẽ, trang chỉ còn nội dung.
+const inShell = useInAdminShell()
 const hasActiveFilters = computed(() => Boolean(
   filters.value.dateFrom
   || filters.value.dateTo
@@ -47,7 +50,10 @@ const hasActiveFilters = computed(() => Boolean(
 const roleLabel = computed(() => USER_ROLE_LABEL[staffAssignment.value?.role] || 'Quản trị viên')
 const assignedWarehousesLabel = computed(() => {
   if (isSystemAdmin.value) return 'Toàn hệ thống'
-  return staffAssignment.value?.warehouseIds?.join(', ') || 'Chưa được phân công kho'
+  const ids = staffAssignment.value?.warehouseIds || []
+  if (!ids.length) return 'Chưa được phân công kho'
+  // Hiện tên kho; chỉ dùng mã khi danh sách kho chưa tải được.
+  return ids.map((id) => warehouses.value.find((warehouse) => warehouse.id === id)?.name || id).join(', ')
 })
 const scopeLabel = computed(() => {
   if (!access.value) return 'Không xác định'
@@ -332,9 +338,9 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <AuthShell>
-    <div v-if="currentUser && staffAssignment" class="admin-ops">
-      <aside class="admin-ops__sidebar" aria-label="Thanh điều hướng quản trị">
+  <AdminFrame>
+    <div v-if="currentUser && staffAssignment" :class="['admin-ops', { 'admin-ops--embedded': inShell }]">
+      <aside v-if="!inShell" class="admin-ops__sidebar" aria-label="Thanh điều hướng quản trị">
         <div class="admin-ops__brand">
           <img :src="logoUrl" alt="" />
           <span><strong>ReShare</strong><small>Admin Portal</small></span>
@@ -370,7 +376,7 @@ onBeforeUnmount(() => {
       </aside>
 
       <div class="admin-ops__body">
-        <header class="admin-ops__topbar">
+        <header v-if="!inShell" class="admin-ops__topbar">
           <strong class="admin-ops__topbar-title">ReShare <span>Admin Portal</span></strong>
           <button
             type="button"
@@ -388,12 +394,22 @@ onBeforeUnmount(() => {
           <section class="admin-dashboard" aria-labelledby="admin-dashboard-title">
             <header class="admin-dashboard__header">
               <div class="admin-dashboard__intro">
-                <p class="admin-dashboard__eyebrow">ReShare · Portal vận hành</p>
+                <p v-if="!inShell" class="admin-dashboard__eyebrow">ReShare · Portal vận hành</p>
                 <h1 id="admin-dashboard-title">Tổng quan vận hành</h1>
                 <p>Theo dõi các yêu cầu quyên góp cần xử lý trong phạm vi kho được cấp quyền.</p>
               </div>
               <div class="admin-dashboard__header-actions">
-                <span class="auth-chip admin-dashboard__role"><span class="auth-dot" />{{ roleLabel }}</span>
+                <button
+                  v-if="inShell"
+                  type="button"
+                  class="admin-ops__warehouse-button"
+                  :disabled="isWarehousesLoading"
+                  aria-haspopup="dialog"
+                  @click="openWarehouseSelector"
+                >
+                  <AuthIcon name="warehouse" :size="17" />{{ selectedWarehouseLabel }} <span aria-hidden="true">⌄</span>
+                </button>
+                <span v-if="!inShell" class="auth-chip admin-dashboard__role"><span class="auth-dot" />{{ roleLabel }}</span>
                 <RouterLink :to="{ name: ADMIN_ROUTE.donationQueue }" class="auth-btn auth-btn--primary">
                   <AuthIcon name="inbox" />Mở hàng đợi
                 </RouterLink>
@@ -545,12 +561,12 @@ onBeforeUnmount(() => {
               </RouterLink>
               <RouterLink
                 v-if="isDemoBuild && demoWarehouse"
-                :to="{ name: 'admin-donation-detail', params: { warehouseId: demoWarehouse, donationId: 'demo-001' } }"
+                :to="{ name: 'admin-donation-detail-preview', params: { warehouseId: demoWarehouse, donationId: 'demo-001' } }"
                 class="auth-btn auth-btn--soft"
               >
                 <AuthIcon name="eye" />Xem trước donation (DEV)
               </RouterLink>
-              <button type="button" class="auth-btn auth-btn--soft" @click="onSignOutClick">
+              <button v-if="!inShell" type="button" class="auth-btn auth-btn--soft" @click="onSignOutClick">
                 <AuthIcon name="log-out" />Đăng xuất
               </button>
             </nav>
@@ -585,7 +601,7 @@ onBeforeUnmount(() => {
       </dialog>
     </div>
     <div v-else class="admin-ops__pending" role="status">Đang tải quyền truy cập…</div>
-  </AuthShell>
+  </AdminFrame>
 </template>
 
 <style scoped>
@@ -639,6 +655,8 @@ onBeforeUnmount(() => {
 .admin-ops__nav-link--active:hover { background: var(--auth-primary-hover); color: white; }
 .admin-ops__sidebar-footer { gap: 8px; margin-top: auto; padding: 12px; border-radius: 9px; background: var(--auth-accent-soft); color: var(--auth-text-secondary); font-size: 12px; }
 .admin-ops__body { min-width: 0; }
+.admin-ops--embedded { display: block; min-height: 0; background: transparent; }
+.admin-ops--embedded .admin-ops__content { padding: 0; }
 .admin-ops__topbar { flex-wrap: wrap; gap: 12px; min-height: 70px; padding: 12px 24px; border-bottom: 1px solid var(--auth-border); background: var(--auth-surface); }
 .admin-ops__topbar-title { margin-right: auto; color: var(--auth-primary); white-space: nowrap; }
 .admin-ops__topbar-title span { display: block; color: var(--auth-text-tertiary); font-size: 11px; font-weight: 500; }

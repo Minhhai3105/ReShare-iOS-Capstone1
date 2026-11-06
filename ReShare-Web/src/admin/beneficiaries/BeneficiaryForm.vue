@@ -6,6 +6,10 @@ import { ADMIN_ROUTE } from '../auth/auth.constants'
 import { staffAssignment } from '../auth/auth.store'
 import { fetchQueueWarehouses, resolveQueueAccess } from '../donations/donation.service'
 import BeneficiaryShell from './BeneficiaryShell.vue'
+import { useInAdminShell } from '../layout/adminShell'
+
+// Trong khung quản trị nút Quay lại và thanh vị trí đã có ở thanh trên cùng.
+const inShell = useInAdminShell()
 import { BENEFICIARY_ERROR, classifyBeneficiaryError, resolveBeneficiaryAccess } from './beneficiary.service'
 import { beneficiaryRepository } from './beneficiary.repository'
 import { validateBeneficiaryForm } from './beneficiary.validation'
@@ -206,7 +210,7 @@ function formatDate(value) {
           <p class="beneficiary-form__subtitle">{{ isEditMode ? 'Cập nhật thông tin hồ sơ trong phạm vi được phân quyền.' : 'Tạo hồ sơ người thụ hưởng cho kho đang làm việc.' }}</p>
           <p class="beneficiary-form__demo-label"><AuthIcon name="info" :size="16" /> Hồ sơ mới hoặc vừa sửa sẽ chờ System Admin duyệt trước khi được dùng để xuất kho.</p>
         </div>
-        <button type="button" class="auth-btn auth-btn--soft" @click="goBack">
+        <button v-if="!inShell" type="button" class="auth-btn auth-btn--soft" @click="goBack">
           <AuthIcon name="arrow-left" :size="18" />Quay lại
         </button>
       </header>

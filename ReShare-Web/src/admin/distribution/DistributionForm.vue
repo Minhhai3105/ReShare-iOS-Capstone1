@@ -5,6 +5,7 @@ import brandLogo from '../auth/assets/reshare-logo.png'
 import { canDistribute, createDemoDistributionRepository, newRequestKey, validateDistribution } from './distribution.repository.js'
 import { mapLqError } from '../lq-errors.js'
 import { quantityBase, quantityFromBase } from '../shared/quantity.js'
+import { useInAdminShell } from '../layout/adminShell'
 
 const props = defineProps({
   assignment: Object,
@@ -12,6 +13,8 @@ const props = defineProps({
   repository: Object,
   preview: { type: Boolean, default: false },
 })
+// Trong khung quản trị: bỏ topbar/sidebar riêng (vốn chỉ có nút vô hiệu), dùng điều hướng chung.
+const inShell = useInAdminShell()
 const activeRepo = computed(() => {
   if (props.repository) return props.repository
   return createDemoDistributionRepository({ getAssignment: () => props.assignment, getActor: () => props.actor })
@@ -171,15 +174,15 @@ const formatTime = (value) => new Intl.DateTimeFormat('vi-VN', {
 </script>
 
 <template>
-  <div class="distribution-shell">
-    <header class="d-topbar">
+  <div :class="['distribution-shell', { 'distribution-shell--embedded': inShell }]">
+    <header v-if="!inShell" class="d-topbar">
       <div class="d-brand"><img :src="brandLogo" alt="ReShare" /><b>ReShare <small>PORTAL</small></b><span><strong>ReShare Ops</strong><small>Hệ thống Điều phối Kho</small></span></div>
-      <div class="d-search"><AdminIcon name="search" /><span>Tìm kiếm vận đơn, kiện hàng, quyền góp</span><kbd>⌘K</kbd></div>
+      <div class="d-search"><AdminIcon name="search" /><span>Tìm kiếm vận đơn, kiện hàng, quyên góp</span><kbd>⌘K</kbd></div>
       <span class="d-shift"><AdminIcon name="clock" :size="16" />{{ preview ? 'Ca trực mẫu: Sáng (08:00 – 16:30)' : 'Ca trực vận hành: Sáng (08:00 – 16:30)' }}</span>
       <div class="d-profile"><span>{{ actorName }}<small>{{ roleName }}</small></span><i><AdminIcon name="user" /></i></div>
     </header>
 
-    <aside class="d-sidebar">
+    <aside v-if="!inShell" class="d-sidebar">
       <div class="d-station"><b><AdminIcon name="warehouse" :size="16" />{{ warehouse?.name || (preview ? 'Chưa có kho mẫu phù hợp' : 'Chưa có kho phù hợp') }}</b><span v-if="preview" class="d-tag">Demo</span><small>Đang thao tác tại kho <em v-if="preview">● Mô phỏng</em></small></div>
       <p class="d-nav-title">VẬN HÀNH KHO &amp; XỬ LÝ</p>
       <nav :aria-label="preview ? 'Điều hướng demo' : 'Điều hướng vận hành'"><button v-for="entry in menu" :key="entry.label" disabled :class="{ active: entry.active }" :aria-current="entry.active ? 'page' : undefined"><AdminIcon :name="entry.icon" />{{ entry.label }}</button></nav>
@@ -190,7 +193,8 @@ const formatTime = (value) => new Intl.DateTimeFormat('vi-VN', {
     </aside>
 
     <main class="d-main">
-      <div class="d-breadcrumb"><AdminIcon name="box" :size="15" />Kho hàng <span>/</span> Chi tiết vật phẩm <span>/</span><b>Phân phối hàng</b></div>
+      <p v-if="inShell" class="d-embedded-station"><AdminIcon name="warehouse" :size="16" />Kho thao tác: <b>{{ warehouse?.name || 'Chưa có kho phù hợp' }}</b></p>
+      <div v-else class="d-breadcrumb"><AdminIcon name="box" :size="15" />Kho hàng <span>/</span> Chi tiết vật phẩm <span>/</span><b>Phân phối hàng</b></div>
       <section v-if="preview" class="d-card d-sandbox" aria-label="Thông báo dữ liệu mẫu">
         <span class="d-icon-tile"><AdminIcon name="flask" :size="24" /></span>
         <div><b><code>SANDBOX NODE: RC1D-82</code> MÔI TRƯỜNG THỬ NGHIỆM ĐỐI CHIẾU</b><p><strong>Dữ liệu mẫu.</strong> Mọi thao tác phân phối và phiếu xuất chỉ được mô phỏng trong bộ nhớ, tải lại trang để đặt lại. Không ghi dữ liệu vận hành thật, không dùng làm báo cáo chính thức. Chưa bảo đảm transaction Backend.</p></div>
@@ -244,7 +248,7 @@ const formatTime = (value) => new Intl.DateTimeFormat('vi-VN', {
           <section class="d-card d-rules"><h2><AdminIcon name="gavel" />Quy chế nghiệp vụ phân phối</h2><h3>1. Nguyên tắc bất biến (Append-only)</h3><p>Mỗi lần xuất thành công tạo một phiếu xuất và movement tham chiếu tương ứng. Không sửa chứng từ đã tạo.</p><h3>2. Phân phối từng phần (Partial)</h3><p>Chỉ giảm số lượng tồn còn lại tương ứng; <b>KHÔNG</b> tự động chuyển toàn bộ yêu cầu quyên góp sang “Đã phân phối”.</p><h3>3. Kiểm soát đồng thời (Concurrency)</h3><p>Nếu tồn hoặc phiên bản sổ kho thay đổi khi gửi, giao dịch có thể bị từ chối. Kiểm tra tồn mới, điều chỉnh và xác nhận lại.</p><h3>4. Tách biệt với P2P “Kho đồ 0đ”</h3><p>Biểu mẫu dành cho phân phối qua kho vật lý. Không xử lý bài đăng chia sẻ ngang hàng P2P.</p><div v-if="preview" class="d-note"><AdminIcon name="info" /><p>Bản demo RC1D-82. Không kết nối kho vận hành hoặc màn chi tiết phiếu xuất.</p></div></section>
         </aside>
       </div>
-      <footer class="d-footer"><span>© ReShare Circular Fashion Hub · Hệ thống điều phối nội bộ</span><b>{{ preview ? '● Dữ liệu mẫu · Không dùng báo cáo chính thức' : '● Hệ thống quản trị ReShare Ops' }}</b></footer>
+      <footer v-if="!inShell" class="d-footer"><span>© ReShare Circular Fashion Hub · Hệ thống điều phối nội bộ</span><b>{{ preview ? '● Dữ liệu mẫu · Không dùng báo cáo chính thức' : '● Hệ thống quản trị ReShare Ops' }}</b></footer>
     </main>
 
     <dialog ref="dialog" class="d-dialog" aria-labelledby="distribution-confirm-title" @cancel="cancelConfirmation">

@@ -4,6 +4,10 @@ import { useRouter } from 'vue-router'
 import AdminChrome from '../AdminChrome.vue'
 import { ADMIN_ROUTE, USER_ROLE } from '../auth/auth.constants'
 import { currentUser, staffAssignment } from '../auth/auth.store'
+import { useInAdminShell } from '../layout/adminShell'
+
+// Trong khung quản trị chỉ hiển thị nội dung; AdminChrome cũ chỉ còn cho trường hợp đứng ngoài khung.
+const inShell = useInAdminShell()
 
 const router = useRouter()
 const role = computed(() => staffAssignment.value?.role === USER_ROLE.systemAdmin
@@ -24,7 +28,9 @@ function navigate(screen) {
 </script>
 
 <template>
+  <div v-if="inShell" class="admin-page"><slot /></div>
   <AdminChrome
+    v-else
     screen="B"
     :role="role"
     :enabled-screens="['B', 'E']"

@@ -6,6 +6,10 @@ import { currentUser, staffAssignment, canAccessWarehouse } from '../../auth/aut
 import { ADMIN_ROUTE } from '../../auth/auth.constants'
 import { demoStockInRepository, STOCK_IN_ERROR, stockInRepository } from '../stockin.repository'
 import brandLogo from '../../auth/assets/reshare-logo.png'
+import { useInAdminShell } from '../../layout/adminShell'
+
+// Trong khung quản trị: không vẽ topbar/sidebar/footer riêng; route xem thử ở DEV giữ nguyên.
+const inShell = useInAdminShell()
 
 const route = useRoute()
 const isDemoPreview = import.meta.env.DEV && route.meta.devPreview === true
@@ -148,23 +152,23 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="admin-shell">
-    <header class="topbar">
+  <div :class="inShell ? 'admin-embedded' : 'admin-shell'">
+    <header v-if="!inShell" class="topbar">
       <div class="brand"><img class="brand-logo" :src="brandLogo" alt="" /><strong>ReShare</strong><span class="brand-tag">PORTAL</span><span class="brand-caption">Hệ thống điều phối vận hành</span></div>
       <div class="topbar__warehouse"><AuthIcon name="warehouse" :size="18" /><span><strong>{{ warehouseName || 'Chưa xác định kho' }}</strong><small>{{ isDemoPreview ? 'Kho minh họa' : 'Kho nhập' }}</small></span></div>
       <span v-if="isDemoPreview" class="topbar__demo">Dữ liệu demo</span>
       <div class="topbar__profile"><span class="profile-avatar">NV</span><span><strong>{{ currentUser?.displayName || currentUser?.email || 'Nhân sự' }}</strong><small>{{ staffAssignment?.role || 'Chưa có quyền' }}</small></span></div>
     </header>
 
-    <aside class="sidebar">
+    <aside v-if="!inShell" class="sidebar">
       <p class="sidebar__label">VẬN HÀNH KHO &amp; XỬ LÝ</p>
       <RouterLink :to="{ name: ADMIN_ROUTE.home }"><AuthIcon name="dashboard" />Tổng quan</RouterLink>
       <span class="sidebar__label sidebar__label--second">Nhập kho</span>
     </aside>
 
-    <main class="admin-main">
+    <main :class="['admin-main', { 'admin-main--embedded': inShell }]">
     <div class="stock-page">
-      <div class="breadcrumbs"><span>Yêu cầu quyên góp</span><b>/</b><span>Chi tiết yêu cầu</span><b>/</b><strong>Nhập kho</strong>
+      <div v-if="!inShell" class="breadcrumbs"><span>Yêu cầu quyên góp</span><b>/</b><span>Chi tiết yêu cầu</span><b>/</b><strong>Nhập kho</strong>
         <RouterLink class="breadcrumbs__back" :to="backRoute"><AuthIcon name="arrow-left" :size="14" />Quay lại chi tiết yêu cầu</RouterLink></div>
 
       <div v-if="isDemoPreview" class="stock-notice stock-notice--demo" role="status">
@@ -329,7 +333,7 @@ onMounted(load)
       </div>
     </div>
     </main>
-    <footer class="admin-footer"><span>ReShare · Hệ thống điều phối nội bộ</span></footer>
+    <footer v-if="!inShell" class="admin-footer"><span>ReShare · Hệ thống điều phối nội bộ</span></footer>
   </div>
 </template>
 
@@ -375,4 +379,6 @@ onMounted(load)
 .dialog-backdrop{position:fixed;inset:0;z-index:10;display:grid;place-items:center;padding:20px;background:#10182880}.confirm-dialog{width:min(480px,100%);padding:24px;border-radius:14px;background:#fff;box-shadow:0 20px 60px #0003}.confirm-dialog h2{font-size:20px}.confirm-dialog p{margin:12px 0 22px;color:#4e5a6c}.form-actions{display:flex;justify-content:flex-end;gap:10px}
 @media(max-width:1150px){.sidebar{width:220px}.admin-main,.admin-footer{margin-left:220px;padding-right:20px;padding-left:20px}.brand{min-width:auto}.brand-caption{display:none}.stock-columns{grid-template-columns:1fr}.side-stack{grid-template-columns:1fr 1fr}}
 @media(max-width:760px){.admin-shell{padding-top:60px}.topbar{height:60px;padding:0 14px}.brand{border:0;padding:0}.topbar__warehouse,.topbar__demo,.topbar__profile>span:nth-child(2){display:none}.sidebar{display:none}.admin-main{margin:0;padding:12px 14px 24px}.admin-footer{display:none}.stock-heading{flex-wrap:wrap}.stock-location{margin-left:0}.side-stack,.readonly-grid,.field-pair,.stock-meta{grid-template-columns:1fr}.breadcrumbs{flex-wrap:wrap}.breadcrumbs__back{margin-left:0}.sticky-actions__hint{display:none}.stock-card{padding:18px 16px}}
+
+.admin-embedded{color:#182235;font:14px/1.45 'Be Vietnam Pro',system-ui,-apple-system,'Segoe UI',sans-serif}.admin-embedded *{box-sizing:border-box}.admin-main--embedded{min-height:0;margin-left:0;padding:0}
 </style>

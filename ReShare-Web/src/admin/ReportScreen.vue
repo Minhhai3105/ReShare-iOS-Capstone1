@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import AdminIcon from './AdminIcon.vue'
 import AdminChrome from './AdminChrome.vue'
+import { useInAdminShell } from './layout/adminShell'
 import { calculateReviewMetrics } from './reviewMetrics'
 import { calculateReports, REPORT_TYPES, reportDay, validateReportFilters } from './reports/reports.model.js'
 import { createMockReportsRepository } from './reports/reports.repository.js'
@@ -16,6 +17,8 @@ const props = defineProps({
   repository: { type: Object, default: null },
 })
 const isLive = computed(() => props.dataMode === 'live')
+// Trong khung quản trị không vẽ AdminChrome (sidebar/topbar cũ); route xem thử ở DEV vẫn dùng AdminChrome.
+const inShell = useInAdminShell()
 const emit = defineEmits(['navigate', 'role'])
 const localRole = ref(props.role)
 watch(() => props.role, (role) => { localRole.value = role })
@@ -139,7 +142,11 @@ function exportCsv() {
 </script>
 
 <template>
-  <AdminChrome screen="Q" :live="isLive" :role="displayRole" :warehouse-label="warehouseLabel" :actor-name="actorName" :lock-role="authenticatedContext || !!props.assignment" reports-page @navigate="emit('navigate', $event)" @role="onRole">
+  <component
+    :is="inShell ? 'div' : AdminChrome"
+    v-bind="inShell ? { class: 'admin-page' } : { screen: 'Q', live: isLive, role: displayRole, warehouseLabel, actorName, lockRole: authenticatedContext || !!props.assignment, reportsPage: true }"
+    v-on="inShell ? {} : { navigate: (screen) => emit('navigate', screen), role: onRole }"
+  >
     <div class="reports-page">
       <section v-if="!isLive" class="q-sandbox"><span class="q-icon"><AdminIcon name="flask" :size="27" /></span><div><b>MÔI TRƯỜNG THỬ NGHIỆM (SANDBOX NODE) <code>RC1D-94 / STAGING-HC01</code></b><p><strong>Dữ liệu mẫu — không dùng làm báo cáo chính thức.</strong> Dữ liệu dưới đây chỉ mô phỏng hoạt động kho, không phản ánh số liệu vận hành thực tế.</p></div><span class="q-badge">● Sandbox Active</span></section>
       <header class="q-heading"><div class="q-tags"><span>PHẠM VI KHO: {{ warehouseLabel }}</span><span>PHÂN HỆ BÁO CÁO VẬN HÀNH (REPORTS)</span></div><h1>Báo cáo</h1><p>Theo dõi yêu cầu và hoạt động kho theo phạm vi được phân quyền</p></header>
@@ -181,7 +188,7 @@ function exportCsv() {
 
       <dialog ref="dialog" class="q-dialog" aria-labelledby="q-drill-title"><header><div><span class="q-badge">{{ isLive ? 'Dữ liệu thật' : 'Dữ liệu mẫu' }}</span><h2 id="q-drill-title">{{ drillTitle }}</h2></div><button class="q-secondary" autofocus @click="dialog.close()">Đóng</button></header><p>{{ warehouseLabel }} · {{ categoryLabel }} · {{ drillType === 'stock' ? `Snapshot ${dateText(reportDay(report?.snapshotAt))}, không lọc theo ngày` : `${dateText(applied.from)} – ${dateText(applied.to)}` }}</p><p v-if="!drillRows.length" class="q-empty">Không có bản ghi nguồn tương ứng.</p><div v-else class="q-table-wrap"><table aria-label="Chi tiết bản ghi nguồn"><thead><tr><th>Mã nguồn</th><th>Kho</th><th>Vật phẩm</th><th>{{ drillType === 'stock' ? 'Tồn' : 'Số lượng' }}</th><th>{{ drillType === 'stock' ? 'Danh mục' : 'Ngày / Tham chiếu' }}</th></tr></thead><tbody><tr v-for="row in drillRows" :key="row.id"><td><code>{{ row.id }}</code></td><td>{{ warehouseName(row.warehouseId) }}</td><td>{{ row.item }}</td><td>{{ drillType === 'stock' ? row.available : row.quantity }} {{ row.unit }}</td><td>{{ drillType === 'stock' ? categoryName(row.categoryId) : `${dateText(reportDay(row.timestamp))} · ${row.reference || '—'}` }}</td></tr></tbody></table></div><p class="q-dialog-note">Chỉ đối chiếu dữ liệu nguồn tại màn Q. Không mở hoặc triển khai màn Y.</p></dialog>
     </div>
-  </AdminChrome>
+  </component>
 </template>
 
 <style scoped src="./reports/reports.css"></style>
