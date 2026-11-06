@@ -81,6 +81,21 @@ test('only an active System Admin can list and change staff', async () => {
     [{ id: 'kho-a', name: 'Kho A' }]);
 });
 
+test('warehouse list is open to active staff and scoped to assigned warehouses for Warehouse Admin', async () => {
+  const { call, documents } = setup();
+  documents.set('warehouses/kho-b', { name: 'Kho B', status: 'active' });
+  await assert.rejects(call('GET', '/v1/admin/warehouses'), { status: 401 });
+  await assert.rejects(call('GET', '/v1/admin/warehouses', 'donor'), { status: 403 });
+  // Form thực nhận của Warehouse Admin cần danh sách này; trước đây trả 403 "System Admin access required".
+  assert.deepEqual((await call('GET', '/v1/admin/warehouses', 'worker')).body.warehouses, [{ id: 'kho-a', name: 'Kho A' }]);
+  assert.deepEqual((await call('GET', '/v1/admin/warehouses', 'admin')).body.warehouses.map(w => w.id).sort(), ['kho-a', 'kho-b']);
+  documents.set('staff_assignments/worker', { uid: 'worker', role: 'warehouse_admin', active: false, warehouseIds: ['kho-a'] });
+  await assert.rejects(call('GET', '/v1/admin/warehouses', 'worker'), { status: 403 });
+  // Các route quản lý nhân sự vẫn chỉ dành cho System Admin.
+  documents.set('staff_assignments/worker', { uid: 'worker', role: 'warehouse_admin', active: true, warehouseIds: ['kho-a'] });
+  await assert.rejects(call('GET', '/v1/admin/staff', 'worker'), { status: 403 });
+});
+
 test('lookup, assign, revoke and audit work without disabling the donor account', async () => {
   const { call, documents } = setup();
   const lookup = await call('POST', '/v1/admin/staff/lookup', 'admin', { email: 'donor@example.com' });

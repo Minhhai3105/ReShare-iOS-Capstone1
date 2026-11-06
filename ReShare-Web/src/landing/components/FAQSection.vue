@@ -13,7 +13,7 @@ const questions = [
   },
   {
     question: 'Tôi gửi quyên góp như thế nào?',
-    answer: 'Trong ứng dụng, chụp ảnh vật phẩm, tự chọn danh mục, nhập số lượng, đơn vị và tình trạng rồi gửi yêu cầu. Khi có điểm tiếp nhận hoạt động, hãy làm theo hướng dẫn bàn giao; việc duyệt chưa có nghĩa vật phẩm đã vào kho.',
+    answer: 'Trong ứng dụng, chụp ảnh vật phẩm, kiểm tra danh mục AI gợi ý (có thể chọn lại), nhập số lượng, đơn vị và tình trạng rồi gửi yêu cầu. Khi có điểm tiếp nhận hoạt động, hãy làm theo hướng dẫn bàn giao; việc duyệt chưa có nghĩa vật phẩm đã vào kho.',
   },
   {
     question: 'Sau khi gửi thì bao lâu có phản hồi?',
@@ -25,11 +25,11 @@ const questions = [
   },
   {
     question: 'AI hoạt động như thế nào?',
-    answer: 'Khi đăng món ở Kho đồ 0đ, AI phân tích ảnh để gợi ý danh mục Sách vở, Quần áo hoặc Gia dụng. Người dùng cần kiểm tra và có thể chọn lại.',
+    answer: 'Khi quyên góp hoặc đăng món ở Kho đồ 0đ, AI chạy trên điện thoại phân tích ảnh đầu tiên để gợi ý danh mục Sách vở, Quần áo hoặc Gia dụng. Nếu độ tin cậy thấp, ứng dụng để bạn tự chọn. Người dùng luôn kiểm tra và có thể chọn lại.',
   },
   {
     question: 'Tôi có thể đổi danh mục AI gợi ý không?',
-    answer: 'Có. Khi đăng món ở Kho đồ 0đ, bạn có thể chọn lại danh mục trước khi đăng.',
+    answer: 'Có. Bạn luôn có thể chọn lại danh mục trước khi gửi yêu cầu quyên góp hoặc đăng món ở Kho đồ 0đ.',
   },
   {
     question: 'Được duyệt có nghĩa là vật phẩm đã vào kho chưa?',
@@ -44,8 +44,8 @@ const questions = [
     answer: 'Thông tin Hub đã được xác minh sẽ được cập nhật tại khu vực Hub trên trang này. Hiện thông tin đang sắp cập nhật.',
   },
   {
-    question: 'Khi nào có kênh liên hệ với ReShare?',
-    answer: 'Biểu mẫu liên hệ nằm ở cuối trang và sẽ mở khi kênh tiếp nhận được kết nối. Trang sẽ báo rõ nếu kênh này chưa sẵn sàng.',
+    question: 'Làm sao để liên hệ với ReShare?',
+    answer: 'Gửi câu hỏi qua biểu mẫu liên hệ ở cuối trang. Đội ngũ ReShare đọc yêu cầu và phản hồi qua email bạn đã nhập.',
   },
 ]
 

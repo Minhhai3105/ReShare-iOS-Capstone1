@@ -13,7 +13,7 @@ import communitySharing from '../assets/community-sharing.jpg'
           ReShare kết nối người trao tặng với cộng đồng cần hỗ trợ — để mỗi món đồ còn tốt tìm được hành trình ý nghĩa tiếp theo.
         </p>
         <p class="hero-description">
-          ReShare đang phát triển tính năng AI gợi ý danh mục từ ảnh; người dùng luôn kiểm tra và xác nhận thông tin.
+          AI chạy ngay trên điện thoại gợi ý danh mục từ ảnh; người dùng luôn kiểm tra và xác nhận thông tin.
         </p>
         <div class="hero-actions">
           <a class="button" href="#preview">
@@ -35,7 +35,7 @@ import communitySharing from '../assets/community-sharing.jpg'
         </div>
         <div class="float-card float-card--top">
           <span class="float-icon float-icon--mint" aria-hidden="true">✳</span>
-          <span><strong>Kết nối mới</strong><small>Mái ấm bình an</small></span>
+          <span><strong>Kết nối mới</strong><small>Hình minh họa</small></span>
         </div>
        <div class="float-card float-card--bottom confirmed-card">
   <div class="confirmed-icon" aria-hidden="true">
