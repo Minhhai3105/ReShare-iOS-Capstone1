@@ -96,8 +96,11 @@ const server = http.createServer(async (request, response) => {
   const allowedAdminOrigin = origin && (adminWebOrigins.has(origin) ||
     /^http:\/\/(localhost|127\.0\.0\.1):\d{2,5}$/.test(origin));
   const allowedContactOrigin = CONTACT_ALLOWED_ORIGIN?.trim();
+  // /v1/contact phục vụ cả form landing (POST) lẫn hộp thư của System Admin trên Web Admin (GET),
+  // nên nhận origin của landing và các origin quản trị. Đọc hộp thư vẫn bắt buộc token System Admin.
+  const contactOriginAllowed = Boolean(origin) && (origin === allowedContactOrigin || allowedAdminOrigin);
   const responseHeaders = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' };
-  if (((isAdminApi || isAdminImageRead) && allowedAdminOrigin) || (isContactPath && origin && origin === allowedContactOrigin)) {
+  if (((isAdminApi || isAdminImageRead) && allowedAdminOrigin) || (isContactPath && contactOriginAllowed)) {
     responseHeaders['Access-Control-Allow-Origin'] = origin;
     responseHeaders['Access-Control-Allow-Headers'] = 'Authorization, Content-Type';
     responseHeaders['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS';
@@ -106,10 +109,10 @@ const server = http.createServer(async (request, response) => {
 
   try {
     if ((isAdminApi || isAdminImageRead) && origin && !allowedAdminOrigin) throw new ApiError(403, 'Origin is not allowed');
-    if (isContactPath && origin && allowedContactOrigin && origin !== allowedContactOrigin) {
+    if (isContactPath && origin && allowedContactOrigin && !contactOriginAllowed) {
       throw new ContactApiError(403, 'Origin is not allowed');
     }
-    if (isContactPath && request.method === 'OPTIONS' && (!origin || origin !== allowedContactOrigin)) {
+    if (isContactPath && request.method === 'OPTIONS' && !contactOriginAllowed) {
       throw new ContactApiError(403, 'Origin is not allowed');
     }
     if ((isAdminApi || isAdminImageRead || isContactPath) && request.method === 'OPTIONS') {

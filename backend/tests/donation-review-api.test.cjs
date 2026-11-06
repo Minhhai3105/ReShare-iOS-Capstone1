@@ -478,7 +478,7 @@ test('Manual assignment: rejects non-existent warehouse, inactive warehouse, non
   );
 });
 
-test('Manual assignment: rejects already assigned, non-pending, awaiting information, or stale expectedVersion', async () => {
+test('Manual assignment: rejects already assigned, finished, awaiting information, or stale expectedVersion', async () => {
   const { api, documents } = setup();
   const headers = { authorization: 'Bearer admin-token' };
 
@@ -489,12 +489,12 @@ test('Manual assignment: rejects already assigned, non-pending, awaiting informa
     { status: 409 }
   );
 
-  // Non-pending status (approved, rejected, etc.)
-  documents.set('donations/don-approved', {
-    id: 'don-approved', donorId: 'donor-1', title: 'Đã duyệt', status: 'approved', version: 1,
+  // Trạng thái đã kết thúc (rejected) không gán kho được.
+  documents.set('donations/don-rejected', {
+    id: 'don-rejected', donorId: 'donor-1', title: 'Đã từ chối', status: 'rejected', version: 1,
   });
   await assert.rejects(
-    api.handle('POST', '/v1/admin/donations/don-approved/assign-warehouse', headers,
+    api.handle('POST', '/v1/admin/donations/don-rejected/assign-warehouse', headers,
       { warehouseId: 'kho-a', expectedVersion: 1 }),
     { status: 409 }
   );
@@ -586,4 +586,31 @@ test('Chi tiết đơn trả email người phân kho / xác nhận danh mục, 
   const plain = await withoutAuth.handle('POST', '/v1/admin/donations/don-unassigned/assign-warehouse', headers,
     { warehouseId: 'kho-a', expectedVersion: 1 });
   assert.equal(plain.body.donation.warehouseAssignedByEmail, null, 'không có Auth thì web hiện UID như cũ');
+});
+
+test('Approved donation without a warehouse can still be assigned, so it is not stuck', async () => {
+  const { api, documents } = setup();
+  const headers = { authorization: 'Bearer admin-token' };
+  documents.set('donations/don-approved-unassigned', {
+    id: 'don-approved-unassigned', donorId: 'donor-1', title: 'Đã duyệt chưa có kho', status: 'approved', version: 2,
+  });
+  const result = await api.handle('POST', '/v1/admin/donations/don-approved-unassigned/assign-warehouse', headers,
+    { warehouseId: 'kho-a', expectedVersion: 2 });
+  assert.equal(result.status, 200);
+  assert.equal(documents.get('donations/don-approved-unassigned').warehouseId, 'kho-a');
+  assert.equal(documents.get('donations/don-approved-unassigned').status, 'approved');
+  assert.equal(documents.get('donations/don-approved-unassigned').version, 3);
+});
+
+test('A donation without a warehouse cannot be approved; reject and information still work', async () => {
+  const { api, documents } = setup();
+  const headers = { authorization: 'Bearer admin-token' };
+  await assert.rejects(
+    api.handle('POST', '/v1/admin/donations/don-unassigned/decide', headers, { action: 'approve' }),
+    (error) => error.status === 409 && /Assign a warehouse/.test(error.message),
+  );
+  assert.equal(documents.get('donations/don-unassigned').status, 'pending');
+  const rejected = await api.handle('POST', '/v1/admin/donations/don-unassigned/decide', headers,
+    { action: 'reject', publicMessage: 'Không phù hợp' });
+  assert.equal(rejected.status, 200);
 });

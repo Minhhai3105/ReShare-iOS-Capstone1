@@ -16,7 +16,10 @@ test('BR03/BR04: resubmit reopens staff review and reservation expiry is atomic 
       await t.test('Concurrent resubmission retries produce one revision and can be reviewed again', async () => {
         const id = randomUUID(), images = [1, 2, 3].map(() => `donations/${id}/${randomUUID()}`);
         await seed(`donations/${id}`, { id, donorId: `${prefix}-donor`, title: 'Before', description: '', category: 'books', condition: 'good',
-          status: 'pending', version: 1, quantity: 1, unitId: 'piece', imageProvider: 'cloudinary', imagePublicIds: images });
+          status: 'pending', version: 1, quantity: 1, unitId: 'piece', imageProvider: 'cloudinary', imagePublicIds: images,
+          // Đơn phải có kho mới duyệt được (chặn trạng thái đã duyệt mà không ai thực nhận).
+          warehouseId: `${prefix}-wh` });
+        await seed(`warehouses/${prefix}-wh`, { name: 'Kho kiểm thử', status: 'active' });
         await seed(`image_upload_batches/donation_${id}`, { ownerUid: `${prefix}-donor`, assets: Object.fromEntries(images.map((image, i) => [i, image])) });
         await seed(`staff_assignments/${prefix}-admin`, { uid: `${prefix}-admin`, role: 'system_admin', active: true, warehouseIds: [] });
         const cfg = { db, verifyToken: async token => ({ uid: `${prefix}-${token}` }), serverTimestamp: () => FieldValue.serverTimestamp() };
