@@ -1,0 +1,29 @@
+[
+  {
+    "id": "hub-haichau",
+    "name": "Hải Châu",
+    "address": "Vị trí minh hoạ tại quận Hải Châu",
+    "latitude": 16.0678,
+    "longitude": 108.2208,
+    "openHours": "Chưa hoạt động",
+    "isDemo": true
+  },
+  {
+    "id": "hub-nguhanhson",
+    "name": "Ngũ Hành Sơn",
+    "address": "Vị trí minh hoạ tại quận Ngũ Hành Sơn",
+    "latitude": 16.035,
+    "longitude": 108.2435,
+    "openHours": "Chưa hoạt động",
+    "isDemo": true
+  },
+  {
+    "id": "hub-lienchieu",
+    "name": "Liên Chiểu",
+    "address": "Vị trí minh hoạ tại quận Liên Chiểu",
+    "latitude": 16.0748,
+    "longitude": 108.1528,
+    "openHours": "Chưa hoạt động",
+    "isDemo": true
+  }
+]

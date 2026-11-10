@@ -1,7 +1,7 @@
 const { ApiError } = require('./image-api.cjs');
 const { runTransaction } = require('./firestore-transaction.cjs');
 const { assertCurrentStaffAccess } = require('./staff-access.cjs');
-const { quantityBase } = require('./quantity.cjs');
+const { canonicalUnit, quantityBase, quantityFromBase } = require('./quantity.cjs');
 const { recordInventoryUpdate } = require('./inventory-updates.cjs');
 const dateString = value => value?.toDate?.().toISOString() ||
   (value instanceof Date ? value.toISOString() : value || null);
@@ -107,6 +107,13 @@ function createStockIntakeApi({ db, verifyToken, serverTimestamp }) {
         throw new ApiError(409, 'Số lượng thực nhận không đáp ứng quy tắc đơn vị; cần đối soát');
       }
       if (donation.status !== 'received') throw new ApiError(409, 'Donation is not ready for stock intake');
+      // Đơn thuộc chiến dịch: tiến độ được cộng trong chính transaction nhập kho, nên chỉ tăng khi
+      // hàng vào kho thật và đúng một lần (nhánh gửi lại phía trên đã return trước khi tới đây).
+      // Phải đọc trước mọi lệnh ghi của transaction.
+      const campaignId = typeof donation.campaignId === 'string' &&
+        /^[A-Za-z0-9_-]{1,128}$/.test(donation.campaignId) ? donation.campaignId : null;
+      const campaignRef = campaignId ? db.collection('campaigns').doc(campaignId) : null;
+      const campaignDoc = campaignRef ? await tx.get(campaignRef) : null;
       const timestamp = now();
       recordInventoryUpdate(tx, db, warehouseId, timestamp);
       tx.set(inventoryRef, {
@@ -136,6 +143,23 @@ function createStockIntakeApi({ db, verifyToken, serverTimestamp }) {
       tx.update(db.collection('donations').doc(donationId), {
         status: 'in_stock', stockEntryId: entryRef.id, version: (donation.version || 1) + 1,
       });
+      if (campaignDoc?.exists) {
+        const campaign = campaignDoc.data();
+        // Cộng bằng đơn vị nguyên (kg -> gram) để tổng không bị nhiễu số thực. Hàng nhận khác
+        // đơn vị mục tiêu vẫn tính một lượt quyên góp nhưng không cộng vào thanh tiến độ.
+        const currentBase = quantityBase(campaign.receivedQuantity || 0, campaign.unitId, { allowZero: true });
+        const addedBase = canonicalUnit(receipt.unitId) === campaign.unitId
+          ? quantityBase(receipt.quantity, receipt.unitId) : null;
+        // Không tăng `version` của chiến dịch: version dành cho chỉnh sửa của System Admin,
+        // tăng ở đây sẽ làm form sửa chiến dịch báo xung đột mỗi khi có hàng nhập kho.
+        tx.update(campaignRef, {
+          receivedDonationCount: (Number.isSafeInteger(campaign.receivedDonationCount)
+            ? campaign.receivedDonationCount : 0) + 1,
+          ...(currentBase !== null && addedBase !== null
+            ? { receivedQuantity: quantityFromBase(currentBase + addedBase, campaign.unitId) } : {}),
+          progressUpdatedAt: timestamp,
+        });
+      }
       return false;
     });
     return { status: replayed ? 200 : 201, body: {
