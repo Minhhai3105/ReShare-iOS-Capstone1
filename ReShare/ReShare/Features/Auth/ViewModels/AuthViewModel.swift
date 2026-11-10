@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import Combine
 import FirebaseAuth
 import FirebaseFirestore
@@ -110,6 +111,54 @@ final class AuthViewModel: ObservableObject {
         }
     }
 
+    // Mark: Luồng đăng nhập / đăng ký bằng Google
+
+    @Published var isGoogleLoading: Bool = false
+
+    var isGoogleSignInAvailable: Bool {
+        AuthService.shared.isGoogleSignInConfigured
+    }
+
+    func loginWithGoogle(appState: AppState) {
+        guard !isLoading, !isGoogleLoading else { return }
+        guard let presenter = Self.topViewController() else {
+            errorMessage = GoogleSignInFlowError.noPresenter.message
+            return
+        }
+
+        isGoogleLoading = true
+        errorMessage = nil
+
+        Task {
+            defer { isGoogleLoading = false }
+            var signedIn = false
+            do {
+                // 1. Google xác thực rồi đổi sang phiên Firebase; nil = người dùng tự huỷ
+                guard let uid = try await AuthService.shared.signInWithGoogle(presenting: presenter) else { return }
+                signedIn = true
+                // 2. Lấy hoặc tạo hồ sơ donor (lần đầu dùng Google sẽ tạo mới, số điện thoại để trống)
+                let profile = try await FirestoreService.shared.fetchOrCreateDonorProfile(userId: uid)
+                // 3. Cập nhật trạng thái đăng nhập toàn cục
+                appState.completeLogin(profile: profile)
+            } catch {
+                // Đã có phiên Firebase nhưng chưa lấy được hồ sơ thì đóng phiên để không kẹt nửa vời.
+                if signedIn { try? AuthService.shared.signOut() }
+                errorMessage = parseFirebaseError(error)
+            }
+        }
+    }
+
+    // ViewController đang hiển thị trên cùng, để SDK Google trình bày cửa sổ đăng nhập.
+    private static func topViewController() -> UIViewController? {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let scene = scenes.first { $0.activationState == .foregroundActive } ?? scenes.first
+        var top = scene?.keyWindow?.rootViewController
+        while let presented = top?.presentedViewController {
+            top = presented
+        }
+        return top
+    }
+
     // Mark: Luồng quên mật khẩu
     // State riêng để lỗi/loading của sheet không lẫn với form đăng nhập phía sau.
 
@@ -169,6 +218,9 @@ final class AuthViewModel: ObservableObject {
 
     // Mark: helper chuyển đổi lỗi firebase sang Tiếng Việt
     private func parseFirebaseError(_ error: Error) -> String {
+        if let googleError = error as? GoogleSignInFlowError {
+            return googleError.message
+        }
         let nsError = error as NSError
         if nsError.domain == AuthErrorDomain,
            let code = AuthErrorCode(rawValue: nsError.code) {
@@ -193,6 +245,10 @@ final class AuthViewModel: ObservableObject {
                 return "Tài khoản này đã bị khóa."
             case .tooManyRequests:
                 return "Bạn đã thử quá nhiều lần. Vui lòng chờ rồi thử lại."
+            case .operationNotAllowed:
+                return "Cách đăng nhập này chưa được bật trên hệ thống. Vui lòng dùng email và mật khẩu."
+            case .accountExistsWithDifferentCredential:
+                return "Email này đã đăng ký bằng cách khác. Hãy đăng nhập bằng email và mật khẩu."
             default:
                 break
             }

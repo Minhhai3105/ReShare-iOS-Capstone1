@@ -142,7 +142,11 @@ final class FirestoreService: FirestoreServiceProtocol {
             guard let email = AuthService.shared.currentEmail, !email.isEmpty else {
                 throw NSError(domain: "ReShare.Profile", code: 400, userInfo: [NSLocalizedDescriptionKey: "Tài khoản không có email để khôi phục hồ sơ."])
             }
-            let name = email.split(separator: "@").first.map(String.init) ?? "Người dùng ReShare"
+            // Ưu tiên tên từ nhà cung cấp đăng nhập (vd. Google); rules giới hạn 1–80 ký tự.
+            let providerName = AuthService.shared.currentDisplayName?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let fallbackName = email.split(separator: "@").first.map(String.init) ?? "Người dùng ReShare"
+            let name = String((providerName?.isEmpty == false ? providerName! : fallbackName).prefix(80))
             let profile = UserProfile(id: userId, email: email, displayName: name, phoneNumber: "", role: .donor, createdAt: Date())
             let encoded = try Firestore.Encoder().encode(profile)
             let reference = db.collection(Constants.FirestoreCollections.users).document(userId)

@@ -4,5 +4,18 @@
 <dict>
     <key>RESHARE_IMAGE_API_BASE_URL</key>
     <string>$(INFOPLIST_KEY_RESHARE_IMAGE_API_BASE_URL)</string>
+    <!-- URL scheme để Google Sign-In mở lại app sau khi đăng nhập. Giá trị lấy từ build setting
+         GOOGLE_REVERSED_CLIENT_ID = REVERSED_CLIENT_ID trong GoogleService-Info.plist. -->
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>google-sign-in</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>$(GOOGLE_REVERSED_CLIENT_ID)</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>

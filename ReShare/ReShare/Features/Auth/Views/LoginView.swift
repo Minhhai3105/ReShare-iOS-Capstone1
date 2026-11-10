@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import GoogleSignInSwift
 
 struct LoginView: View {
     @EnvironmentObject var appState: AppState
@@ -57,12 +58,19 @@ struct LoginView: View {
                         loginButton
                             .padding(.top, 4)
 
-                        // Vạch phân cách: OR CONTINUE WITH
-                        orDividerView
-                            .padding(.vertical, 4)
+                        // Chỉ hiện đăng nhập Google khi bản build đã có CLIENT_ID + URL scheme,
+                        // để không có nút bấm vào mà không chạy được.
+                        if viewModel.isGoogleSignInAvailable {
+                            // Vạch phân cách: OR CONTINUE WITH
+                            orDividerView
+                                .padding(.vertical, 4)
 
-                        // Nút Đăng nhập với Apple
-                        appleSignInButton
+                            googleSignInButton
+                        }
+
+                        // Nút Đăng nhập với Apple: tạm ẩn vì Sign in with Apple cần tài khoản
+                        // Apple Developer trả phí (nhóm chưa có). Giữ code để bật lại sau.
+                        // appleSignInButton
 
                         // Link chuyển sang trang Đăng ký (Sign Up)
                         signUpLinkView
@@ -237,7 +245,7 @@ struct LoginView: View {
             .cornerRadius(16)
             .shadow(color: isFormValid ? AppColors.primary.opacity(0.3) : Color.clear, radius: 10, x: 0, y: 4)
         }
-        .disabled(!isFormValid || viewModel.isLoading)
+        .disabled(!isFormValid || viewModel.isLoading || viewModel.isGoogleLoading)
     }
 
     // MARK: - 6. Or Divider
@@ -258,6 +266,27 @@ struct LoginView: View {
                 .frame(height: 1)
         }
         .padding(.horizontal, 4)
+    }
+
+    // MARK: - 7a. Google Sign In Button
+    // Dùng nút chính thức của Google (đúng quy định nhận diện thương hiệu). Lần đầu đăng nhập sẽ tự tạo tài khoản.
+    private var googleSignInButton: some View {
+        ZStack {
+            GoogleSignInButton(
+                scheme: .light,
+                style: .wide,
+                state: viewModel.isGoogleLoading || viewModel.isLoading ? .disabled : .normal
+            ) {
+                viewModel.loginWithGoogle(appState: appState)
+            }
+            .disabled(viewModel.isGoogleLoading || viewModel.isLoading)
+            .accessibilityIdentifier("googleSignInButton")
+
+            if viewModel.isGoogleLoading {
+                ProgressView()
+            }
+        }
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: - 7. Apple Sign In Button

@@ -7,7 +7,7 @@ let package = Package(
     platforms: [.macOS(.v13), .iOS(.v17)],
     products: [.library(name: "ReShareCore", targets: ["ReShareCore"])],
     targets: [
-        .target(name: "ReShareCore", path: "ReShare/Core", sources: ["DonationQuantity.swift", "ReShareAPIConfiguration.swift", "CampaignRecord.swift", "PasswordResetPolicy.swift"]),
+        .target(name: "ReShareCore", path: "ReShare/Core", sources: ["DonationQuantity.swift", "ReShareAPIConfiguration.swift", "CampaignRecord.swift", "PasswordResetPolicy.swift", "GoogleSignInSetup.swift"]),
         .testTarget(name: "ReShareCoreTests", dependencies: ["ReShareCore"], path: "ReShareCoreTests")
     ]
 )
