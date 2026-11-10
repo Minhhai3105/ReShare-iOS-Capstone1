@@ -4,6 +4,7 @@ import { ADMIN_ROUTE, USER_ROLE } from '../auth/auth.constants.js'
 export const ADMIN_SECTIONS = Object.freeze([
   { key: 'home', label: 'Tổng quan', icon: 'dashboard', to: { name: ADMIN_ROUTE.home } },
   { key: 'donations', label: 'Tiếp nhận quyên góp', icon: 'inbox', to: { name: ADMIN_ROUTE.donationQueue } },
+  { key: 'campaigns', label: 'Chiến dịch quyên góp', icon: 'heart-handshake', to: { name: ADMIN_ROUTE.campaignList }, roles: [USER_ROLE.systemAdmin] },
   { key: 'inventory', label: 'Kho hàng', icon: 'shelves', to: { name: ADMIN_ROUTE.inventory } },
   { key: 'beneficiaries', label: 'Người thụ hưởng', icon: 'users', to: { name: ADMIN_ROUTE.beneficiaryList } },
   { key: 'distribution', label: 'Xuất kho & phân phối', icon: 'warehouse', to: { name: 'admin-distribution' } },
@@ -23,6 +24,14 @@ export const ADMIN_PAGES = Object.freeze({
   'admin-donation-receipt': { section: 'donations', title: 'Ghi nhận hàng thực nhận', parent: toDonation },
   'admin-donation-stock-in': { section: 'donations', title: 'Nhập kho', parent: toDonation },
   'admin-stock-entry-detail': { section: 'donations', title: 'Chi tiết phiếu nhập kho', parent: () => ({ name: ADMIN_ROUTE.donationQueue }) },
+  [ADMIN_ROUTE.campaignList]: { section: 'campaigns', title: 'Chiến dịch quyên góp', parent: toHome },
+  [ADMIN_ROUTE.campaignNew]: { section: 'campaigns', title: 'Tạo chiến dịch', parent: () => ({ name: ADMIN_ROUTE.campaignList }) },
+  [ADMIN_ROUTE.campaignDetail]: { section: 'campaigns', title: 'Chi tiết chiến dịch', parent: () => ({ name: ADMIN_ROUTE.campaignList }) },
+  [ADMIN_ROUTE.campaignEdit]: {
+    section: 'campaigns',
+    title: 'Sửa chiến dịch',
+    parent: (route) => ({ name: ADMIN_ROUTE.campaignDetail, params: { campaignId: route.params.campaignId } }),
+  },
   [ADMIN_ROUTE.inventory]: { section: 'inventory', title: 'Kho hàng', parent: toHome },
   [ADMIN_ROUTE.inventoryDetail]: { section: 'inventory', title: 'Chi tiết vật phẩm', parent: () => ({ name: ADMIN_ROUTE.inventory }) },
   [ADMIN_ROUTE.distributionDetail]: { section: 'inventory', title: 'Chi tiết phiếu xuất kho', parent: () => ({ name: ADMIN_ROUTE.inventory }) },
