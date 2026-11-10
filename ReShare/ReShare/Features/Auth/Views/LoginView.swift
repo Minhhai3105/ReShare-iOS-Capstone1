@@ -17,6 +17,9 @@ struct LoginView: View {
     // Điều hướng sang màn hình Đăng ký (RegisterView)
     @State private var navigateToRegister: Bool = false
 
+    // Mở sheet Quên mật khẩu
+    @State private var showForgotPassword: Bool = false
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -78,6 +81,10 @@ struct LoginView: View {
                 RegisterView(onNavigateToLogin: {
                     navigateToRegister = false
                 })
+            }
+            .sheet(isPresented: $showForgotPassword) {
+                ForgotPasswordSheet(viewModel: viewModel)
+                    .presentationDetents([.medium, .large])
             }
             .navigationBarHidden(true)
         }
@@ -197,12 +204,15 @@ struct LoginView: View {
         HStack {
             Spacer()
             Button(action: {
-                // Action quên mật khẩu (sẽ tích hợp gửi mail reset)
+                // Mở sheet gửi mail đặt lại mật khẩu, điền sẵn email đang gõ
+                viewModel.prepareForPasswordReset()
+                showForgotPassword = true
             }) {
                 Text("Forgot password?")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(AppColors.primary)
             }
+            .accessibilityIdentifier("forgotPasswordButton")
         }
     }
 
@@ -307,6 +317,137 @@ struct LoginView: View {
     private var isFormValid: Bool {
         !viewModel.email.trimmingCharacters(in: .whitespaces).isEmpty &&
         viewModel.password.count >= 6
+    }
+}
+
+// MARK: - Sheet Quên mật khẩu
+// Dùng chung AuthViewModel với LoginView để email gửi xong được điền lại vào form đăng nhập.
+private struct ForgotPasswordSheet: View {
+    @ObservedObject var viewModel: AuthViewModel
+    @Environment(\.dismiss) private var dismiss
+    @FocusState private var isEmailFocused: Bool
+
+    var body: some View {
+        NavigationStack {
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 18) {
+                    Text("Nhập email bạn đã dùng để đăng ký. ReShare sẽ gửi một đường link để bạn đặt mật khẩu mới.")
+                        .font(.system(size: 14))
+                        .foregroundColor(AppColors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    emailField
+
+                    if let error = viewModel.resetErrorMessage {
+                        Text(error)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(AppColors.rejected)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("resetError")
+                    }
+
+                    if let notice = viewModel.resetSentMessage {
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: "envelope.badge")
+                                .foregroundColor(AppColors.distributed)
+                            Text(notice)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(AppColors.textPrimary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(AppColors.distributedSoft)
+                        .cornerRadius(12)
+                        .accessibilityIdentifier("resetSentNotice")
+                    }
+
+                    // Vẽ lại nút mỗi giây để đếm ngược thời gian chờ trước khi được gửi lại.
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        sendButton(waitSeconds: PasswordResetPolicy.secondsUntilResend(
+                            lastSentAt: viewModel.lastResetSentAt,
+                            now: context.date
+                        ))
+                    }
+                }
+                .padding(20)
+            }
+            .background(AppColors.background.ignoresSafeArea())
+            .navigationTitle("Quên mật khẩu")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Đóng") { dismiss() }
+                }
+            }
+        }
+        .onAppear {
+            if viewModel.resetEmail.isEmpty { isEmailFocused = true }
+        }
+    }
+
+    private var emailField: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Email")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(AppColors.textPrimary)
+
+            HStack(spacing: 12) {
+                Image(systemName: "envelope")
+                    .font(.system(size: 17))
+                    .foregroundStyle(AppColors.textTertiary)
+                    .frame(width: 20)
+
+                TextField("Email address", text: $viewModel.resetEmail)
+                    .font(.system(size: 15))
+                    .textContentType(.emailAddress)
+                    .keyboardType(.emailAddress)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .submitLabel(.send)
+                    .focused($isEmailFocused)
+                    .onSubmit { viewModel.sendPasswordReset() }
+                    .accessibilityIdentifier("resetEmailField")
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 52)
+            .background(Color.white)
+            .cornerRadius(14)
+            .shadow(color: Color.black.opacity(0.02), radius: 6, x: 0, y: 2)
+        }
+    }
+
+    private func sendButton(waitSeconds: Int) -> some View {
+        let hasEmail = !viewModel.resetEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let canSend = hasEmail && waitSeconds == 0 && !viewModel.isSendingReset
+
+        return Button(action: {
+            isEmailFocused = false
+            viewModel.sendPasswordReset()
+        }) {
+            HStack(spacing: 8) {
+                if viewModel.isSendingReset {
+                    ProgressView()
+                        .tint(.white)
+                } else {
+                    Text(sendButtonTitle(waitSeconds: waitSeconds))
+                        .font(.system(size: 16, weight: .semibold))
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 52)
+            .background(canSend ? AppColors.primary : AppColors.border)
+            .foregroundColor(.white)
+            .cornerRadius(16)
+        }
+        .disabled(!canSend)
+        .accessibilityIdentifier("sendResetButton")
+    }
+
+    private func sendButtonTitle(waitSeconds: Int) -> String {
+        if waitSeconds > 0 { return "Gửi lại sau \(waitSeconds)s" }
+        if viewModel.lastResetSentAt != nil { return "Gửi lại thư" }
+        return "Gửi link đặt lại mật khẩu"
     }
 }
 

@@ -5,6 +5,7 @@ protocol AuthServiceProtocol {
     func signUp(email: String, password: String) async throws -> String
     func signIn(email: String, password: String) async throws -> String
     func signOut() throws
+    func sendPasswordReset(email: String) async throws
     var currentUser: String? { get }
 }
 
@@ -41,5 +42,11 @@ final class AuthService: AuthServiceProtocol {
     
     func signOut() throws {
         try Auth.auth().signOut()
+    }
+
+    // Firebase gửi thư chứa link đặt lại mật khẩu; trang nhập mật khẩu mới do Firebase host,
+    // app không bao giờ chạm vào mật khẩu mới.
+    func sendPasswordReset(email: String) async throws {
+        try await Auth.auth().sendPasswordReset(withEmail: email)
     }
 }

@@ -109,7 +109,64 @@ final class AuthViewModel: ObservableObject {
             }
         }
     }
-    
+
+    // Mark: Luồng quên mật khẩu
+    // State riêng để lỗi/loading của sheet không lẫn với form đăng nhập phía sau.
+
+    @Published var resetEmail: String = ""
+    @Published var isSendingReset: Bool = false
+    @Published var resetErrorMessage: String? = nil
+    @Published var resetSentMessage: String? = nil
+    @Published private(set) var lastResetSentAt: Date? = nil
+
+    // Thông báo trung tính: không cho biết email có tài khoản hay không, tránh bị dò danh sách tài khoản.
+    static let resetSentNotice = "Nếu email này đã đăng ký ReShare, thư đặt lại mật khẩu sẽ đến trong vài phút. Hãy kiểm tra cả mục Spam/Quảng cáo."
+
+    // Gọi khi mở sheet: điền sẵn email đang gõ ở form đăng nhập và xoá thông báo cũ.
+    func prepareForPasswordReset() {
+        resetEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        resetErrorMessage = nil
+        resetSentMessage = nil
+    }
+
+    func sendPasswordReset() {
+        guard !isSendingReset else { return }
+        guard let normalizedEmail = PasswordResetPolicy.normalizedEmail(resetEmail) else {
+            resetErrorMessage = "Vui lòng nhập đúng địa chỉ email đã dùng để đăng ký."
+            return
+        }
+        guard PasswordResetPolicy.secondsUntilResend(lastSentAt: lastResetSentAt) == 0 else { return }
+
+        isSendingReset = true
+        resetErrorMessage = nil
+        resetSentMessage = nil
+
+        Task {
+            defer { isSendingReset = false }
+            do {
+                try await AuthService.shared.sendPasswordReset(email: normalizedEmail)
+                markResetSent(to: normalizedEmail)
+            } catch {
+                let nsError = error as NSError
+                if nsError.domain == AuthErrorDomain,
+                   AuthErrorCode(rawValue: nsError.code) == .userNotFound {
+                    // Trả lời giống hệt khi thành công để không lộ email nào đã có tài khoản.
+                    markResetSent(to: normalizedEmail)
+                } else {
+                    resetErrorMessage = parseFirebaseError(error)
+                }
+            }
+        }
+    }
+
+    private func markResetSent(to sentEmail: String) {
+        lastResetSentAt = Date()
+        resetSentMessage = Self.resetSentNotice
+        // Điền lại email vào form đăng nhập để đặt mật khẩu xong quay lại đăng nhập luôn.
+        email = sentEmail
+        password = ""
+    }
+
     // Mark: helper chuyển đổi lỗi firebase sang Tiếng Việt
     private func parseFirebaseError(_ error: Error) -> String {
         let nsError = error as NSError
