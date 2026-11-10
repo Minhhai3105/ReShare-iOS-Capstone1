@@ -1,13 +1,24 @@
 import SwiftUI
 import MapKit
 
-// MARK: - Model Trạm Tiếp Nhận ReShare Hub tại Đà Nẵng
+// MARK: - Model Trạm Tiếp Nhận ReShare Hub (đọc từ Firestore `hubs`)
 struct ReShareHub: Identifiable {
     let id: String
     let name: String
     let address: String
     let coordinate: CLLocationCoordinate2D
     let openHours: String
+    /// Điểm minh hoạ: đơn vẫn lưu thật nhưng không mang đồ tới đây.
+    let isDemo: Bool
+
+    init(record: HubRecord) {
+        id = record.id
+        name = record.name
+        address = record.address
+        coordinate = CLLocationCoordinate2D(latitude: record.latitude, longitude: record.longitude)
+        openHours = record.openHours
+        isDemo = record.isDemo
+    }
 }
 
 /// Màn hình BƯỚC 2: Nhập thông tin chi tiết & Chọn Trạm ReShare Hub tại Đà Nẵng
@@ -16,33 +27,19 @@ struct DonationDetailsView: View {
 
     // Nhận mảng 3 - 6 ảnh vừa chụp từ Camera
     var capturedImages: [UIImage] = []
-    var campaignId: String? = nil
+    /// Chiến dịch đang quyên góp (nil = quyên góp tự do). Có chiến dịch thì danh mục bị khoá
+    /// theo chiến dịch và chỉ chọn được Hub của chiến dịch (rules cũng kiểm tra danh mục).
+    var campaign: DonationCampaign? = nil
     var onBackToHome: (() -> Void)? = nil
 
-    // MARK: - Ba điểm minh hoạ chưa hoạt động tại TP. Đà Nẵng
-    private let daNangHubs: [ReShareHub] = [
-        ReShareHub(
-            id: "hub-haichau",
-            name: "Hải Châu",
-            address: "Vị trí minh hoạ tại quận Hải Châu",
-            coordinate: CLLocationCoordinate2D(latitude: 16.0678, longitude: 108.2208),
-            openHours: "Chưa hoạt động"
-        ),
-        ReShareHub(
-            id: "hub-nguhanhson",
-            name: "Ngũ Hành Sơn",
-            address: "Vị trí minh hoạ tại quận Ngũ Hành Sơn",
-            coordinate: CLLocationCoordinate2D(latitude: 16.0350, longitude: 108.2435),
-            openHours: "Chưa hoạt động"
-        ),
-        ReShareHub(
-            id: "hub-lienchieu",
-            name: "Liên Chiểu",
-            address: "Vị trí minh hoạ tại quận Liên Chiểu",
-            coordinate: CLLocationCoordinate2D(latitude: 16.0748, longitude: 108.1528),
-            openHours: "Chưa hoạt động"
-        )
-    ]
+    // MARK: - Điểm tiếp nhận đọc từ Firestore
+    @State private var daNangHubs: [ReShareHub] = []
+    @State private var isLoadingHubs: Bool = true
+    @State private var hubsLoadFailed: Bool = false
+
+    private var selectedHub: ReShareHub? {
+        daNangHubs.indices.contains(selectedHubIndex) ? daNangHubs[selectedHubIndex] : nil
+    }
 
     // MARK: - State dữ liệu
     @State private var itemTitle: String = ""
@@ -86,6 +83,7 @@ struct DonationDetailsView: View {
         Binding(
             get: { selectedHubIndex },
             set: { newIndex in
+                guard daNangHubs.indices.contains(newIndex) else { return }
                 selectedHubIndex = newIndex
                 withAnimation(.easeInOut(duration: 0.4)) {
                     mapRegion.center = daNangHubs[newIndex].coordinate
@@ -97,6 +95,10 @@ struct DonationDetailsView: View {
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(spacing: 20) {
+                if let campaign {
+                    campaignBanner(campaign)
+                }
+
                 // 1. Dải ảnh thu nhỏ cuộn ngang từ Camera
                 capturedPhotosCarousel
 
@@ -121,7 +123,11 @@ struct DonationDetailsView: View {
         .navigationTitle("Thông tin quyên góp")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
-        .onAppear(perform: classifyFirstPhoto)
+        .onAppear {
+            if let campaign { selectedCategory = campaign.donationCategory }
+            classifyFirstPhoto()
+        }
+        .task { await loadHubs() }
         .toolbar(.visible, for: .navigationBar)
         .preferredColorScheme(.light)
         .environment(\.colorScheme, .light)
@@ -223,16 +229,22 @@ struct DonationDetailsView: View {
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(textDark)
                     Spacer()
-                    Picker("Danh mục", selection: Binding(
-                        get: { selectedCategory },
-                        set: { selectedCategory = $0; didConfirmCategory = true }
-                    )) {
-                        ForEach(DonationCategory.allCases) { cat in
-                            Text(cat.title).tag(cat)
+                    if let campaign {
+                        Label(campaign.categoryTitle, systemImage: "lock.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(primaryGreen)
+                    } else {
+                        Picker("Danh mục", selection: Binding(
+                            get: { selectedCategory },
+                            set: { selectedCategory = $0; didConfirmCategory = true }
+                        )) {
+                            ForEach(DonationCategory.allCases) { cat in
+                                Text(cat.title).tag(cat)
+                            }
                         }
+                        .pickerStyle(.menu)
+                        .tint(primaryGreen)
                     }
-                    .pickerStyle(.menu)
-                    .tint(primaryGreen)
                 }
                 .padding(14)
                 .background(Color.white)
@@ -250,6 +262,11 @@ struct DonationDetailsView: View {
                     Text("AI gợi ý: \(aiPrediction.category.title) · \(Int((aiPrediction.confidence * 100).rounded()))% tin cậy\(aiPrediction.confidence < 0.6 ? " (thấp, hãy chọn thủ công)" : "")")
                         .font(.system(size: 12))
                         .foregroundColor(textMuted)
+                    if let campaign, aiPrediction.confidence >= 0.6, aiPrediction.category != campaign.donationCategory {
+                        Text("Ảnh có vẻ là \(aiPrediction.category.title.lowercased()), nhưng chiến dịch này chỉ nhận \(campaign.categoryTitle.lowercased()). Hãy kiểm tra lại món đồ hoặc quyên góp tự do.")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(Color(red: 0.85, green: 0.45, blue: 0.10))
+                    }
                 } else if didClassify {
                     Text("Không có gợi ý AI. Bạn có thể chọn danh mục thủ công.")
                         .font(.system(size: 12))
@@ -329,13 +346,40 @@ struct DonationDetailsView: View {
     // MARK: - 3. Chọn Trạm tiếp nhận Đà Nẵng & MapKit
     private var hubSelectionSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("ĐIỂM TIẾP NHẬN MẪU (CHƯA HOẠT ĐỘNG)")
+            Text(campaign == nil ? "ĐIỂM TIẾP NHẬN" : "ĐIỂM TIẾP NHẬN CỦA CHIẾN DỊCH")
                 .font(.system(size: 12, weight: .bold))
                 .foregroundColor(sectionHeaderColor)
 
-            Text("Đây là luồng thử nghiệm. Không mang đồ tới vị trí trên bản đồ hoặc hẹn người đến nhận.")
-                .font(.system(size: 12))
-                .foregroundColor(Color(red: 0.85, green: 0.45, blue: 0.10))
+            if isLoadingHubs {
+                ProgressView("Đang tải điểm tiếp nhận…")
+                    .font(.system(size: 12))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else if let selectedHub {
+                if selectedHub.isDemo {
+                    Text("Điểm này đang minh hoạ: đơn được lưu thật và kho sẽ duyệt, nhưng chưa mang đồ tới vị trí trên bản đồ.")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color(red: 0.85, green: 0.45, blue: 0.10))
+                }
+                hubPickerAndMap(selectedHub)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(hubsLoadFailed
+                         ? "Không tải được điểm tiếp nhận. Kiểm tra kết nối rồi thử lại."
+                         : "Chưa có điểm tiếp nhận nào đang hoạt động\(campaign == nil ? "" : " cho chiến dịch này"). Chưa thể gửi đơn.")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color(red: 0.85, green: 0.45, blue: 0.10))
+                    if hubsLoadFailed {
+                        Button("Thử lại") { Task { await loadHubs() } }
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(primaryGreen)
+                    }
+                }
+            }
+        }
+    }
+
+    private func hubPickerAndMap(_ hub: ReShareHub) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
 
             // Picker chọn Trạm Đà Nẵng
             Picker("Trạm", selection: selectedHubBinding) {
@@ -346,7 +390,7 @@ struct DonationDetailsView: View {
             .pickerStyle(.segmented)
 
             // Bản đồ MapKit hiển thị vị trí Trạm
-            Map(coordinateRegion: $mapRegion, annotationItems: [daNangHubs[selectedHubIndex]]) { hub in
+            Map(coordinateRegion: $mapRegion, annotationItems: [hub]) { hub in
                 MapAnnotation(coordinate: hub.coordinate) {
                     VStack(spacing: 2) {
                         Image(systemName: "mappin.circle.fill")
@@ -379,10 +423,10 @@ struct DonationDetailsView: View {
                     .font(.system(size: 16))
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(daNangHubs[selectedHubIndex].address)
+                    Text(hub.address)
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(textDark)
-                    Text("⏰ \(daNangHubs[selectedHubIndex].openHours)")
+                    Text("⏰ \(hub.openHours)")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundColor(textMuted)
                 }
@@ -460,7 +504,7 @@ struct DonationDetailsView: View {
                     Text(submitStatus ?? "Đang lưu đơn...")
                         .font(.system(size: 15, weight: .semibold))
                 } else {
-                    Text("Lưu đơn thử nghiệm")
+                    Text(selectedHub?.isDemo == false ? "Gửi đơn quyên góp" : "Lưu đơn thử nghiệm")
                         .font(.system(size: 16, weight: .bold))
                     Image(systemName: "arrow.right")
                         .font(.system(size: 14, weight: .bold))
@@ -473,7 +517,7 @@ struct DonationDetailsView: View {
             .cornerRadius(16)
             .shadow(color: Color(red: 0.11, green: 0.35, blue: 0.20).opacity(0.3), radius: 8, y: 4)
         }
-        .disabled(isSubmitting)
+        .disabled(isSubmitting || selectedHub == nil)
     }
 
     private var declaredQuantity: Double? {
@@ -497,12 +541,28 @@ struct DonationDetailsView: View {
             self.showErrorAlert = true
             return
         }
+        guard let selectedHub else {
+            self.errorMessage = "Chưa có điểm tiếp nhận để gửi đơn. Vui lòng thử lại sau."
+            self.showErrorAlert = true
+            return
+        }
+        if let campaign {
+            guard campaign.isAcceptingDonations else {
+                self.errorMessage = "Chiến dịch đã hết hạn nhận đơn. Bạn có thể quyên góp tự do thay thế."
+                self.showErrorAlert = true
+                return
+            }
+            guard selectedCategory == campaign.donationCategory else {
+                self.errorMessage = "Chiến dịch này chỉ nhận \(campaign.categoryTitle.lowercased())."
+                self.showErrorAlert = true
+                return
+            }
+        }
 
         isSubmitting = true
         submitStatus = "Đang chuẩn bị ảnh..."
         let confirmedCategory = selectedCategory
         let submittedPrediction = aiPrediction
-        let selectedHub = daNangHubs[selectedHubIndex]
         let deliveryText = deliveryMethod == 0 ? "drop_off" : "pickup"
 
         Task {
@@ -545,7 +605,7 @@ struct DonationDetailsView: View {
                 id: donationDocumentId,
                 donorId: currentUserId,
                 title: itemTitle,
-                description: notes.isEmpty ? "Đơn thử nghiệm tại điểm mẫu \(selectedHub.name)" : notes,
+                description: notes.isEmpty ? defaultDescription(hub: selectedHub) : notes,
                 category: confirmedCategory,
                 condition: selectedCondition,
                 status: .pending,
@@ -554,8 +614,10 @@ struct DonationDetailsView: View {
                 imageProvider: "cloudinary",
                 imagePublicIds: finalAssets.map(\.publicId),
                 createdAt: Date(),
-                statusNote: "Đơn thử nghiệm; điểm \(selectedHub.name) chưa hoạt động và không tiếp nhận đồ thật.",
-                campaignId: campaignId,
+                statusNote: selectedHub.isDemo
+                    ? "Đơn thử nghiệm; điểm \(selectedHub.name) chưa hoạt động và không tiếp nhận đồ thật."
+                    : "Chờ kho duyệt; mang đồ tới điểm \(selectedHub.name) sau khi đơn được duyệt.",
+                campaignId: campaign?.id,
                 hubId: selectedHub.id,
                 deliveryMethod: deliveryText,
                 confirmationCode: confirmationCode,
@@ -585,13 +647,65 @@ struct DonationDetailsView: View {
                 print("❌ [Firestore] Ghi đơn quyên góp thất bại: \(error.localizedDescription)")
                 print("⏱️ [Donation] Ghi đơn thất bại sau \(Int(Date().timeIntervalSince(firestoreStartedAt).rounded())) giây")
                 await MainActor.run {
-                    self.errorMessage = "Không thể tạo đơn quyên góp: \(error.localizedDescription). Ảnh của bạn đã được tải lên và sẵn sàng thử lại."
+                    let nsError = error as NSError
+                    if campaign != nil, nsError.domain == "FIRFirestoreErrorDomain", nsError.code == 7 {
+                        // Rules từ chối: chiến dịch vừa đóng/hết hạn hoặc danh mục không khớp.
+                        self.errorMessage = "Chiến dịch có thể vừa đóng hoặc hết hạn nên không nhận đơn mới. Ảnh đã tải lên; bạn có thể huỷ đơn hoặc quyên góp tự do."
+                    } else {
+                        self.errorMessage = "Không thể tạo đơn quyên góp: \(error.localizedDescription). Ảnh của bạn đã được tải lên và sẵn sàng thử lại."
+                    }
                     self.showErrorAlert = true
                     self.isSubmitting = false
                     self.submitStatus = nil
                 }
             }
         }
+    }
+
+    private func defaultDescription(hub: ReShareHub) -> String {
+        if let campaign { return "Quyên góp cho chiến dịch \(campaign.title)" }
+        return hub.isDemo ? "Đơn thử nghiệm tại điểm mẫu \(hub.name)" : "Quyên góp tại điểm \(hub.name)"
+    }
+
+    /// Hub đang hoạt động từ Firestore; có chiến dịch thì chỉ giữ Hub của chiến dịch.
+    private func loadHubs() async {
+        isLoadingHubs = true
+        do {
+            let records = try await FirestoreService.shared.fetchActiveHubs()
+            let allowed = campaign.map { Set($0.hubIds) }
+            daNangHubs = records
+                .filter { allowed?.contains($0.id) ?? true }
+                .map(ReShareHub.init(record:))
+            hubsLoadFailed = false
+            selectedHubIndex = 0
+            if let first = daNangHubs.first {
+                mapRegion.center = first.coordinate
+            }
+        } catch {
+            hubsLoadFailed = true
+        }
+        isLoadingHubs = false
+    }
+
+    private func campaignBanner(_ campaign: DonationCampaign) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: campaign.imageSystemName)
+                .font(.system(size: 18))
+                .foregroundColor(primaryGreen)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Quyên góp cho chiến dịch")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(textMuted)
+                Text(campaign.title)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(textDark)
+                    .lineLimit(2)
+            }
+            Spacer()
+        }
+        .padding(12)
+        .background(primaryGreen.opacity(0.08))
+        .cornerRadius(12)
     }
 
     private func storageErrorMessage(_ error: Error) -> String {
@@ -611,7 +725,8 @@ struct DonationDetailsView: View {
             aiPrediction = prediction
             isClassifying = false
             didClassify = true
-            if let prediction, prediction.confidence >= 0.6, !didConfirmCategory {
+            // Có chiến dịch thì danh mục đã khoá theo chiến dịch, AI chỉ để cảnh báo nếu lệch.
+            if let prediction, prediction.confidence >= 0.6, !didConfirmCategory, campaign == nil {
                 selectedCategory = prediction.category
             }
             if let prediction {

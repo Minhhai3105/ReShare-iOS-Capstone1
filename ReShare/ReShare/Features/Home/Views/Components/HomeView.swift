@@ -27,10 +27,8 @@ struct HomeView: View {
         return "bạn"
     }
 
-    // Chiến dịch khẩn cấp nhất tại Đà Nẵng
-    private var urgentCampaign: DonationCampaign? {
-        DonationCampaign.mockCampaigns.first(where: { $0.urgentLevel == .urgent })
-    }
+    // Chiến dịch khẩn cấp đang tiếp nhận (đọc từ Firestore); không có thì ẩn thẻ
+    @State private var urgentCampaign: DonationCampaign? = nil
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -116,9 +114,11 @@ struct HomeView: View {
         }
         .task {
             await loadRecentDonations()
+            await loadUrgentCampaign()
         }
         .refreshable {
             await loadRecentDonations()
+            await loadUrgentCampaign()
         }
         .onChange(of: showCamera) { _, isOpen in
             if !isOpen {
@@ -127,6 +127,12 @@ struct HomeView: View {
                 }
             }
         }
+    }
+
+    // Chiến dịch khẩn cấp đầu tiên trong danh sách đang tiếp nhận (đã sắp khẩn cấp lên trước)
+    private func loadUrgentCampaign() async {
+        guard let campaigns = try? await FirestoreService.shared.fetchOpenCampaigns() else { return }
+        urgentCampaign = campaigns.first(where: { $0.urgentLevel == .urgent })
     }
 
     // Tải các đơn quyên góp thực tế mới nhất của người dùng từ Cloud Firestore

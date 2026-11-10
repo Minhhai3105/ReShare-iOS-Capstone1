@@ -65,6 +65,7 @@ Vai trò: `donor` (iOS) · `warehouse_admin` (chỉ đơn thuộc kho được g
 | `distribution-api` | `GET /v1/admin/distribution/options` · `GET` + `POST /v1/admin/distribution` |
 | `reports-api` | `GET /v1/admin/reports` (timezone `Asia/Ho_Chi_Minh`) |
 | `contact-api` | `POST` + `GET /v1/contact` |
+| `campaigns-api` | `GET` + `POST /v1/admin/campaigns` · `GET …/options`, `…/:id` · `POST …/:id/update`, `…/:id/status` (chỉ System Admin) |
 
 `server.cjs` route theo prefix path, có allowlist origin (`ADMIN_WEB_ORIGINS`) và chặn body > 8KB (32KB cho `/v1/contact`).
 
@@ -78,7 +79,7 @@ Web Admin tách rõ bằng `import.meta.env.DEV`:
 - Component dùng chung cho cả hai (`ReportScreen.vue`, `DonationDetail.vue`, `ActualReceipt.vue`, `DistributionForm.vue`) nhận repository/prop từ route. **Khi sửa, đừng làm rò mock sang nhánh live hoặc ngược lại.**
 - `/admin` (`AdminHome.vue`) vẫn là trang tạm sau đăng nhập, chưa phải dashboard vận hành.
 
-iOS còn mock: `DonationCampaign.mockCampaigns` hardcode trong Swift và danh sách `ReShareHub` hardcode trong `DonationDetailsView.swift` — `FirestoreService` chưa có hàm đọc `campaigns`/`hubs` dù rules đã mở sẵn hai collection đó.
+Chiến dịch và Hub trên iOS đọc từ Firestore (`fetchOpenCampaigns`, `fetchActiveHubs`). Chiến dịch do System Admin tạo trên Web Admin qua `campaigns-api`; tiến độ chỉ cộng trong transaction nhập kho. Hub nạp bằng `backend/scripts/seed-hubs.cjs` và **vẫn là điểm minh hoạ** (`isDemo: true`) cho tới khi nhóm có điểm tiếp nhận thật — app phải tiếp tục ghi rõ điều đó.
 
 ## AI / Core ML
 

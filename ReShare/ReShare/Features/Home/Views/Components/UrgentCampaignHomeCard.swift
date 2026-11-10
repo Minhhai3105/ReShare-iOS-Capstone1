@@ -16,14 +16,14 @@ struct UrgentCampaignHomeCard: View {
                     HStack(spacing: 4) {
                         Text("🔥")
                             .font(.system(size: 11))
-                        Text("CHIẾN DỊCH MẪU TẠI ĐÀ NẴNG")
+                        Text("CHIẾN DỊCH KHẨN CẤP")
                             .font(.system(size: 11, weight: .bold))
                             .foregroundColor(Color(red: 0.85, green: 0.20, blue: 0.15))
                     }
 
                     Spacer()
 
-                    Text("Dữ liệu demo")
+                    Text(campaign.daysLeftText)
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundColor(.secondary)
                         .padding(.horizontal, 8)
@@ -61,7 +61,7 @@ struct UrgentCampaignHomeCard: View {
                 // Thanh tiến độ %
                 VStack(spacing: 4) {
                     HStack {
-                        Text("Tiến độ minh hoạ: \(campaign.currentCount)/\(campaign.targetCount) món")
+                        Text("Đã nhập kho: \(campaign.progressText)")
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundColor(primaryGreen)
 
@@ -105,7 +105,7 @@ struct UrgentCampaignHomeCard: View {
 }
 
 #Preview {
-    UrgentCampaignHomeCard(campaign: DonationCampaign.mockCampaigns[0])
+    UrgentCampaignHomeCard(campaign: DonationCampaign.previewSample)
         .padding(.vertical)
         .background(Color(red: 0.97, green: 0.98, blue: 0.96))
 }
