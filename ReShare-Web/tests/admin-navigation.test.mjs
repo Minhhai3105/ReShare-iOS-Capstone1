@@ -10,8 +10,8 @@ import {
   visibleSections,
 } from '../src/admin/layout/admin.navigation.js'
 
-test('System Admin thấy đủ 8 mục, Warehouse Admin không thấy Nhân sự và Liên hệ', () => {
-  assert.equal(visibleSections('system_admin').length, 8)
+test('System Admin thấy đủ 9 mục, Warehouse Admin không thấy Chiến dịch, Nhân sự và Liên hệ', () => {
+  assert.equal(visibleSections('system_admin').length, 9)
   const warehouseKeys = visibleSections('warehouse_admin').map((section) => section.key)
   assert.deepEqual(warehouseKeys, ['home', 'donations', 'inventory', 'beneficiaries', 'distribution', 'reports'])
   assert.equal(visibleSections('').some((section) => section.key === 'staff'), false)
@@ -33,7 +33,7 @@ test('Mọi route con trong khung quản trị đều có tiêu đề, mục và
     if (literal) return literal
     return constants.match(new RegExp(`\\b${key}: '([^']+)'`))[1]
   })
-  assert.equal(names.length, 17)
+  assert.equal(names.length, 21)
   for (const name of names) {
     const page = pageFor(name)
     assert.ok(page?.title && page.section, `thiếu khai báo cho ${name}`)

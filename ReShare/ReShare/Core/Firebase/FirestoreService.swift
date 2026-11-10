@@ -30,6 +30,10 @@ protocol FirestoreServiceProtocol {
     func fetchMyDonations(donorId: String) async throws -> [DonationItem]
     func fetchRecentDonations(donorId: String?, limit: Int) async throws -> [DonationItem]
 
+    // MARK: - Chiến dịch & Điểm tiếp nhận (chỉ đọc; backend ghi)
+    func fetchOpenCampaigns() async throws -> [DonationCampaign]
+    func fetchActiveHubs() async throws -> [HubRecord]
+
     // MARK: - Kênh 1: Kho đồ 0đ Cộng đồng (P2P Catalog)
     func publishCatalogItem(_ item: CatalogItem) async throws
     func fetchCatalogPickupAddress(itemId: String) async -> String?
@@ -217,6 +221,38 @@ final class FirestoreService: FirestoreServiceProtocol {
         return snapshot.documents.compactMap { doc in
             try? doc.data(as: DonationItem.self)
         }
+    }
+
+    // MARK: - Chiến dịch & Điểm tiếp nhận
+
+    /// Chiến dịch đang tiếp nhận do System Admin mở trên Web Admin. Truy vấn phải lọc
+    /// `status == active` mới khớp rules (bản nháp không đọc được); sắp xếp trong bộ nhớ
+    /// nên không cần composite index.
+    func fetchOpenCampaigns() async throws -> [DonationCampaign] {
+        let snapshot = try await db.collection(Constants.FirestoreCollections.campaigns)
+            .whereField("status", isEqualTo: "active")
+            .limit(to: 50)
+            .getDocuments()
+        let records = snapshot.documents.compactMap { document in
+            CampaignRecord(id: document.documentID, data: Self.plainValues(document.data()))
+        }
+        return CampaignRecord.openForDisplay(records).map(DonationCampaign.init(record:))
+    }
+
+    /// Điểm tiếp nhận đang hoạt động (nạp bằng backend/scripts/seed-hubs.cjs).
+    func fetchActiveHubs() async throws -> [HubRecord] {
+        let snapshot = try await db.collection(Constants.FirestoreCollections.hubs)
+            .whereField("status", isEqualTo: "active")
+            .limit(to: 50)
+            .getDocuments()
+        return snapshot.documents
+            .compactMap { HubRecord(id: $0.documentID, data: $0.data()) }
+            .sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
+    }
+
+    /// Đổi Timestamp sang Date để tầng Core (CampaignRecord) không phụ thuộc Firebase.
+    private static func plainValues(_ data: [String: Any]) -> [String: Any] {
+        data.mapValues { value in (value as? Timestamp)?.dateValue() ?? value }
     }
 
     // MARK: - Catalog Operations (Kênh 1: Kho đồ 0đ P2P)

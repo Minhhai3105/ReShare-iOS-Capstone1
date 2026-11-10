@@ -430,7 +430,20 @@ service cloud.firestore {
           && data.createdAt is timestamp
           && data.imageProvider == 'cloudinary'
           && !data.keys().hasAny(['warehouseId', 'warehouseName', 'imageUploadRecordId', 'resubmittedAt'])
+          && (!data.keys().hasAny(['campaignId']) || validCampaignDonation(data))
           && validCloudinaryImages('donation', donationId);
+      }
+
+      // Đơn gửi cho chiến dịch phải trỏ tới chiến dịch đang mở, chưa quá hạn và cùng danh mục,
+      // để tiến độ (cộng lúc nhập kho) không nhận đơn của chiến dịch nháp/đã đóng hoặc sai loại đồ.
+      function validCampaignDonation(data) {
+        let campaignPath = /databases/$(database)/documents/campaigns/$(data.campaignId);
+        return data.campaignId is string
+          && data.campaignId.matches('^[A-Za-z0-9_-]{1,128}$')
+          && exists(campaignPath)
+          && get(campaignPath).data.status == 'active'
+          && get(campaignPath).data.category == data.category
+          && get(campaignPath).data.endDate > request.time;
       }
 
       function canStaffReadDonation() {
@@ -493,9 +506,11 @@ service cloud.firestore {
     }
 
     // 5. Campaigns & Hubs (Chiến dịch & Trạm tiếp nhận - Công khai để xem)
+    // Chỉ chiến dịch đã công khai (đang mở hoặc đã đóng) được đọc; bản nháp không lộ ra app.
+    // Mọi thao tác ghi đi qua backend (campaigns-api.cjs) bằng Admin SDK, kể cả System Admin.
     match /campaigns/{campaignId} {
-      allow read: if true;
-      allow write: if request.auth != null && isSystemAdmin();
+      allow read: if resource.data.status in ['active', 'closed'];
+      allow write: if false;
     }
 
     match /hubs/{hubId} {

@@ -3,7 +3,10 @@ import SwiftUI
 /// Màn hình Trung tâm Chiến dịch Quyên góp (Campaigns Hub - Tab 3 của ứng dụng)
 struct DonationCampaignsView: View {
     @State private var selectedFilter: String = "Tất cả"
-    @State private var campaigns: [DonationCampaign] = DonationCampaign.mockCampaigns
+    // Chiến dịch thật đọc từ Firestore (System Admin mở trên Web Admin)
+    @State private var campaigns: [DonationCampaign] = []
+    @State private var isLoading: Bool = true
+    @State private var loadError: String? = nil
 
     // State mở Camera quyên góp tự do (không theo chiến dịch)
     @State private var showFreeDonationCamera: Bool = false
@@ -12,7 +15,7 @@ struct DonationCampaignsView: View {
     @State private var selectedCampaign: DonationCampaign? = nil
 
     // Bộ lọc danh mục
-    private let filters = ["Tất cả", "🔥 Khẩn cấp", "👕 Áo ấm", "📚 Sách vở", "⚡ Thiết bị", "🪑 Gia dụng"]
+    private let filters = ["Tất cả", "🔥 Khẩn cấp", "👕 Quần áo", "📚 Sách vở", "🪑 Gia dụng"]
 
     // Màu sắc nhận diện ReShare
     private let primaryGreen = Color(red: 0.11, green: 0.35, blue: 0.20)
@@ -25,14 +28,12 @@ struct DonationCampaignsView: View {
             return campaigns
         } else if selectedFilter == "🔥 Khẩn cấp" {
             return campaigns.filter { $0.urgentLevel == .urgent }
-        } else if selectedFilter == "👕 Áo ấm" {
-            return campaigns.filter { $0.category.contains("Áo") || $0.category.contains("Quần") }
+        } else if selectedFilter == "👕 Quần áo" {
+            return campaigns.filter { $0.donationCategory == .clothing }
         } else if selectedFilter == "📚 Sách vở" {
-            return campaigns.filter { $0.category.contains("Sách") }
-        } else if selectedFilter == "⚡ Thiết bị" {
-            return campaigns.filter { $0.category.contains("điện tử") || $0.category.contains("Thiết bị") }
+            return campaigns.filter { $0.donationCategory == .books }
         } else if selectedFilter == "🪑 Gia dụng" {
-            return campaigns.filter { $0.category.contains("Gia dụng") }
+            return campaigns.filter { $0.donationCategory == .household }
         }
         return campaigns
     }
@@ -46,13 +47,24 @@ struct DonationCampaignsView: View {
                 // 2. Dải bộ lọc danh mục & mức độ khẩn cấp
                 categoryFilterSection
 
-                // 3. Spotlight Card: Chiến dịch khẩn cấp nhất (nếu có)
-                if let spotlight = campaigns.first(where: { $0.urgentLevel == .urgent }) {
-                    spotlightCard(for: spotlight)
-                }
+                if isLoading && campaigns.isEmpty {
+                    campaignStateView(icon: nil, message: "Đang tải chiến dịch…")
+                } else if let loadError, campaigns.isEmpty {
+                    campaignStateView(icon: "wifi.exclamationmark", message: loadError, showsRetry: true)
+                } else if campaigns.isEmpty {
+                    campaignStateView(
+                        icon: "megaphone",
+                        message: "Hiện chưa có chiến dịch nào đang tiếp nhận. Bạn vẫn có thể quyên góp tự do ở bên dưới."
+                    )
+                } else {
+                    // 3. Spotlight Card: Chiến dịch khẩn cấp nhất (nếu có)
+                    if let spotlight = campaigns.first(where: { $0.urgentLevel == .urgent }) {
+                        spotlightCard(for: spotlight)
+                    }
 
-                // 4. Danh sách các chiến dịch đang tiếp nhận
-                activeCampaignsListSection
+                    // 4. Danh sách các chiến dịch đang tiếp nhận
+                    activeCampaignsListSection
+                }
 
                 // 5. Nút quyên góp tự do (Không theo chiến dịch)
                 freeDonationOptionBanner
@@ -63,6 +75,8 @@ struct DonationCampaignsView: View {
         }
         .background(Color(red: 0.97, green: 0.98, blue: 0.96).ignoresSafeArea())
         .navigationBarHidden(true)
+        .task { await loadCampaigns() }
+        .refreshable { await loadCampaigns() }
         // Sheet mở chi tiết chiến dịch
         .sheet(item: $selectedCampaign) { camp in
             NavigationStack {
@@ -82,6 +96,45 @@ struct DonationCampaignsView: View {
         }
     }
 
+    // MARK: - Tải dữ liệu & trạng thái rỗng/lỗi
+    private func loadCampaigns() async {
+        isLoading = true
+        do {
+            campaigns = try await FirestoreService.shared.fetchOpenCampaigns()
+            loadError = nil
+        } catch {
+            loadError = "Không tải được chiến dịch. Kiểm tra kết nối rồi kéo xuống để thử lại."
+        }
+        isLoading = false
+    }
+
+    private func campaignStateView(icon: String?, message: String, showsRetry: Bool = false) -> some View {
+        VStack(spacing: 12) {
+            if let icon {
+                Image(systemName: icon)
+                    .font(.system(size: 28))
+                    .foregroundColor(primaryGreen)
+            } else {
+                ProgressView()
+            }
+            Text(message)
+                .font(.system(size: 13))
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            if showsRetry {
+                Button("Thử lại") {
+                    Task { await loadCampaigns() }
+                }
+                .font(.system(size: 14, weight: .bold))
+                .foregroundColor(primaryGreen)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(24)
+        .background(Color.white)
+        .cornerRadius(18)
+    }
+
     // MARK: - 1. Top Header (Đã bỏ chiếc chuông thừa)
     private var topHeaderSection: some View {
         HStack(alignment: .center) {
@@ -90,7 +143,7 @@ struct DonationCampaignsView: View {
                     .font(.system(size: 24, weight: .bold))
                     .foregroundColor(primaryGreen)
 
-                Text("Chiến dịch minh hoạ; chưa tiếp nhận quyên góp thật")
+                Text("Tiến độ chỉ tính đồ đã được kho tiếp nhận")
                     .font(.system(size: 12))
                     .foregroundColor(.secondary)
             }
@@ -161,7 +214,7 @@ struct DonationCampaignsView: View {
                         .background(Color.white)
                         .clipShape(Capsule())
 
-                        Text("⏰ Còn \(camp.daysLeft) ngày")
+                        Text("⏰ \(camp.daysLeftText)")
                             .font(.system(size: 10, weight: .semibold))
                             .foregroundColor(.white)
                             .padding(.horizontal, 8)
@@ -187,7 +240,7 @@ struct DonationCampaignsView: View {
                     // Tiến độ
                     VStack(spacing: 4) {
                         HStack {
-                            Text("Đã tiếp nhận: \(camp.currentCount)/\(camp.targetCount) món")
+                            Text("Đã nhập kho: \(camp.progressText)")
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundColor(.white.opacity(0.9))
                             Spacer()
@@ -259,7 +312,7 @@ struct DonationCampaignsView: View {
 
                         Spacer()
 
-                        Text("Còn \(camp.daysLeft) ngày")
+                        Text(camp.daysLeftText)
                             .font(.system(size: 10, weight: .semibold))
                             .foregroundColor(.secondary)
                     }
@@ -274,13 +327,13 @@ struct DonationCampaignsView: View {
             // Tiến độ thanh ngang
             VStack(spacing: 4) {
                 HStack {
-                    Text("\(camp.category) • Tiếp nhận tại \(camp.hubs.count) Trạm")
+                    Text("\(camp.categoryTitle) • Tiếp nhận tại \(camp.hubs.count) điểm")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundColor(.secondary)
 
                     Spacer()
 
-                    Text("\(camp.currentCount)/\(camp.targetCount) (\(camp.progressPercentageString))")
+                    Text("\(camp.progressText) (\(camp.progressPercentageString))")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundColor(primaryGreen)
                 }

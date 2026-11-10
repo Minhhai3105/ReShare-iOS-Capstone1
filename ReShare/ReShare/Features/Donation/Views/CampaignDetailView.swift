@@ -6,6 +6,14 @@ struct CampaignDetailView: View {
     let campaign: DonationCampaign
 
     @State private var showCameraView: Bool = false
+    // Thông tin Hub (địa chỉ, giờ, cờ minh hoạ) đọc từ Firestore theo mã Hub của chiến dịch
+    @State private var hubDetails: [String: HubRecord] = [:]
+    @State private var didLoadHubs: Bool = false
+
+    /// Còn Hub nào của chiến dịch ở chế độ minh hoạ (hoặc chưa tải được) thì phải nói rõ.
+    private var hasDemoHub: Bool {
+        campaign.hubIds.contains { hubDetails[$0]?.isDemo ?? true }
+    }
 
     // Màu sắc nhận diện ReShare
     private let primaryGreen = Color(red: 0.11, green: 0.35, blue: 0.20)
@@ -15,10 +23,12 @@ struct CampaignDetailView: View {
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(spacing: 20) {
-                Text("CHIẾN DỊCH MINH HOẠ — CHƯA TIẾP NHẬN ĐỒ THẬT")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(.orange)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                if didLoadHubs && hasDemoHub {
+                    Text("ĐIỂM TIẾP NHẬN ĐANG MINH HOẠ — ĐƠN ĐƯỢC LƯU THẬT NHƯNG CHƯA MANG ĐỒ TỚI ĐIỂM NÀY")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.orange)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
 
                 // 1. Hero Card Banner & Huy hiệu khẩn cấp
                 heroBannerSection
@@ -58,6 +68,7 @@ struct CampaignDetailView: View {
             }
 
         }
+        .task { await loadHubDetails() }
         // Thanh dính đáy kích hoạt Camera quyên góp
         .safeAreaInset(edge: .bottom) {
             stickyBottomActionBar
@@ -70,10 +81,25 @@ struct CampaignDetailView: View {
                     onBackToHome: {
                         showCameraView = false
                     },
-                    campaignId: campaign.id
+                    campaign: campaign
                 )
             }
         }
+    }
+
+    // MARK: - Hub của chiến dịch
+    private func loadHubDetails() async {
+        if let hubs = try? await FirestoreService.shared.fetchActiveHubs() {
+            hubDetails = Dictionary(uniqueKeysWithValues: hubs.map { ($0.id, $0) })
+        }
+        didLoadHubs = true
+    }
+
+    private func hubSubtitle(for hubId: String) -> String {
+        guard didLoadHubs else { return "Đang tải thông tin điểm tiếp nhận…" }
+        guard let hub = hubDetails[hubId] else { return "Điểm này đã ngừng hoạt động" }
+        if hub.isDemo { return "Điểm minh hoạ — chưa tiếp nhận đồ thật" }
+        return [hub.address, hub.openHours].filter { !$0.isEmpty }.joined(separator: " • ")
     }
 
     // MARK: - 1. Hero Banner
@@ -112,7 +138,7 @@ struct CampaignDetailView: View {
                     .background(Color.white)
                     .clipShape(Capsule())
 
-                    Text("Mốc thời gian mẫu")
+                    Text(campaign.daysLeftText)
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundColor(.white)
                         .padding(.horizontal, 10)
@@ -126,7 +152,7 @@ struct CampaignDetailView: View {
                 Spacer()
 
                 // Thẻ danh mục
-                Text(campaign.category)
+                Text(campaign.categoryTitle)
                     .font(.system(size: 12, weight: .bold))
                     .foregroundColor(Color(red: 0.08, green: 0.35, blue: 0.18))
                     .padding(.horizontal, 10)
@@ -167,7 +193,7 @@ struct CampaignDetailView: View {
     private var campaignProgressCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("TIẾN ĐỘ TIẾP NHẬN ĐỒ QUYÊN GÓP")
+                Text("TIẾN ĐỘ (ĐỒ ĐÃ NHẬP KHO)")
                     .font(.system(size: 11, weight: .bold))
                     .foregroundColor(.secondary)
 
@@ -199,16 +225,20 @@ struct CampaignDetailView: View {
             .frame(height: 12)
 
             HStack {
-                Text("Đã nhận: \(campaign.currentCount) món")
+                Text("Đã nhập kho: \(campaign.receivedText)")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundColor(primaryGreen)
 
                 Spacer()
 
-                Text("Mục tiêu: \(campaign.targetCount) món")
+                Text("Mục tiêu: \(campaign.targetText)")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(.secondary)
             }
+
+            Text("\(campaign.receivedDonationCount) lượt quyên góp đã vào kho. Số lượng bạn khai báo chỉ được cộng sau khi kho kiểm đếm thực tế.")
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
         }
         .padding(14)
         .background(Color.white)
@@ -223,7 +253,7 @@ struct CampaignDetailView: View {
                 .font(.system(size: 11, weight: .bold))
                 .foregroundColor(.secondary)
 
-            Text(campaign.description)
+            Text(campaign.description.isEmpty ? campaign.subtitle : campaign.description)
                 .font(.system(size: 13))
                 .foregroundColor(.primary.opacity(0.85))
                 .lineSpacing(4)
@@ -272,11 +302,11 @@ struct CampaignDetailView: View {
     // MARK: - 6. Participating Hubs
     private var participatingHubsCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("ĐIỂM TIẾP NHẬN MẪU — CHƯA HOẠT ĐỘNG")
+            Text("ĐIỂM TIẾP NHẬN CỦA CHIẾN DỊCH")
                 .font(.system(size: 11, weight: .bold))
                 .foregroundColor(.secondary)
 
-            ForEach(campaign.hubs, id: \.self) { hubName in
+            ForEach(Array(zip(campaign.hubIds, campaign.hubs)), id: \.0) { hubId, hubName in
                 HStack(spacing: 10) {
                     Image(systemName: "mappin.circle.fill")
                         .font(.system(size: 18))
@@ -285,9 +315,9 @@ struct CampaignDetailView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(hubName)
                             .font(.system(size: 13, weight: .bold))
-                        Text("Không mang đồ đến địa điểm minh hoạ")
+                        Text(hubSubtitle(for: hubId))
                             .font(.system(size: 11))
-                            .foregroundColor(.secondary)
+                            .foregroundColor(hubDetails[hubId]?.isDemo == false ? .secondary : .orange)
                     }
 
                     Spacer()
@@ -312,18 +342,21 @@ struct CampaignDetailView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "camera.fill")
                         .font(.system(size: 16, weight: .bold))
-                    Text("Thử quy trình chụp và tạo đơn")
+                    Text(campaign.isAcceptingDonations ? "Chụp ảnh và gửi đồ cho chiến dịch" : "Chiến dịch đã ngừng nhận đơn")
                         .font(.system(size: 16, weight: .bold))
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: 52)
-                .background(primaryGreen)
+                .background(campaign.isAcceptingDonations ? primaryGreen : Color.gray)
                 .foregroundColor(.white)
                 .cornerRadius(16)
                 .shadow(color: primaryGreen.opacity(0.35), radius: 8, y: 4)
             }
+            .disabled(!campaign.isAcceptingDonations)
 
-            Text("Đơn demo được lưu trên Firebase; chưa có tình nguyện viên tiếp nhận đồ.")
+            Text(hasDemoHub
+                 ? "Đơn được lưu thật và kho sẽ duyệt; điểm tiếp nhận đang minh hoạ nên chưa mang đồ tới."
+                 : "Kho duyệt đơn trước, sau đó bạn mang đồ tới điểm tiếp nhận đã chọn.")
                 .font(.system(size: 10, weight: .medium))
                 .foregroundColor(.secondary)
         }
@@ -340,6 +373,6 @@ struct CampaignDetailView: View {
 
 #Preview {
     NavigationStack {
-        CampaignDetailView(campaign: DonationCampaign.mockCampaigns[0])
+        CampaignDetailView(campaign: DonationCampaign.previewSample)
     }
 }

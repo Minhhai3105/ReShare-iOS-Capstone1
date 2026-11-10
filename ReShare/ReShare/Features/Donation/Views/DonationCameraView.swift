@@ -16,8 +16,8 @@ struct DonationCameraView: View {
     var onFinishCapturing: (([UIImage]) -> Void)?
     var onBackToHome: (() -> Void)? = nil
 
-    // Chiến dịch tiếp nhận (nếu có)
-    var campaignId: String? = nil
+    // Chiến dịch tiếp nhận (nếu có): truyền cả chiến dịch để bước sau khoá đúng danh mục và Hub
+    var campaign: DonationCampaign? = nil
 
     // Chế độ hoạt động
     var mode: CameraMode = .hubDonation
@@ -26,13 +26,13 @@ struct DonationCameraView: View {
     init(
         onFinishCapturing: (([UIImage]) -> Void)? = nil,
         onBackToHome: (() -> Void)? = nil,
-        campaignId: String? = nil,
+        campaign: DonationCampaign? = nil,
         mode: CameraMode = .hubDonation,
         onCatalogPublished: ((CatalogItem) -> Void)? = nil
     ) {
         self.onFinishCapturing = onFinishCapturing
         self.onBackToHome = onBackToHome
-        self.campaignId = campaignId
+        self.campaign = campaign
         self.mode = mode
         self.onCatalogPublished = onCatalogPublished
     }
@@ -154,7 +154,7 @@ struct DonationCameraView: View {
         .navigationDestination(isPresented: $navigateToDetails) {
             DonationDetailsView(
                 capturedImages: capturedImages,
-                campaignId: campaignId,
+                campaign: campaign,
                 onBackToHome: {
                     if let onBackToHome = onBackToHome {
                         onBackToHome()

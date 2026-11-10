@@ -36,6 +36,12 @@ export const ADMIN_ROUTE = Object.freeze({
   beneficiaryDetail: 'admin-beneficiary-detail',
   beneficiaryEdit: 'admin-beneficiary-edit',
 
+  // Chiến dịch quyên góp (chỉ System Admin)
+  campaignList: 'admin-campaign-list',
+  campaignNew: 'admin-campaign-new',
+  campaignDetail: 'admin-campaign-detail',
+  campaignEdit: 'admin-campaign-edit',
+
   // Routes từ dev - Inventory và Distribution
   inventory: 'admin-inventory',
   inventoryDetail: 'admin-inventory-detail',
