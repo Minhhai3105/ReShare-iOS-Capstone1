@@ -104,8 +104,11 @@ struct UrgentCampaignHomeCard: View {
     }
 }
 
+// previewSample chỉ có trong bản Debug (DonationCampaign.swift), nên preview cũng chỉ biên dịch ở Debug.
+#if DEBUG
 #Preview {
     UrgentCampaignHomeCard(campaign: DonationCampaign.previewSample)
         .padding(.vertical)
         .background(Color(red: 0.97, green: 0.98, blue: 0.96))
 }
+#endif

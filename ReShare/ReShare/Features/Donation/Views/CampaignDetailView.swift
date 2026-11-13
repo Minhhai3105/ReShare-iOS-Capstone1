@@ -371,8 +371,11 @@ struct CampaignDetailView: View {
     }
 }
 
+// previewSample chỉ có trong bản Debug (DonationCampaign.swift), nên preview cũng chỉ biên dịch ở Debug.
+#if DEBUG
 #Preview {
     NavigationStack {
         CampaignDetailView(campaign: DonationCampaign.previewSample)
     }
 }
+#endif
