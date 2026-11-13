@@ -47,7 +47,10 @@ import { LEGAL_CONTACT_EMAIL } from './legal.js'
       <li>Bạn xem được đơn quyên góp và hồ sơ của chính mình. Người dùng khác không xem được đơn của bạn.</li>
       <li>Nhân sự kho chỉ xem đơn thuộc kho được giao; quản trị hệ thống xem được toàn hệ thống. Ghi chú nội bộ của nhân sự không hiển thị cho người khác ngoài nhân sự.</li>
       <li>Bài đăng trong Kho đồ 0đ hiển thị cho người dùng đã đăng nhập. <strong>Địa chỉ nhận đồ</strong> chỉ người đăng và người đang được giữ đồ xem được.</li>
-      <li>Tin nhắn chỉ hai người trong cuộc trò chuyện đọc được.</li>
+      <li>Tin nhắn chỉ hai người trong cuộc trò chuyện đọc được. Ngoại lệ duy nhất: khi một tin nhắn bị báo cáo vi phạm,
+        quản trị hệ thống của ReShare được xem nội dung của chính tin nhắn bị báo cáo để xử lý báo cáo đó.</li>
+      <li>Khi bạn gửi báo cáo vi phạm, lý do, ghi chú và nội dung bị báo cáo (bài đăng, tin nhắn hoặc tài khoản) chỉ quản trị hệ thống xem
+        để xử lý. Người bị báo cáo không biết ai đã báo cáo.</li>
       <li>Thông tin người thụ hưởng chỉ nhân sự được phân quyền xem. Người quyên góp chỉ thấy trạng thái công khai của đơn.</li>
     </ul>
 
@@ -55,7 +58,8 @@ import { LEGAL_CONTACT_EMAIL } from './legal.js'
     <p>ReShare dùng các dịch vụ sau để lưu trữ và vận hành. Máy chủ của các dịch vụ này có thể đặt ngoài Việt Nam.</p>
     <ul>
       <li><strong>Google Firebase</strong> (Authentication, Cloud Firestore): tài khoản và dữ liệu của ứng dụng.</li>
-      <li><strong>Cloudinary</strong>: lưu ảnh món đồ. Chỉ người có quyền mới nhận được đường dẫn xem ảnh.</li>
+      <li><strong>Cloudinary</strong>: lưu ảnh món đồ. Ảnh đơn quyên góp lưu ở chế độ cần cấp quyền: chỉ nhân sự được phân quyền nhận được
+        đường dẫn xem có thời hạn ngắn. Ảnh bài Kho đồ 0đ là ảnh công khai để người dùng khác xem bài, nên ai có đường dẫn ảnh đều mở được.</li>
       <li><strong>Render</strong>: máy chủ API kiểm tra quyền trước mọi thao tác ghi quan trọng.</li>
       <li><strong>Cloudflare Pages</strong>: lưu trữ website này và trang quản trị.</li>
     </ul>
@@ -64,8 +68,11 @@ import { LEGAL_CONTACT_EMAIL } from './legal.js'
     <ul>
       <li>Dữ liệu tài khoản được giữ cho tới khi bạn xoá tài khoản.</li>
       <li>Bạn có thể xoá tài khoản ngay trong app tại <strong>Tài khoản cá nhân → Xoá tài khoản</strong>, hoặc gửi yêu cầu qua email bên dưới.</li>
-      <li>Khi xoá tài khoản, chúng tôi xoá tài khoản đăng nhập và hồ sơ (họ tên, email, số điện thoại), gỡ các bài đăng đang mở
-        và đổi tên hiển thị trong tin nhắn thành “Người dùng đã xoá”.</li>
+      <li>Khi xoá tài khoản, chúng tôi xoá tài khoản đăng nhập và hồ sơ (họ tên, email, số điện thoại), gỡ các bài đăng đang mở kèm ảnh,
+        huỷ lịch hẹn chưa ai xác nhận bàn giao và đổi tên hiển thị trong tin nhắn thành “Người dùng đã xoá”.
+        Nếu máy chủ ảnh tạm lỗi, hệ thống tự thử xoá lại ảnh sau đó.</li>
+      <li>Nếu bạn đang bàn giao dở một món (một bên đã bấm xác nhận), cần hoàn tất bàn giao trước khi xoá tài khoản,
+        để không làm mất ghi nhận của người còn lại.</li>
       <li>Đơn quyên góp đã gửi được giữ lại ở dạng <strong>ẩn danh</strong> vì phiếu thực nhận, tồn kho và phiếu phân phối tham chiếu tới chúng.
         Các đơn này không còn gắn với thông tin cá nhân của bạn.</li>
     </ul>
