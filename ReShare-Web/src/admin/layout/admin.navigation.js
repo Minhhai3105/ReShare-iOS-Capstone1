@@ -11,6 +11,7 @@ export const ADMIN_SECTIONS = Object.freeze([
   { key: 'reports', label: 'Báo cáo', icon: 'chart', to: { name: 'admin-reports' } },
   { key: 'staff', label: 'Nhân sự & phân quyền', icon: 'shield-check', to: { name: ADMIN_ROUTE.staff }, roles: [USER_ROLE.systemAdmin] },
   { key: 'contacts', label: 'Liên hệ từ landing', icon: 'mail', to: { name: ADMIN_ROUTE.contacts }, roles: [USER_ROLE.systemAdmin] },
+  { key: 'moderation', label: 'Báo cáo vi phạm', icon: 'alert-triangle', to: { name: ADMIN_ROUTE.moderation }, roles: [USER_ROLE.systemAdmin] },
 ])
 
 const toHome = () => ({ name: ADMIN_ROUTE.home })
@@ -47,6 +48,7 @@ export const ADMIN_PAGES = Object.freeze({
   'admin-reports': { section: 'reports', title: 'Báo cáo', parent: toHome },
   [ADMIN_ROUTE.staff]: { section: 'staff', title: 'Nhân sự & phân quyền', parent: toHome },
   [ADMIN_ROUTE.contacts]: { section: 'contacts', title: 'Liên hệ từ landing', parent: toHome },
+  [ADMIN_ROUTE.moderation]: { section: 'moderation', title: 'Báo cáo vi phạm', parent: toHome },
 })
 
 export function visibleSections(role) {

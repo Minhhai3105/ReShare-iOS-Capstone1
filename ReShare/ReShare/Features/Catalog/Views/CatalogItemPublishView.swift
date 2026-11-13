@@ -390,6 +390,11 @@ struct CatalogItemPublishView: View {
             errorMessage = "Vui lòng chụp hoặc chọn từ 3 đến 6 ảnh thật của món đồ."
             return
         }
+        // Rules cũng chặn đúng danh sách này; kiểm trước để không tải ảnh lên rồi mới bị từ chối.
+        guard !ContentFilter.containsBlockedWord(itemTitle), !ContentFilter.containsBlockedWord(donorNote) else {
+            errorMessage = ContentFilter.rejectionMessage
+            return
+        }
         guard let donorId = AuthService.shared.currentUserId, !donorId.isEmpty else {
             errorMessage = "Bạn cần đăng nhập lại trước khi đăng đồ."
             return

@@ -8,6 +8,10 @@ struct CatalogItemDetailView: View {
     @State private var selectedPhotoIndex = 0
     // Địa chỉ chính xác chỉ người đăng và người đang được giữ đồ đọc được; người khác chỉ thấy quận.
     @State private var privatePickupAddress: String? = nil
+    // Báo cáo / chặn người đăng (App Store Guideline 1.2)
+    @State private var reportTarget: ContentReport? = nil
+    @State private var showBlockConfirm = false
+    @State private var safetyErrorMessage: String? = nil
 
 
     // Màu sắc nhận diện ReShare
@@ -77,6 +81,24 @@ struct CatalogItemDetailView: View {
                     ShareLink(item: "Món đồ 0đ trên ReShare: \(item.title) — \(item.district), Đà Nẵng") {
                         Image(systemName: "square.and.arrow.up")
                     }
+                    if !isMyItem && !currentUserId.isEmpty {
+                        Menu {
+                            Button {
+                                reportTarget = ContentReport(targetType: .listing, targetId: item.id, targetUserId: item.donorId)
+                            } label: {
+                                Label("Báo cáo bài đăng", systemImage: "exclamationmark.bubble")
+                            }
+                            Button(role: .destructive) {
+                                showBlockConfirm = true
+                            } label: {
+                                Label("Chặn người đăng", systemImage: "hand.raised")
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                                .frame(width: 44, height: 44)
+                        }
+                        .accessibilityLabel("Báo cáo hoặc chặn")
+                    }
                 }
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundColor(.primary)
@@ -85,6 +107,33 @@ struct CatalogItemDetailView: View {
         // Thanh nút bấm cố định dính đáy (Dùng NavigationLink push sang Chat, không chồng Sheet)
         .safeAreaInset(edge: .bottom) {
             stickyBottomActionBar
+        }
+        .sheet(item: $reportTarget) { report in
+            ReportContentSheet(report: report)
+        }
+        .confirmationDialog("Chặn \(item.donorName)?", isPresented: $showBlockConfirm, titleVisibility: .visible) {
+            Button("Chặn người này", role: .destructive) { blockDonor() }
+            Button("Huỷ", role: .cancel) {}
+        } message: {
+            Text("Bạn sẽ không thấy bài của người này trong Kho đồ 0đ, và hai bên không nhắn tin được cho nhau. Lịch hẹn đang có giữa hai bên sẽ bị huỷ. Có thể bỏ chặn trong Tài khoản > Người dùng đã chặn.")
+        }
+        .alert("Chưa chặn được", isPresented: Binding(get: { safetyErrorMessage != nil }, set: { if !$0 { safetyErrorMessage = nil } })) {
+            Button("Đóng", role: .cancel) {}
+        } message: {
+            Text(safetyErrorMessage ?? "")
+        }
+    }
+
+    private func blockDonor() {
+        Task {
+            do {
+                try await FirestoreService.shared.blockUser(item.donorId, displayName: item.donorName)
+                dismiss()
+            } catch let error as NSError where error.domain == "ReShare" {
+                safetyErrorMessage = error.localizedDescription
+            } catch {
+                safetyErrorMessage = "Kiểm tra kết nối rồi thử lại."
+            }
         }
     }
 

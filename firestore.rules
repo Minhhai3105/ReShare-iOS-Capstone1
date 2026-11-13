@@ -41,6 +41,31 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // An toàn nội dung (App Store Guideline 1.2). Danh sách từ lấy từ
+    // ReShare/ReShare/Core/ContentFilter.swift; regex dưới đây SINH TỰ ĐỘNG bằng
+    // `node tests/content-filter-pattern.cjs` — test web `content-filter-sync` bắt lệch.
+    // Chỉ dùng từ đủ đặc trưng để không chặn nhầm từ thường (vd. không dùng "đĩ" vì có trong "đĩa").
+    function cleanText(text) {
+      // (?i) thay cho lower(): lower() của Rules chỉ đổi chữ ASCII nên "ĐÉO" sẽ lọt.
+      // Rules không chuẩn hoá Unicode, nên mỗi chữ có dấu liệt kê cả dạng dựng sẵn (NFC) lẫn dạng
+      // dấu tổ hợp (NFD, vd. "e" + \x{301}) — app chuẩn hoá NFC trước khi lọc, Rules phải bắt cả hai.
+      return !(text is string) || !text.matches(
+        '(?si).*(đ(?:i\\x{323}|ị)t|đ(?:u\\x{323}|ụ) m(?:a\\x{301}|á)|đ(?:u\\x{323}|ụ) m(?:e\\x{323}|ẹ)|đ(?:e\\x{301}|é)o|l(?:o\\x{302}\\x{300}|ô\\x{300}|ồ)n|bu(?:o\\x{302}\\x{300}|ô\\x{300}|ồ)i|c(?:a\\x{306}\\x{323}|a\\x{323}\\x{306}|ă\\x{323}|ạ\\x{306}|ặ)c|con đ(?:i\\x{303}|ĩ)|đ(?:o\\x{302}\\x{300}|ô\\x{300}|ồ) đ(?:i\\x{303}|ĩ)|đmm|đcm|dcm|vcl|vkl|fuck|shit|bitch|cunt).*');
+    }
+
+    // Tài khoản bị System Admin khoá (moderation-api ghi users/{uid}.suspended). ID token đã cấp vẫn
+    // còn hạn tới 1 giờ sau khi thu hồi phiên, nên Rules chặn ghi nội dung ngay thay vì chờ token hết hạn.
+    function isSuspended() {
+      let profile = /databases/$(database)/documents/users/$(request.auth.uid);
+      return exists(profile) && get(profile).data.get('suspended', false) == true;
+    }
+
+    // Một trong hai người đã chặn người kia thì không được mở hội thoại hay nhắn tin cho nhau.
+    function blockedEitherWay(a, b) {
+      return exists(/databases/$(database)/documents/users/$(a)/blocks/$(b))
+        || exists(/databases/$(database)/documents/users/$(b)/blocks/$(a));
+    }
+
     function validCloudinaryImages(purpose, recordId) {
       let ids = request.resource.data.get('imagePublicIds', null);
       let provider = request.resource.data.get('imageProvider', null);
@@ -91,6 +116,20 @@ service cloud.firestore {
         ])
         && validPublicProfile();
       allow delete: if false;
+
+      // Danh sách người dùng mình đã chặn: chỉ chính chủ đọc, thêm, gỡ.
+      match /blocks/{blockedId} {
+        allow read, delete: if isOwner();
+        allow create: if isOwner()
+          && blockedId != userId
+          && request.resource.data.keys().hasOnly(['blockedUid', 'createdAt', 'displayName'])
+          && request.resource.data.blockedUid == blockedId
+          && request.resource.data.createdAt == request.time
+          // Tên lưu kèm để màn "Người dùng đã chặn" hiển thị được (hồ sơ người khác không đọc được).
+          && (!request.resource.data.keys().hasAny(['displayName']) ||
+              (request.resource.data.displayName is string && request.resource.data.displayName.size() <= 80));
+        allow update: if false;
+      }
     }
 
     // 2. Catalog Items (Kho đồ 0đ P2P C2C)
@@ -167,8 +206,11 @@ service cloud.firestore {
       allow create: if request.auth != null
         && request.resource.data.donorId == request.auth.uid
         && request.resource.data.status == 'available'
+        && !isSuspended()
         // Địa chỉ và giờ hẹn chính xác không được nằm trên bài mọi người đều đọc được.
         && !request.resource.data.keys().hasAny(['pickupAddress', 'pickupTime'])
+        && cleanText(request.resource.data.get('title', ''))
+        && cleanText(request.resource.data.get('donorNote', ''))
         && validCloudinaryImages('catalog_item', itemId)
         && request.resource.data.get('reservedChatId', null) == null
         && request.resource.data.get('reservedRequesterId', null) == null
@@ -348,6 +390,8 @@ service cloud.firestore {
         && !request.resource.data.keys().hasAny(['itemPickupAddress'])
         && request.resource.data.participantIds == [request.resource.data.donorId, request.resource.data.requesterId]
         && request.resource.data.lastSenderId == request.auth.uid
+        && !blockedEitherWay(request.resource.data.donorId, request.resource.data.requesterId)
+        && !isSuspended()
         && validConversationState();
 
       // Thành viên chỉ được cập nhật các trường metadata tin nhắn, lịch hẹn và bàn giao
@@ -360,6 +404,12 @@ service cloud.firestore {
             'donorHandoverConfirmed', 'requesterHandoverConfirmed'
           ])
           && request.resource.data.lastSenderId == request.auth.uid
+          // Bản xem trước (lastMessage) là nội dung người kia thấy ở danh sách chat: chặn/lọc như tin nhắn,
+          // nếu không người bị chặn vẫn ghi riêng trường này để gửi chữ tới người đã chặn mình.
+          && !blockedEitherWay(resource.data.donorId, resource.data.requesterId)
+          && !isSuspended()
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastMessage'])
+            || cleanText(request.resource.data.get('lastMessage', '')))
           && validConversationState()
           && validWorkflowTransition()
         ));
@@ -380,7 +430,10 @@ service cloud.firestore {
         allow create: if request.auth != null
           && request.resource.data.senderId == request.auth.uid
           && request.resource.data.get('messageType', 'text') != 'system'
-          && request.auth.uid in conversationAfter().participantIds;
+          && request.auth.uid in conversationAfter().participantIds
+          && !blockedEitherWay(conversationAfter().donorId, conversationAfter().requesterId)
+          && !isSuspended()
+          && cleanText(request.resource.data.get('text', ''));
         // Cho phép cập nhật trạng thái thẻ đề xuất hẹn (appointmentStatus)
         allow update: if request.auth != null
           && request.auth.uid == conversationAfter().donorId
@@ -468,6 +521,7 @@ service cloud.firestore {
         && request.resource.data.donorId == request.auth.uid
         && request.resource.data.status == 'pending'
         && !request.resource.data.keys().hasAny(['internalNote', 'reviewedBy', 'history'])
+        && !isSuspended()
         && validNewDonation();
       // Review decisions go through the trusted API so private fields stay separate.
       allow update: if false;
@@ -493,6 +547,54 @@ service cloud.firestore {
         (activeStaffWithRole('warehouse_admin') && canReadWarehouse(resource.data.warehouseId))
       );
       allow write: if false;
+    }
+
+    // Báo cáo vi phạm (Guideline 1.2): người dùng chỉ tạo được; không ai đọc hay sửa từ client.
+    // System Admin xem và xử lý qua backend (moderation-api.cjs).
+    match /reports/{reportId} {
+      // Người bị báo cáo phải đúng là chủ của nội dung: chủ bài đăng, người gửi tin nhắn, hoặc chính
+      // người dùng được báo cáo. Không thì người báo cáo có thể gán bài của A cho B và lừa admin khoá nhầm B.
+      function validReportTarget(data) {
+        let cleanId = '^[A-Za-z0-9_-]{1,200}$';
+        let listingPath = /databases/$(database)/documents/catalog_items/$(data.targetId);
+        return data.targetId.matches(cleanId) && (
+          (data.targetType == 'user'
+            && !data.keys().hasAny(['conversationId'])
+            && data.targetId == data.targetUserId)
+          || (data.targetType == 'listing'
+            && !data.keys().hasAny(['conversationId'])
+            && exists(listingPath)
+            && get(listingPath).data.donorId == data.targetUserId)
+          || (data.targetType == 'message'
+            && data.get('conversationId', null) is string
+            && data.conversationId.matches(cleanId)
+            && request.auth.uid in get(/databases/$(database)/documents/conversations/$(data.conversationId)).data.participantIds
+            && exists(/databases/$(database)/documents/conversations/$(data.conversationId)/messages/$(data.targetId))
+            && get(/databases/$(database)/documents/conversations/$(data.conversationId)/messages/$(data.targetId)).data.senderId == data.targetUserId));
+      }
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly([
+          'reporterId', 'targetType', 'targetId', 'targetUserId', 'conversationId',
+          'reason', 'note', 'status', 'createdAt'
+        ])
+        && request.resource.data.keys().hasAll([
+          'reporterId', 'targetType', 'targetId', 'targetUserId', 'reason', 'status', 'createdAt'
+        ])
+        && request.resource.data.reporterId == request.auth.uid
+        && request.resource.data.targetId is string
+        && request.resource.data.targetId.size() > 0
+        && request.resource.data.targetId.size() <= 200
+        && request.resource.data.targetUserId is string
+        && request.resource.data.targetUserId.size() > 0
+        && request.resource.data.targetUserId.size() <= 128
+        && request.resource.data.targetUserId != request.auth.uid
+        && request.resource.data.reason in ['spam', 'scam', 'inappropriate', 'harassment', 'prohibited_item', 'other']
+        && (!request.resource.data.keys().hasAny(['note']) ||
+            (request.resource.data.note is string && request.resource.data.note.size() <= 500))
+        && request.resource.data.status == 'open'
+        && request.resource.data.createdAt == request.time
+        && validReportTarget(request.resource.data);
+      allow read, update, delete: if false;
     }
 
     // Contact records are accepted and accessed only by the trusted backend using Admin SDK.

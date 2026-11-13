@@ -34,6 +34,8 @@ test('Chiến dịch: app chỉ đọc chiến dịch đã công khai; mọi tha
     await assertFails(donor.doc('campaigns/camp-active').update({ receivedQuantity: 999 }));
     await assertFails(admin.doc('campaigns/camp-active').delete());
   } finally {
+    // Rules test và backend test dùng chung project emulator: dọn dữ liệu để không làm hỏng test sau.
+    await env.clearFirestore();
     await env.cleanup();
   }
 });
@@ -76,6 +78,8 @@ test('Chiến dịch: đơn quyên góp chỉ gắn được vào chiến dịch
     await env.withSecurityRulesDisabled(context => context.firestore().doc(`donations/${recordId}`).delete());
     await assertSucceeds(reference.set(donation), 'quyên góp tự do không cần chiến dịch');
   } finally {
+    // Rules test và backend test dùng chung project emulator: dọn dữ liệu để không làm hỏng test sau.
+    await env.clearFirestore();
     await env.cleanup();
   }
 });

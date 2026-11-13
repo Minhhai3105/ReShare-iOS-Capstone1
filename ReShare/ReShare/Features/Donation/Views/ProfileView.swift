@@ -216,6 +216,30 @@ struct ProfileView: View {
                         .padding(.horizontal, 20)
                     }
 
+                    // MARK: 2b. AN TOÀN (App Store Guideline 1.2): bỏ chặn được cả người chưa từng nhắn tin
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("AN TOÀN")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(Color(red: 0.32, green: 0.40, blue: 0.36))
+                            .padding(.horizontal, 20)
+
+                        NavigationLink(destination: BlockedUsersView()) {
+                            HStack {
+                                MenuActionRow(icon: "hand.raised.fill", title: "Người dùng đã chặn")
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(Color(uiColor: .tertiaryLabel))
+                            }
+                        }
+                        .padding(.horizontal, 14)
+                        .background(RoundedRectangle(cornerRadius: 18).fill(Color.white))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 18)
+                                .stroke(Color.black.opacity(0.08), lineWidth: 1)
+                        )
+                        .padding(.horizontal, 20)
+                    }
+
                     // MARK: 3. CÀI ĐẶT & TIỆN ÍCH QUYÊN GÓP (PREFERENCES)
                     VStack(alignment: .leading, spacing: 10) {
                         Text("TÍNH NĂNG ĐANG PHÁT TRIỂN")

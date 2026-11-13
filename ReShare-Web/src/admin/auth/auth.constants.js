@@ -36,6 +36,9 @@ export const ADMIN_ROUTE = Object.freeze({
   beneficiaryDetail: 'admin-beneficiary-detail',
   beneficiaryEdit: 'admin-beneficiary-edit',
 
+  // Báo cáo vi phạm từ app (chỉ System Admin, App Store Guideline 1.2)
+  moderation: 'admin-moderation',
+
   // Chiến dịch quyên góp (chỉ System Admin)
   campaignList: 'admin-campaign-list',
   campaignNew: 'admin-campaign-new',

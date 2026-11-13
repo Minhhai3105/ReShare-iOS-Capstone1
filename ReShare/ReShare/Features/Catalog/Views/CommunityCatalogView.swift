@@ -25,6 +25,8 @@ struct CommunityCatalogView: View {
 
     // Dữ liệu Kho đồ 0đ (100% Real Data nạp từ Cloud Firestore)
     @State private var catalogItems: [CatalogItem] = []
+    // Người mình đã chặn: ẩn bài của họ (App Store Guideline 1.2)
+    @State private var blockedUserIds: Set<String> = []
     // Con trỏ trang kế; nil khi đã tải hết
     @State private var nextCatalogCursor: CatalogPageCursor? = nil
     @State private var isLoadingMore: Bool = false
@@ -56,7 +58,7 @@ struct CommunityCatalogView: View {
             let cleanQuery = searchText.trimmingCharacters(in: .whitespaces)
             let matchSearch = cleanQuery.isEmpty || item.title.localizedCaseInsensitiveContains(cleanQuery)
 
-            return matchCategory && matchDistrict && matchSearch
+            return matchCategory && matchDistrict && matchSearch && !blockedUserIds.contains(item.donorId)
         }
     }
 
@@ -141,6 +143,14 @@ struct CommunityCatalogView: View {
         }
         .task {
             await loadCatalog()
+        }
+        // Chạy lại mỗi lần quay về màn này, để bài của người vừa bị chặn biến mất ngay.
+        .onAppear {
+            Task {
+                if let ids = try? await FirestoreService.shared.fetchBlockedUserIds() {
+                    blockedUserIds = ids
+                }
+            }
         }
     }
 
