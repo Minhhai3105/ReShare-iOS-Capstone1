@@ -6,6 +6,8 @@ import {
   fetchQueueWarehouses,
   processAndPaginateDonations,
   enrichDonationSenders,
+  donationSearchPlan,
+  matchesQueueFilters,
 } from '../src/admin/donations/donation.service.js';
 import { donationSender } from '../src/admin/donations/donation-sender.js';
 import { DONATION_STATUS, DONATION_PAGE_SIZE, DONATION_SORT } from '../src/admin/donations/donation.constants.js';
@@ -117,4 +119,24 @@ test('US09: processAndPaginateDonations filters strictly by assigned warehouse a
   // Kiểm tra chip đếm statusCounts độc lập với bộ lọc trạng thái
   assert.equal(pendingResult.statusCounts.pending, 4);
   assert.equal(pendingResult.statusCounts.approved, 1);
+});
+
+test('Ô tìm đơn nhận cả mã tài liệu đầy đủ lẫn mã app cho người quyên góp sao chép (RS-…)', () => {
+  const id = '1A2B3C4D-1234-4ABC-8DEF-123456789ABC';
+  // Mã app iOS hiển thị = "RS-" + 8 ký tự đầu mã tài liệu (DonationDetailsView.confirmationCode).
+  assert.deepEqual(donationSearchPlan(' rs-1a2b3c4d '), { donationId: 'rs-1a2b3c4d', code: 'RS-1A2B3C4D' });
+  assert.deepEqual(donationSearchPlan(`#${id}`), { donationId: id, code: null }, 'mã đầy đủ chỉ tra theo ID');
+  assert.deepEqual(donationSearchPlan('#DEMO-2026-1234'), { donationId: 'DEMO-2026-1234', code: '#DEMO-2026-1234' }, 'mã của đơn cũ');
+  assert.equal(donationSearchPlan('RS-1A2B').code, null, 'mã thiếu ký tự không tra theo mã');
+  assert.equal(donationSearchPlan('donations/x'), null);
+  assert.equal(donationSearchPlan('   '), null);
+});
+
+test('Kết quả tìm theo mã vẫn giữ phạm vi kho và bộ lọc của hàng đợi', () => {
+  const warehouseAdmin = { isAllWarehouses: false, warehouseIds: ['kho-a'] };
+  const item = { warehouseId: 'kho-b', category: 'books', status: 'pending', createdAt: '2026-11-13T03:00:00.000Z' };
+  assert.equal(matchesQueueFilters(item, warehouseAdmin), false, 'nhân sự kho không thấy đơn kho khác dù đúng mã');
+  assert.equal(matchesQueueFilters({ ...item, warehouseId: 'kho-a' }, warehouseAdmin), true);
+  assert.equal(matchesQueueFilters(item, { isAllWarehouses: true, warehouseIds: [] }, { status: 'approved' }), false);
+  assert.equal(matchesQueueFilters(item, { isAllWarehouses: true, warehouseIds: [] }, { category: 'books' }), true);
 });

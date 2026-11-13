@@ -115,13 +115,13 @@ struct DonationHistoryView: View {
             isLoading = false
             return
         }
-        // Tải điểm tiếp nhận song song; lỗi thì chỉ hiện tên chung, không chặn lịch sử.
+        // Tên điểm tiếp nhận là dữ liệu phụ: tải song song nhưng KHÔNG chờ nó mới hiện đơn.
+        // Đơn về trước thì hiện ngay với nhãn chung "Điểm tiếp nhận"; tên điểm về sau thì cập nhật nhãn.
+        // Lỗi tải điểm không biến thành lỗi tải lịch sử. Task bị huỷ khi đóng màn thì không ghi tiếp.
         async let hubList = try? FirestoreService.shared.fetchActiveHubs()
         do {
             let liveItems = try await FirestoreService.shared.fetchMyDonations(donorId: currentUserId)
-            let loadedHubs = await hubList ?? []
             await MainActor.run {
-                self.hubs = Dictionary(loadedHubs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
                 self.items = liveItems
                 self.loadError = nil
                 self.isLoading = false
@@ -130,6 +130,11 @@ struct DonationHistoryView: View {
             await MainActor.run {
                 self.loadError = "Không thể tải lịch sử quyên góp: \(error.localizedDescription)"
                 self.isLoading = false
+            }
+        }
+        if let loadedHubs = await hubList, !Task.isCancelled {
+            await MainActor.run {
+                self.hubs = Dictionary(loadedHubs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
             }
         }
     }
