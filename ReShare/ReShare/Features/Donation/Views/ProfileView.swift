@@ -45,6 +45,7 @@ struct ProfileView: View {
     @State private var showHistoryScreen: Bool = false
     @State private var showProfileEditor: Bool = false
     @State private var showSignOutAlert: Bool = false
+    @State private var showDeleteAccount: Bool = false
 
     var body: some View {
         NavigationStack {
@@ -269,6 +270,15 @@ struct ProfileView: View {
                     .padding(.horizontal, 20)
                     .padding(.top, 4)
 
+                    // Xoá tài khoản ngay trong app (App Store Guideline 5.1.1(v))
+                    Button(action: { showDeleteAccount = true }) {
+                        Text("Xoá tài khoản")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(Color.red.opacity(0.85))
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .padding(.horizontal, 20)
+
                     // Footer
                     Text("ReShare Non-Profit Network • Made with care in Vietnam")
                         .font(.system(size: 11))
@@ -308,6 +318,12 @@ struct ProfileView: View {
             }
             .sheet(isPresented: $showProfileEditor) {
                 UserProfileView()
+            }
+            .sheet(isPresented: $showDeleteAccount) {
+                DeleteAccountView(onDeleted: {
+                    // Tài khoản đã bị xoá trên máy chủ: dọn phiên cục bộ để quay về màn đăng nhập.
+                    try? appState.logout()
+                })
             }
             // Alert Đăng xuất
             .alert("Sign Out", isPresented: $showSignOutAlert) {

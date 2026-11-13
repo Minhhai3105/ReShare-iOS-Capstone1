@@ -18,6 +18,7 @@ const { createReportsApi } = require('./reports-api.cjs');
 const { createBeneficiariesApi } = require('./beneficiaries-api.cjs');
 const { createDashboardApi } = require('./dashboard-api.cjs');
 const { createCampaignsApi } = require('./campaigns-api.cjs');
+const { createAccountApi } = require('./account-api.cjs');
 const { errorBody } = require('./error-body.cjs');
 const { createReservationExpiry } = require('./p2p-reservation-expiry.cjs');
 
@@ -57,6 +58,15 @@ const reportsApi = createReportsApi({ db, verifyToken, serverTimestamp: () => Fi
 const beneficiariesApi = createBeneficiariesApi({ db, auth: getAuth(), verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const dashboardApi = createDashboardApi({ db, verifyToken });
 const campaignsApi = createCampaignsApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
+const accountApi = createAccountApi({
+  db, auth: getAuth(), verifyToken,
+  // Chỉ xoá ảnh của bài Kho đồ 0đ (prefix catalog_items/), đúng loại delivery 'upload' như image-api.
+  deleteCatalogImage: async publicId => {
+    if (typeof publicId !== 'string' || !publicId.startsWith('catalog_items/')) return;
+    const result = await cloudinary.uploader.destroy(publicId, { resource_type: 'image', type: 'upload', invalidate: true });
+    if (!['ok', 'not found'].includes(result.result)) throw new Error('Cloudinary cleanup failed');
+  },
+});
 const adminWebOrigins = new Set((process.env.ADMIN_WEB_ORIGINS || '')
   .split(',').map(origin => origin.trim()).filter(Boolean));
 
@@ -97,6 +107,7 @@ const server = http.createServer(async (request, response) => {
     /^\/v1\/admin\/campaigns\/[^/]+(\/(update|status))?$/.test(pathname);
   const isAdminImageRead = pathname === '/v1/images/read-access';
   const isContactPath = pathname === '/v1/contact';
+  const isAccountPath = pathname === '/v1/account/delete';
   const origin = request.headers.origin;
   const allowedAdminOrigin = origin && (adminWebOrigins.has(origin) ||
     /^http:\/\/(localhost|127\.0\.0\.1):\d{2,5}$/.test(origin));
@@ -146,6 +157,7 @@ const server = http.createServer(async (request, response) => {
     // phải đứng trước isDonationAdminPath; isAdminApi là nhánh bắt tất cả cuối cùng.
     const handler = isContactPath ? contactApi
       : isDonationResubmitPath ? donationResubmitApi
+      : isAccountPath ? accountApi
       : isReceiptPath ? receiptApi
       : isStockIntakePath ? stockIntakeApi
       : isInventoryPath ? inventoryApi
