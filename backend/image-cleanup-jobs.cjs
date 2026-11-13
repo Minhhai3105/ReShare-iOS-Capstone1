@@ -1,4 +1,5 @@
 const { FieldValue } = require('firebase-admin/firestore');
+const { runTransaction } = require('./firestore-transaction.cjs');
 
 // Việc dọn ảnh Cloudinary còn dở (hiện dùng khi xoá tài khoản). Public ID được ghi vào
 // `image_cleanup_jobs` TRONG CÙNG transaction xoá bài, nên Cloudinary lỗi hay process dừng giữa chừng
@@ -36,20 +37,19 @@ function createImageCleanupJobs({ db, deleteCatalogImage, batchSize = 20, interv
         // Giữ lại để lần sau thử tiếp.
       }
     }
-    const remaining = publicIds.length - done.length;
-    try {
-      if (remaining === 0) await ref.delete();
-      else {
-        await ref.update({
-          ...(done.length ? { publicIds: FieldValue.arrayRemove(...done) } : {}),
-          attempts: FieldValue.increment(1), lastAttemptAt: FieldValue.serverTimestamp(),
-        });
-      }
-    } catch (error) {
-      // Worker và request xoá tài khoản cùng xử lý một bản ghi: bên kia đã xoá xong thì thôi.
-      if (error?.code !== 5) throw error;
-    }
-    return remaining;
+    // Đọc lại bản ghi trong transaction trước khi ghi: trong lúc đang gọi Cloudinary, request xoá tài
+    // khoản có thể vừa bổ sung ảnh của bài kế tiếp (arrayUnion vào cùng bản ghi). Chỉ bỏ những ảnh đã
+    // xoá xong; chỉ xoá bản ghi khi danh sách MỚI thực sự rỗng; số còn chờ tính từ dữ liệu mới.
+    // Worker và request cùng xử lý một bản ghi: bên kia đã xoá xong thì bản ghi không còn, trả 0.
+    const doneIds = new Set(done);
+    return runTransaction(db, async tx => {
+      const fresh = await tx.get(ref);
+      if (!fresh.exists) return 0;
+      const left = (fresh.data().publicIds || []).filter(id => typeof id === 'string' && !doneIds.has(id));
+      if (left.length === 0) tx.delete(ref);
+      else tx.update(ref, { publicIds: left, attempts: FieldValue.increment(1), lastAttemptAt: FieldValue.serverTimestamp() });
+      return left.length;
+    });
   }
 
   async function runOnce() {
