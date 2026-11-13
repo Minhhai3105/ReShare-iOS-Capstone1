@@ -632,6 +632,7 @@ struct DonationDetailsView: View {
                         : "Chờ kho duyệt; mang đồ tới điểm \(selectedHub.name) sau khi đơn được duyệt.",
                 campaignId: campaign?.id,
                 hubId: selectedHub.id,
+                hubName: selectedHub.name,
                 deliveryMethod: deliveryText,
                 confirmationCode: confirmationCode,
                 quantity: quantity,

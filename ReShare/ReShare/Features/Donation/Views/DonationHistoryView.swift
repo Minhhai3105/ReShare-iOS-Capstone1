@@ -160,7 +160,7 @@ struct DonationHistoryView: View {
 // MARK: - Card hiển thị 1 món đồ trong Lịch sử (Kèm Ảnh thật + Chấm trạng thái)
 struct HistoryItemCard: View {
     let item: DonationItem
-    /// Điểm tiếp nhận của đơn (nil khi đơn không chọn điểm hoặc điểm đã ngừng/chưa tải được).
+    /// Điểm tiếp nhận đang hoạt động của đơn (nil khi đơn không chọn điểm, điểm đã ngừng hoặc chưa tải được).
     var hub: HubRecord? = nil
     var onResubmitted: () -> Void = {}
     @State private var protectedImageURL: URL?

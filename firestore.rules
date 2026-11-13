@@ -484,7 +484,19 @@ service cloud.firestore {
           && data.imageProvider == 'cloudinary'
           && !data.keys().hasAny(['warehouseId', 'warehouseName', 'imageUploadRecordId', 'resubmittedAt'])
           && (!data.keys().hasAny(['campaignId']) || validCampaignDonation(data))
+          && (!data.keys().hasAny(['hubName']) || validHubName(data))
           && validCloudinaryImages('donation', donationId);
+      }
+
+      // Tên điểm lưu kèm đơn (giống biên nhận) phải đúng tên điểm tiếp nhận lúc gửi, không do client
+      // tự đặt: lịch sử của người quyên góp hiển thị tên này kể cả khi điểm đổi tên hoặc ngừng hoạt động.
+      function validHubName(data) {
+        let hubPath = /databases/$(database)/documents/hubs/$(data.get('hubId', ''));
+        return data.get('hubId', null) is string
+          && data.hubId.matches('^[A-Za-z0-9_-]{1,128}$')
+          && data.hubName is string
+          && exists(hubPath)
+          && get(hubPath).data.name == data.hubName;
       }
 
       // Đơn gửi cho chiến dịch phải trỏ tới chiến dịch đang mở, chưa quá hạn và cùng danh mục,
