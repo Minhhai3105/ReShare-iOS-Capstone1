@@ -7,6 +7,18 @@ struct DonationSuccessView: View {
     // Món đồ vừa được tạo thành công
     var item: DonationItem? = nil
     var confirmationCode: String = ""
+    /// Điểm tiếp nhận của đơn đang minh hoạ (mặc định true khi không rõ: thà nói thiếu còn hơn nói sai).
+    var hubIsDemo: Bool = true
+
+    private var isPickup: Bool { item?.deliveryMethod == "pickup" }
+
+    /// Câu dưới lời cảm ơn: đơn thật, kho duyệt; nói rõ phần chưa vận hành nếu có.
+    private var nextStepText: String {
+        let review = "Kho ReShare sẽ duyệt đơn; theo dõi trạng thái trong Lịch sử quyên góp."
+        if isPickup { return review + " Nhận tận nơi chưa vận hành nên chưa có người đến lấy đồ." }
+        if hubIsDemo { return review + " Điểm tiếp nhận đang minh hoạ nên chưa mang đồ tới điểm này." }
+        return review + " Mang đồ tới điểm tiếp nhận sau khi đơn được duyệt."
+    }
 
     // Callback quay về màn hình Trang chủ (Home)
     var onBackToHome: () -> Void = {}
@@ -26,7 +38,7 @@ struct DonationSuccessView: View {
                         .fill(Color.green)
                         .frame(width: 6, height: 6)
 
-                    Text("ĐƠN THỬ NGHIỆM ĐÃ LƯU")
+                    Text("ĐÃ GỬI ĐƠN")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundColor(Color(red: 0.15, green: 0.35, blue: 0.20))
                 }
@@ -84,11 +96,11 @@ struct DonationSuccessView: View {
 
             // MARK: 3. LỜI CẢM ƠN
             VStack(spacing: 6) {
-                Text("Đã lưu đơn thử nghiệm")
+                Text("Đã gửi đơn quyên góp")
                     .font(.system(size: 26, weight: .bold, design: .serif))
                     .foregroundColor(Color(red: 0.11, green: 0.27, blue: 0.16))
 
-                Text("Thông tin đã lưu trên Firebase. Hiện chưa có trạm hoặc tình nguyện viên tiếp nhận đồ thật.")
+                Text(nextStepText)
                     .font(.system(size: 13))
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -98,7 +110,7 @@ struct DonationSuccessView: View {
             VStack(spacing: 12) {
                 // Header của Receipt + Badge "Under Review"
                 HStack {
-                    Text("THÔNG TIN ĐƠN DEMO")
+                    Text("THÔNG TIN ĐƠN")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundColor(Color(red: 0.32, green: 0.40, blue: 0.36))
 
@@ -108,7 +120,7 @@ struct DonationSuccessView: View {
                         Circle()
                             .fill(Color(red: 0.88, green: 0.55, blue: 0.22))
                             .frame(width: 6, height: 6)
-                        Text("Demo")
+                        Text("Chờ duyệt")
                             .font(.system(size: 11, weight: .bold))
                             .foregroundColor(Color(red: 0.88, green: 0.55, blue: 0.22))
                     }
@@ -122,7 +134,7 @@ struct DonationSuccessView: View {
                 // Các hàng thông tin
                 ReceiptRow(title: "Món đồ", value: item?.title ?? "Chưa có thông tin")
                 ReceiptRow(title: "Danh mục", value: item?.category.title ?? "Chưa có thông tin")
-                ReceiptRow(title: "Hình thức", value: (item?.deliveryMethod == "pickup" ? "Mô phỏng lấy tận nơi" : "Mô phỏng gửi tại điểm"))
+                ReceiptRow(title: "Hình thức", value: isPickup ? "Nhận tận nơi (chưa vận hành)" : "Gửi tại điểm tiếp nhận")
 
                 // Hàng Mã đơn có nút Copy
                 HStack {
@@ -153,7 +165,7 @@ struct DonationSuccessView: View {
                         .font(.system(size: 11))
                         .foregroundColor(Color(red: 0.88, green: 0.55, blue: 0.22))
 
-                    Text("Chưa có lịch duyệt hoặc tiếp nhận đồ thật.")
+                    Text("Chưa có cam kết thời gian duyệt; trạng thái cập nhật trong Lịch sử quyên góp.")
                         .font(.system(size: 11))
                         .foregroundColor(Color(red: 0.40, green: 0.46, blue: 0.42))
 

@@ -84,10 +84,6 @@ struct ProfileView: View {
                             Spacer()
                         }
 
-                        Text("Hồ sơ đang ở chế độ thử nghiệm; hạng thành viên chưa được triển khai.")
-                            .font(.system(size: 11))
-                            .foregroundColor(Color(red: 0.40, green: 0.46, blue: 0.42))
-                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .padding(16)
                     .background(
@@ -102,18 +98,12 @@ struct ProfileView: View {
                     .padding(.horizontal, 20)
                     .padding(.top, 4)
 
-                    // MARK: 2. KHỐI TÁC ĐỘNG CỘNG ĐỒNG (MY COMMUNITY IMPACT)
+                    // MARK: 2. QUYÊN GÓP CỦA BẠN (chỉ giữ mục đang chạy thật: lịch sử đơn)
                     VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            Text("THÔNG TIN QUYÊN GÓP THỬ NGHIỆM")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundColor(.secondary)
-                            Spacer()
-                            Text("Demo")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundColor(Color(red: 0.15, green: 0.35, blue: 0.20))
-                        }
-                        .padding(.horizontal, 20)
+                        Text("QUYÊN GÓP CỦA BẠN")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.secondary)
+                            .padding(.horizontal, 20)
 
                         VStack(spacing: 0) {
                             // DÒNG 1: MY DONATIONS -> BẤM VÀO MỞ MÀN HÌNH LỊCH SỬ!
@@ -149,63 +139,6 @@ struct ProfileView: View {
                                 .padding(.vertical, 12)
                             }
 
-                            Divider().padding(.leading, 52)
-
-                            // DÒNG 2: MÁI ẤM & NGƯỜI NHẬN ĐÃ ĐƯỢC GIÚP ĐỠ
-                            HStack(spacing: 12) {
-                                ZStack {
-                                    RoundedRectangle(cornerRadius: 10)
-                                        .fill(Color.mint.opacity(0.15))
-                                        .frame(width: 40, height: 40)
-                                    Image(systemName: "person.2.fill")
-                                        .foregroundColor(Color.mint)
-                                }
-
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Người được hỗ trợ")
-                                        .font(.system(size: 14, weight: .bold))
-                                        .foregroundColor(Color(red: 0.11, green: 0.15, blue: 0.13))
-                                    Text("Chưa theo dõi số liệu này")
-                                        .font(.system(size: 11))
-                                        .foregroundColor(Color(red: 0.40, green: 0.46, blue: 0.42))
-                                }
-
-                                Spacer()
-
-                                Text("—")
-                                    .font(.system(size: 14, weight: .bold))
-                                    .foregroundColor(Color(red: 0.11, green: 0.15, blue: 0.13))
-                            }
-                            .padding(.vertical, 12)
-
-                            Divider().padding(.leading, 52)
-
-                            // DÒNG 3: BẢO VỆ MÔI TRƯỜNG / CO2 SAVED
-                            HStack(spacing: 12) {
-                                ZStack {
-                                    RoundedRectangle(cornerRadius: 10)
-                                        .fill(Color.green.opacity(0.15))
-                                        .frame(width: 40, height: 40)
-                                    Image(systemName: "leaf.fill")
-                                        .foregroundColor(Color.green)
-                                }
-
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Tác động môi trường")
-                                        .font(.system(size: 14, weight: .bold))
-                                        .foregroundColor(Color(red: 0.11, green: 0.15, blue: 0.13))
-                                    Text("Chưa đo lường CO₂ hoặc khối lượng")
-                                        .font(.system(size: 11))
-                                        .foregroundColor(Color(red: 0.40, green: 0.46, blue: 0.42))
-                                }
-
-                                Spacer()
-
-                                Text("—")
-                                    .font(.system(size: 14, weight: .bold))
-                                    .foregroundColor(Color(red: 0.15, green: 0.35, blue: 0.20))
-                            }
-                            .padding(.vertical, 12)
                         }
                         .padding(.horizontal, 14)
                         .background(RoundedRectangle(cornerRadius: 18).fill(Color.white))
@@ -230,31 +163,6 @@ struct ProfileView: View {
                                     .font(.system(size: 13, weight: .semibold))
                                     .foregroundColor(Color(uiColor: .tertiaryLabel))
                             }
-                        }
-                        .padding(.horizontal, 14)
-                        .background(RoundedRectangle(cornerRadius: 18).fill(Color.white))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 18)
-                                .stroke(Color.black.opacity(0.08), lineWidth: 1)
-                        )
-                        .padding(.horizontal, 20)
-                    }
-
-                    // MARK: 3. CÀI ĐẶT & TIỆN ÍCH QUYÊN GÓP (PREFERENCES)
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("TÍNH NĂNG ĐANG PHÁT TRIỂN")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundColor(Color(red: 0.32, green: 0.40, blue: 0.36))
-                            .padding(.horizontal, 20)
-
-                        VStack(spacing: 0) {
-                            MenuActionRow(icon: "mappin.circle.fill", title: "Trạm yêu thích", valueText: "Chưa có trạm")
-                            Divider().padding(.leading, 50)
-                            MenuActionRow(icon: "book.closed.fill", title: "Hướng dẫn quyên góp", valueText: "Chưa triển khai")
-                            Divider().padding(.leading, 50)
-                            MenuActionRow(icon: "bell.fill", title: "Thông báo trạng thái", valueText: "Chưa triển khai")
-                            Divider().padding(.leading, 50)
-                            MenuActionRow(icon: "questionmark.circle.fill", title: "Trợ giúp", valueText: "Chưa triển khai")
                         }
                         .padding(.horizontal, 14)
                         .background(RoundedRectangle(cornerRadius: 18).fill(Color.white))

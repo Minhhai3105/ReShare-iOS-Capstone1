@@ -69,7 +69,8 @@ const unitLabels = { piece: 'chiếc', kg: 'kg', bag: 'túi', box: 'thùng/hộp
 const categoryLabels = { clothing: 'Quần áo', books: 'Sách vở', household: 'Gia dụng' }
 const categoryName = value => categoryLabels[value] || value || 'Chưa có dữ liệu'
 const conditionLabels = { new: 'Mới 100%', like_new: 'Như mới (95%)', good: 'Còn tốt', fair: 'Dùng được' }
-const deliveryMethodLabels = { drop_off: 'Mô phỏng gửi tại điểm', pickup: 'Mô phỏng nhận tận nơi' }
+// App giữ cả hai hình thức để demo; nhận tận nơi chưa có quy trình đi lấy đồ nên ghi rõ cho nhân sự.
+const deliveryMethodLabels = { drop_off: 'Gửi tại điểm tiếp nhận', pickup: 'Nhận tận nơi (chưa vận hành)' }
 const conditionName = value => conditionLabels[value] || value || 'Chưa có dữ liệu'
 const deliveryMethodName = value => deliveryMethodLabels[value] || value || 'Chưa có dữ liệu'
 const messages = {

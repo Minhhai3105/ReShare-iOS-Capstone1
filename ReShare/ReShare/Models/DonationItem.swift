@@ -40,6 +40,9 @@ struct DonationItem: Identifiable, Codable {
     // Hỗ trợ tích hợp Firestore & đồng bộ Web Admin theo BACKEND_SPECIFICATION.md
     var campaignId: String? = nil
     var hubId: String? = nil
+    /// Tên điểm tiếp nhận lúc gửi đơn (giống biên nhận): điểm sau này đổi tên hay ngừng hoạt động thì
+    /// lịch sử vẫn đúng tên. Rules buộc khớp tên trong `hubs/{hubId}` lúc tạo. Đơn cũ không có trường này.
+    var hubName: String? = nil
     var deliveryMethod: String? = nil
     var confirmationCode: String? = nil
     var quantity: Double? = nil

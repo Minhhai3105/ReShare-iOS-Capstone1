@@ -7,6 +7,8 @@ struct DonationHistoryView: View {
     // Tab bộ lọc: All, Pending, In Stock, Distributed
     @State private var selectedFilter: String = "Tất cả"
     @State private var items: [DonationItem] = []
+    // Điểm tiếp nhận đọc từ Firestore (tên + cờ minh hoạ), thay cho tên gõ cứng.
+    @State private var hubs: [String: HubRecord] = [:]
     @State private var isLoading: Bool = false
     @State private var loadError: String? = nil
     private let filters = ["Tất cả", "Chờ tiếp nhận", "Đã duyệt", "Đã tiếp nhận", "Trong kho", "Đã trao", "Từ chối"]
@@ -58,7 +60,7 @@ struct DonationHistoryView: View {
                         Text("Chưa có đơn quyên góp nào")
                             .font(.system(size: 16, weight: .bold))
                             .foregroundColor(Color(red: 0.15, green: 0.35, blue: 0.20))
-                        Text("Đơn thử nghiệm của bạn sẽ xuất hiện tại đây. Hiện chưa có trạm ReShare tiếp nhận đồ thật.")
+                        Text("Đơn quyên góp bạn gửi sẽ xuất hiện tại đây, kèm trạng thái kho duyệt và tiếp nhận.")
                             .font(.system(size: 13))
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
@@ -75,7 +77,8 @@ struct DonationHistoryView: View {
                     ScrollView {
                         VStack(spacing: 12) {
                             ForEach(filteredItems) { item in
-                                HistoryItemCard(item: item, onResubmitted: { Task { await loadHistory() } })
+                                HistoryItemCard(item: item, hub: item.hubId.flatMap { hubs[$0] },
+                                                onResubmitted: { Task { await loadHistory() } })
                             }
                         }
                         .padding(.horizontal, 20)
@@ -112,6 +115,10 @@ struct DonationHistoryView: View {
             isLoading = false
             return
         }
+        // Tên điểm tiếp nhận là dữ liệu phụ: tải song song nhưng KHÔNG chờ nó mới hiện đơn.
+        // Đơn về trước thì hiện ngay với nhãn chung "Điểm tiếp nhận"; tên điểm về sau thì cập nhật nhãn.
+        // Lỗi tải điểm không biến thành lỗi tải lịch sử. Task bị huỷ khi đóng màn thì không ghi tiếp.
+        async let hubList = try? FirestoreService.shared.fetchActiveHubs()
         do {
             let liveItems = try await FirestoreService.shared.fetchMyDonations(donorId: currentUserId)
             await MainActor.run {
@@ -123,6 +130,11 @@ struct DonationHistoryView: View {
             await MainActor.run {
                 self.loadError = "Không thể tải lịch sử quyên góp: \(error.localizedDescription)"
                 self.isLoading = false
+            }
+        }
+        if let loadedHubs = await hubList, !Task.isCancelled {
+            await MainActor.run {
+                self.hubs = Dictionary(loadedHubs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
             }
         }
     }
@@ -148,6 +160,8 @@ struct DonationHistoryView: View {
 // MARK: - Card hiển thị 1 món đồ trong Lịch sử (Kèm Ảnh thật + Chấm trạng thái)
 struct HistoryItemCard: View {
     let item: DonationItem
+    /// Điểm tiếp nhận đang hoạt động của đơn (nil khi đơn không chọn điểm, điểm đã ngừng hoặc chưa tải được).
+    var hub: HubRecord? = nil
     var onResubmitted: () -> Void = {}
     @State private var protectedImageURL: URL?
     @State private var showResubmit = false
@@ -301,13 +315,9 @@ struct HistoryItemCard: View {
         }) { DonationResubmitView(item: item, onResubmitted: { didResubmit = true }) }
     }
 
+    // Tên lưu kèm đơn lúc gửi đứng trước; đơn cũ lấy tên điểm đang hoạt động; còn lại nhãn chung.
     private var hubDisplayName: String {
-        switch item.hubId {
-        case "hub-haichau": return "Demo Hải Châu"
-        case "hub-nguhanhson": return "Demo Ngũ Hành Sơn"
-        case "hub-lienchieu": return "Demo Liên Chiểu"
-        default: return "Chưa có điểm tiếp nhận"
-        }
+        HubDisplayName.label(hubId: item.hubId, savedName: item.hubName, currentName: hub?.name, currentIsDemo: hub?.isDemo)
     }
 
     private var declaredQuantityLabel: String {

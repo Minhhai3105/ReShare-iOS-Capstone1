@@ -105,6 +105,26 @@ export function processAndPaginateDonations(source, access, query) {
  * @param query { search, status, warehouseId, category, dateFrom, dateTo, sort, page }
  * @returns { items, total, page, pageSize, totalPages, statusCounts }
  */
+// Ô tìm kiếm nhận mã tài liệu đầy đủ (có hoặc không có #) hoặc mã app iOS cho người quyên góp sao chép
+// (confirmationCode: "RS-" + 8 ký tự đầu mã tài liệu; đơn cũ có dạng "#DEMO-2026-1234").
+export function donationSearchPlan(search) {
+  const raw = String(search || '').trim()
+  const donationId = raw.replace(/^#/, '')
+  if (!donationId || donationId.includes('/')) return null
+  const code = raw.toUpperCase()
+  return { donationId, code: /^(RS-[0-9A-F]{8}|#DEMO-\d{4}-\d{4})$/.test(code) ? code : null }
+}
+
+// Lọc kết quả tìm theo mã/ID bằng đúng các bộ lọc và phạm vi kho của hàng đợi.
+export function matchesQueueFilters(item, access, query = {}) {
+  return (access.isAllWarehouses || access.warehouseIds.includes(item.warehouseId)) &&
+    (!query.warehouseId || item.warehouseId === query.warehouseId) &&
+    (!query.category || item.category === query.category) &&
+    (!query.status || item.status === query.status) &&
+    (!query.dateFrom || new Date(item.createdAt) >= new Date(`${query.dateFrom}T00:00:00`)) &&
+    (!query.dateTo || new Date(item.createdAt) <= new Date(`${query.dateTo}T23:59:59.999`))
+}
+
 export async function fetchDonationQueue(access, query) {
   if (!access) throw createQueueError(DONATION_QUEUE_ERROR.forbidden)
 
@@ -119,14 +139,16 @@ export async function fetchDonationQueue(access, query) {
   }
 
   try {
-    const constraints = []
     const warehouseIds = access.warehouseIds
+    // Phạm vi kho tách riêng để đường tìm theo mã đơn dùng lại đúng phạm vi đó.
+    const warehouseScope = []
     if (query.warehouseId) {
-      constraints.push(where('warehouseId', '==', query.warehouseId))
+      warehouseScope.push(where('warehouseId', '==', query.warehouseId))
     } else if (!access.isAllWarehouses) {
       if (warehouseIds.length > 10) throw createQueueError(DONATION_QUEUE_ERROR.server)
-      constraints.push(where('warehouseId', warehouseIds.length === 1 ? '==' : 'in', warehouseIds.length === 1 ? warehouseIds[0] : warehouseIds))
+      warehouseScope.push(where('warehouseId', warehouseIds.length === 1 ? '==' : 'in', warehouseIds.length === 1 ? warehouseIds[0] : warehouseIds))
     }
+    const constraints = [...warehouseScope]
     if (query.category) constraints.push(where('category', '==', query.category))
     if (query.status) constraints.push(where('status', '==', query.status))
     if (query.dateFrom) constraints.push(where('createdAt', '>=', new Date(`${query.dateFrom}T00:00:00`)))
@@ -143,20 +165,23 @@ export async function fetchDonationQueue(access, query) {
       }
     }
 
-    // Search by exact donation ID avoids reading a whole collection for client-side text matching.
+    // Search by exact donation ID or by the code shown to the donor (confirmationCode, e.g. RS-1A2B3C4D)
+    // avoids reading a whole collection for client-side text matching.
     if (query.search?.trim()) {
-      const donationId = query.search.trim().replace(/^#/, '')
-      if (donationId.includes('/')) {
+      const plan = donationSearchPlan(query.search)
+      if (!plan) {
         return { items: [], total: 0, page: 1, pageSize: DONATION_PAGE_SIZE, totalPages: 1, hasMore: false, nextCursor: null, statusCounts: null }
       }
-      const snap = await getDoc(doc(db, 'donations', donationId))
-      const items = snap.exists() ? [normalizeDoc(snap)].filter((item) =>
-        (access.isAllWarehouses || warehouseIds.includes(item.warehouseId)) &&
-        (!query.warehouseId || item.warehouseId === query.warehouseId) &&
-        (!query.category || item.category === query.category) &&
-        (!query.status || item.status === query.status) &&
-        (!query.dateFrom || new Date(item.createdAt) >= new Date(`${query.dateFrom}T00:00:00`)) &&
-        (!query.dateTo || new Date(item.createdAt) <= new Date(`${query.dateTo}T23:59:59.999`))) : []
+      const snap = await getDoc(doc(db, 'donations', plan.donationId))
+      let found = snap.exists() ? [normalizeDoc(snap)] : []
+      if (!found.length && plan.code) {
+        // Same warehouse scope as the queue query, so Rules still prove a Warehouse Admin only reads
+        // donations of assigned warehouses. Equality-only filters: no composite index needed.
+        const codeSnap = await getDocs(firestoreQuery(collection(db, 'donations'),
+          where('confirmationCode', '==', plan.code), ...warehouseScope, limit(10)))
+        found = codeSnap.docs.map(normalizeDoc)
+      }
+      const items = found.filter((item) => matchesQueueFilters(item, access, query))
       return { items: await enrichDonationSenders(items), total: items.length, page: 1, pageSize: DONATION_PAGE_SIZE, totalPages: 1, hasMore: false, nextCursor: null, statusCounts: null }
     }
 
