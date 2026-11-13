@@ -19,6 +19,7 @@ const { createBeneficiariesApi } = require('./beneficiaries-api.cjs');
 const { createDashboardApi } = require('./dashboard-api.cjs');
 const { createCampaignsApi } = require('./campaigns-api.cjs');
 const { createAccountApi } = require('./account-api.cjs');
+const { cloudinaryCatalogImageDeleter, createImageCleanupJobs } = require('./image-cleanup-jobs.cjs');
 const { errorBody } = require('./error-body.cjs');
 const { createReservationExpiry } = require('./p2p-reservation-expiry.cjs');
 
@@ -58,15 +59,8 @@ const reportsApi = createReportsApi({ db, verifyToken, serverTimestamp: () => Fi
 const beneficiariesApi = createBeneficiariesApi({ db, auth: getAuth(), verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const dashboardApi = createDashboardApi({ db, verifyToken });
 const campaignsApi = createCampaignsApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
-const accountApi = createAccountApi({
-  db, auth: getAuth(), verifyToken,
-  // Chỉ xoá ảnh của bài Kho đồ 0đ (prefix catalog_items/), đúng loại delivery 'upload' như image-api.
-  deleteCatalogImage: async publicId => {
-    if (typeof publicId !== 'string' || !publicId.startsWith('catalog_items/')) return;
-    const result = await cloudinary.uploader.destroy(publicId, { resource_type: 'image', type: 'upload', invalidate: true });
-    if (!['ok', 'not found'].includes(result.result)) throw new Error('Cloudinary cleanup failed');
-  },
-});
+const deleteCatalogImage = cloudinaryCatalogImageDeleter(cloudinary);
+const accountApi = createAccountApi({ db, auth: getAuth(), verifyToken, deleteCatalogImage });
 const adminWebOrigins = new Set((process.env.ADMIN_WEB_ORIGINS || '')
   .split(',').map(origin => origin.trim()).filter(Boolean));
 
@@ -185,4 +179,7 @@ server.listen(Number(process.env.PORT || 3000), '0.0.0.0');
 // Chỉ chạy khi backend được vận hành; cold start/sleep phải được kiểm chứng ở môi trường demo.
 const reservationExpiry = createReservationExpiry({ db });
 reservationExpiry.start();
-server.on('close', () => reservationExpiry.stop());
+// Dọn tiếp ảnh Cloudinary còn sót sau khi xoá tài khoản (mỗi 15 phút khi server đang chạy).
+const imageCleanupJobs = createImageCleanupJobs({ db, deleteCatalogImage });
+imageCleanupJobs.start();
+server.on('close', () => { reservationExpiry.stop(); imageCleanupJobs.stop(); });

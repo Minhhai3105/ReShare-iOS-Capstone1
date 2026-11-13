@@ -10,6 +10,8 @@ struct DeleteAccountView: View {
     @State private var understood = false
     @State private var isDeleting = false
     @State private var errorMessage: String?
+    /// Khác nil khi máy chủ đã xoá xong: hiện màn kết quả trước khi đăng xuất.
+    @State private var outcome: AccountDeletionService.Outcome?
     @FocusState private var passwordFocused: Bool
 
     private let danger = Color(red: 0.78, green: 0.16, blue: 0.16)
@@ -20,6 +22,51 @@ struct DeleteAccountView: View {
 
     var body: some View {
         NavigationStack {
+            if let outcome {
+                completedView(outcome)
+            } else {
+                formView
+            }
+        }
+    }
+
+    /// Kết quả sau khi xoá. Còn ảnh chưa dọn thì nói rõ, không báo "đã xoá hết".
+    private func completedView(_ outcome: AccountDeletionService.Outcome) -> some View {
+        VStack(spacing: 18) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 52))
+                .foregroundColor(Color(red: 0.11, green: 0.35, blue: 0.20))
+            Text("Đã xoá tài khoản")
+                .font(.system(size: 20, weight: .bold))
+                .foregroundColor(textDark)
+            Text(outcome.imagesPending > 0
+                 ? "Còn \(outcome.imagesPending) ảnh của bài đăng chưa xoá được trên máy chủ ảnh. Hệ thống sẽ tự thử lại và xoá trong thời gian tới; bạn không cần làm gì thêm."
+                 : "Hồ sơ, tài khoản đăng nhập và các bài đăng đang mở kèm ảnh đã được xoá.")
+                .font(.system(size: 14))
+                .foregroundColor(textMuted)
+                .multilineTextAlignment(.center)
+            Button {
+                dismiss()
+                onDeleted()
+            } label: {
+                Text("Đóng")
+                    .font(.system(size: 16, weight: .bold))
+                    .frame(maxWidth: .infinity, minHeight: 52)
+                    .background(Color(red: 0.11, green: 0.35, blue: 0.20))
+                    .foregroundColor(.white)
+                    .cornerRadius(14)
+            }
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(red: 0.98, green: 0.98, blue: 0.96).ignoresSafeArea())
+        .navigationTitle("Xoá tài khoản")
+        .navigationBarTitleDisplayMode(.inline)
+        // Tài khoản đã xoá trên máy chủ: chỉ đóng bằng nút để luôn đăng xuất phiên cục bộ.
+        .interactiveDismissDisabled(true)
+    }
+
+    private var formView: some View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     Text("Thao tác này **không thể hoàn tác**. Sau khi xoá, bạn không đăng nhập lại được bằng tài khoản này.")
@@ -34,6 +81,10 @@ struct DeleteAccountView: View {
                     infoCard(title: "Được giữ ở dạng ẩn danh", icon: "eye.slash.fill", color: textMuted, lines: [
                         "Đơn quyên góp đã gửi, vì phiếu nhập kho và phân phối tham chiếu tới chúng",
                         "Tin nhắn đã gửi cho người khác, tên hiển thị đổi thành “Người dùng đã xoá”",
+                    ])
+                    infoCard(title: "Lưu ý", icon: "info.circle.fill", color: textMuted, lines: [
+                        "Lịch hẹn chưa ai xác nhận bàn giao sẽ bị huỷ, món được mở lại cho người khác",
+                        "Đang bàn giao dở (một bên đã bấm xác nhận) thì cần hoàn tất trước khi xoá",
                     ])
 
                     VStack(alignment: .leading, spacing: 8) {
@@ -94,7 +145,6 @@ struct DeleteAccountView: View {
                 }
             }
             .interactiveDismissDisabled(isDeleting)
-        }
     }
 
     private func infoCard(title: String, icon: String, color: Color, lines: [String]) -> some View {
@@ -123,10 +173,10 @@ struct DeleteAccountView: View {
         isDeleting = true
         Task {
             do {
-                try await AccountDeletionService.deleteAccount(password: password)
+                let result = try await AccountDeletionService.deleteAccount(password: password)
                 isDeleting = false
-                dismiss()
-                onDeleted()
+                password = ""
+                outcome = result
             } catch {
                 isDeleting = false
                 errorMessage = error.localizedDescription
