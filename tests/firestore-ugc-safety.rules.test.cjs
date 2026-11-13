@@ -45,6 +45,8 @@ test('Chặn người dùng: chỉ chính chủ quản lý danh sách chặn; đ
     await assertSucceeds(donor.doc('users/donor/blocks/asker').delete());
     await assertSucceeds(asker.doc('conversations/chat_ugc/messages/m4').set(message('asker', 'Cảm ơn bạn')), 'bỏ chặn thì nhắn lại được');
   } finally {
+    // Rules test và backend test dùng chung project emulator: dọn dữ liệu để không làm hỏng test sau.
+    await env.clearFirestore();
     await env.cleanup();
   }
 });
@@ -75,6 +77,8 @@ test('Lọc từ ngữ: tin nhắn và bài đăng chứa từ thô tục bị t
     await assertFails(donor.doc(`catalog_items/${itemId}`).set({ ...listing, donorNote: 'shit quá' }));
     await assertSucceeds(donor.doc(`catalog_items/${itemId}`).set(listing));
   } finally {
+    // Rules test và backend test dùng chung project emulator: dọn dữ liệu để không làm hỏng test sau.
+    await env.clearFirestore();
     await env.cleanup();
   }
 });
@@ -104,6 +108,8 @@ test('Báo cáo vi phạm: người dùng chỉ tạo được báo cáo hợp l
     await assertFails(env.authenticatedContext('admin').firestore().doc('reports/r1').get(), 'System Admin đọc qua API, không qua client');
     await assertFails(asker.doc('reports/r1').update({ status: 'resolved' }));
   } finally {
+    // Rules test và backend test dùng chung project emulator: dọn dữ liệu để không làm hỏng test sau.
+    await env.clearFirestore();
     await env.cleanup();
   }
 });
