@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// Màn xác nhận xoá tài khoản: nói rõ cái gì bị xoá, cái gì được giữ ẩn danh, bắt nhập lại mật khẩu
-/// và tích "không thể hoàn tác" trước khi gọi backend.
+/// Màn xác nhận xoá tài khoản: nói rõ cái gì bị xoá, cái gì được giữ ẩn danh, bắt xác minh lại
+/// (nhập mật khẩu, hoặc chọn lại tài khoản Google nếu chỉ đăng nhập bằng Google) và tích
+/// "không thể hoàn tác" trước khi gọi backend.
 struct DeleteAccountView: View {
     @Environment(\.dismiss) private var dismiss
     var onDeleted: () -> Void
@@ -13,12 +14,14 @@ struct DeleteAccountView: View {
     /// Khác nil khi máy chủ đã xoá xong: hiện màn kết quả trước khi đăng xuất.
     @State private var outcome: AccountDeletionService.Outcome?
     @FocusState private var passwordFocused: Bool
+    /// Chốt một lần khi mở màn: tài khoản có mật khẩu hay chỉ đăng nhập Google.
+    private let usesPassword = AccountDeletionService.usesPassword
 
     private let danger = Color(red: 0.78, green: 0.16, blue: 0.16)
     private let textDark = Color(red: 0.11, green: 0.15, blue: 0.13)
     private let textMuted = Color(red: 0.40, green: 0.46, blue: 0.42)
 
-    private var canDelete: Bool { !password.isEmpty && understood && !isDeleting }
+    private var canDelete: Bool { (!usesPassword || !password.isEmpty) && understood && !isDeleting }
 
     var body: some View {
         NavigationStack {
@@ -87,17 +90,25 @@ struct DeleteAccountView: View {
                         "Đang bàn giao dở (một bên đã bấm xác nhận) thì cần hoàn tất trước khi xoá",
                     ])
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Nhập mật khẩu để xác nhận")
-                            .font(.system(size: 14, weight: .semibold))
+                    if usesPassword {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Nhập mật khẩu để xác nhận")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(textDark)
+                            SecureField("Mật khẩu", text: $password)
+                                .textContentType(.password)
+                                .focused($passwordFocused)
+                                .padding(14)
+                                .background(Color.white)
+                                .cornerRadius(12)
+                                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.black.opacity(0.1), lineWidth: 1))
+                        }
+                    } else {
+                        // Tài khoản Google không có mật khẩu ReShare: xác minh bằng cách chọn lại đúng tài khoản Google.
+                        Label("Tài khoản này đăng nhập bằng Google. Khi bấm xoá, hãy chọn lại đúng tài khoản Google đang dùng để xác minh.",
+                              systemImage: "person.badge.key.fill")
+                            .font(.system(size: 14))
                             .foregroundColor(textDark)
-                        SecureField("Mật khẩu", text: $password)
-                            .textContentType(.password)
-                            .focused($passwordFocused)
-                            .padding(14)
-                            .background(Color.white)
-                            .cornerRadius(12)
-                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.black.opacity(0.1), lineWidth: 1))
                     }
 
                     Toggle(isOn: $understood) {
@@ -173,10 +184,19 @@ struct DeleteAccountView: View {
         isDeleting = true
         Task {
             do {
-                let result = try await AccountDeletionService.deleteAccount(password: password)
+                let result: AccountDeletionService.Outcome?
+                if usesPassword {
+                    result = try await AccountDeletionService.deleteAccount(password: password)
+                } else if let presenter = AuthViewModel.topViewController() {
+                    result = try await AccountDeletionService.deleteAccountWithGoogle(presenting: presenter)
+                } else {
+                    result = nil
+                    errorMessage = "Không mở được cửa sổ Google. Vui lòng thử lại."
+                }
                 isDeleting = false
                 password = ""
-                outcome = result
+                // nil: người dùng đóng cửa sổ Google, chưa xoá gì — ở lại màn này.
+                if let result { outcome = result }
             } catch {
                 isDeleting = false
                 errorMessage = error.localizedDescription

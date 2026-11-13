@@ -11,5 +11,18 @@
     </dict>
     <key>NSLocalNetworkUsageDescription</key>
     <string>ReShare kết nối máy chủ thử nghiệm trong mạng nội bộ để nhóm kiểm thử ứng dụng.</string>
+    <!-- URL scheme để Google Sign-In mở lại app sau khi đăng nhập. Giá trị lấy từ build setting
+         GOOGLE_REVERSED_CLIENT_ID = REVERSED_CLIENT_ID trong GoogleService-Info.plist. -->
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>google-sign-in</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>$(GOOGLE_REVERSED_CLIENT_ID)</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>

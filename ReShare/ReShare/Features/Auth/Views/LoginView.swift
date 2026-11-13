@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import GoogleSignInSwift
 
 struct LoginView: View {
     @EnvironmentObject var appState: AppState
@@ -57,9 +58,17 @@ struct LoginView: View {
                         loginButton
                             .padding(.top, 4)
 
-                        // Không có nút Sign in with Apple: nhóm chưa có tài khoản Apple Developer trả phí
-                        // nên không bật được capability. App chỉ dùng tài khoản email của ReShare
-                        // (Guideline 4.8 không áp dụng khi không có đăng nhập bên thứ ba).
+                        // Đăng nhập Google: chỉ hiện khi bản build có CLIENT_ID + URL scheme, để không có nút chết.
+                        // Không có Sign in with Apple: nhóm chưa có tài khoản Apple Developer trả phí. Đây là lệch
+                        // chuẩn Guideline 4.8 có chủ đích, vì đồ án không phát hành lên App Store.
+                        if viewModel.isGoogleSignInAvailable {
+                            orDividerView
+                                .padding(.vertical, 4)
+
+                            googleSignInButton
+
+                            googleConsentText
+                        }
 
                         // Link chuyển sang trang Đăng ký
                         signUpLinkView
@@ -231,7 +240,104 @@ struct LoginView: View {
             .cornerRadius(16)
             .shadow(color: isFormValid ? AppColors.primary.opacity(0.3) : Color.clear, radius: 10, x: 0, y: 4)
         }
-        .disabled(!isFormValid || viewModel.isLoading)
+        .disabled(!isFormValid || viewModel.isLoading || viewModel.isGoogleLoading)
+    }
+
+    // MARK: - 6. Vạch phân cách
+    private var orDividerView: some View {
+        HStack(spacing: 12) {
+            Rectangle()
+                .fill(AppColors.border.opacity(0.6))
+                .frame(height: 1)
+
+            Text("HOẶC")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(AppColors.textTertiary)
+                .lineLimit(1)
+                .fixedSize()
+
+            Rectangle()
+                .fill(AppColors.border.opacity(0.6))
+                .frame(height: 1)
+        }
+        .padding(.horizontal, 4)
+    }
+
+    // MARK: - 7. Google Sign In Button
+    // Nút theo kiểu nút của app (trắng, bo 16, cao 52) nhưng giữ đúng quy định thương hiệu Google: logo "G"
+    // chuẩn lấy nguyên từ SDK GoogleSignIn (không vẽ lại, không đổi màu) và câu chữ được Google chấp nhận
+    // ("Tiếp tục với Google"). Không tải được logo thì dùng nút chính thức của SDK. Lần đầu đăng nhập sẽ tự tạo tài khoản.
+    private var googleSignInButton: some View {
+        Group {
+            if let logo = Self.googleLogo {
+                Button(action: { viewModel.loginWithGoogle(appState: appState) }) {
+                    HStack(spacing: 10) {
+                        if viewModel.isGoogleLoading {
+                            ProgressView()
+                                .frame(width: 20, height: 20)
+                        } else {
+                            Image(uiImage: logo)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 20, height: 20)
+                                .accessibilityHidden(true)
+                        }
+                        Text(viewModel.isGoogleLoading ? "Đang mở Google…" : "Tiếp tục với Google")
+                            .font(.system(size: 15, weight: .semibold))
+                    }
+                    .foregroundColor(AppColors.textPrimary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+                    .background(Color.white)
+                    .cornerRadius(16)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(AppColors.border.opacity(0.8), lineWidth: 1)
+                    )
+                    .shadow(color: Color.black.opacity(0.02), radius: 6, x: 0, y: 2)
+                }
+                .buttonStyle(.plain)
+                .disabled(viewModel.isGoogleLoading || viewModel.isLoading)
+                .opacity(viewModel.isLoading ? 0.6 : 1)
+                .accessibilityLabel("Tiếp tục với Google")
+            } else {
+                GoogleSignInButton(
+                    scheme: .light,
+                    style: .wide,
+                    state: viewModel.isGoogleLoading || viewModel.isLoading ? .disabled : .normal
+                ) {
+                    viewModel.loginWithGoogle(appState: appState)
+                }
+                .disabled(viewModel.isGoogleLoading || viewModel.isLoading)
+            }
+        }
+        .accessibilityIdentifier("googleSignInButton")
+        .frame(maxWidth: .infinity)
+    }
+
+    /// Logo "G" chuẩn đi kèm SDK GoogleSignIn (resource bundle `GoogleSignIn_GoogleSignIn.bundle`).
+    private static let googleLogo: UIImage? = {
+        guard let url = Bundle.main.url(forResource: "GoogleSignIn_GoogleSignIn", withExtension: "bundle"),
+              let bundle = Bundle(url: url) else { return nil }
+        return UIImage(named: "google", in: bundle, compatibleWith: nil)
+    }()
+
+    // Đăng nhập Google lần đầu là tạo tài khoản mà không qua màn Đăng ký, nên nói rõ việc đồng ý
+    // Điều khoản & Chính sách ngay dưới nút (giống ô đồng ý ở màn Đăng ký, App Store 1.2 và 5.1.1).
+    private var googleConsentText: some View {
+        Text(googleConsentMarkdown)
+            .font(.system(size: 12))
+            .foregroundColor(AppColors.textSecondary)
+            .tint(AppColors.primary)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+    }
+
+    private var googleConsentMarkdown: AttributedString {
+        let markdown = "Tiếp tục với Google là bạn đồng ý với "
+            + "[Điều khoản sử dụng](\(Constants.Links.termsOfUse.absoluteString)) và "
+            + "[Chính sách quyền riêng tư](\(Constants.Links.privacyPolicy.absoluteString)) của ReShare."
+        return (try? AttributedString(markdown: markdown)) ?? AttributedString(markdown)
     }
 
     // MARK: - 8. Sign Up Link

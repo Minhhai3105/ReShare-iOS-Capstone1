@@ -7,6 +7,7 @@
 
 import SwiftUI
 import FirebaseCore
+import GoogleSignIn
 
 @main
 struct ReShareApp: App {
@@ -24,6 +25,10 @@ struct ReShareApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(appState)
+                // Nhận lại kết quả khi Google Sign-In mở app qua URL scheme REVERSED_CLIENT_ID
+                .onOpenURL { url in
+                    _ = GIDSignIn.sharedInstance.handle(url)
+                }
         }
     }
 }

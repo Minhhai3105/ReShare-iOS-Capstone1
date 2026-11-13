@@ -15,7 +15,9 @@ import { LEGAL_CONTACT_EMAIL } from './legal.js'
 
     <h2>1. Dữ liệu chúng tôi thu thập</h2>
     <ul>
-      <li><strong>Tài khoản:</strong> họ tên hiển thị, email, số điện thoại và mã người dùng do Firebase cấp.</li>
+      <li><strong>Tài khoản:</strong> họ tên hiển thị, email, số điện thoại và mã người dùng do Firebase cấp.
+        Nếu bạn đăng nhập bằng Google, ReShare chỉ nhận tên hiển thị và email từ tài khoản Google; số điện thoại để trống cho tới khi bạn tự nhập.
+        ReShare không nhận mật khẩu Google, danh bạ hay dữ liệu Google khác.</li>
       <li><strong>Đơn quyên góp:</strong> tên và mô tả món đồ, danh mục, tình trạng, số lượng và đơn vị, điểm tiếp nhận, hình thức gửi,
         3–6 ảnh món đồ, danh mục do AI gợi ý kèm độ tin cậy và phiên bản model, danh mục bạn xác nhận.</li>
       <li><strong>Kho đồ 0đ (trao đồ trực tiếp):</strong> tiêu đề, mô tả, ảnh, tình trạng món đồ và địa chỉ nhận đồ bạn nhập.</li>
@@ -58,6 +60,7 @@ import { LEGAL_CONTACT_EMAIL } from './legal.js'
     <p>ReShare dùng các dịch vụ sau để lưu trữ và vận hành. Máy chủ của các dịch vụ này có thể đặt ngoài Việt Nam.</p>
     <ul>
       <li><strong>Google Firebase</strong> (Authentication, Cloud Firestore): tài khoản và dữ liệu của ứng dụng.</li>
+      <li><strong>Đăng nhập bằng Google</strong> (Google Sign-In, tuỳ chọn): xác thực tài khoản Google của bạn rồi chuyển tên và email cho Firebase Authentication.</li>
       <li><strong>Cloudinary</strong>: lưu ảnh món đồ. Ảnh đơn quyên góp lưu ở chế độ cần cấp quyền: chỉ nhân sự được phân quyền nhận được
         đường dẫn xem có thời hạn ngắn. Ảnh bài Kho đồ 0đ là ảnh công khai để người dùng khác xem bài, nên ai có đường dẫn ảnh đều mở được.</li>
       <li><strong>Render</strong>: máy chủ API kiểm tra quyền trước mọi thao tác ghi quan trọng.</li>
