@@ -34,6 +34,12 @@ protocol FirestoreServiceProtocol {
     func fetchOpenCampaigns() async throws -> [DonationCampaign]
     func fetchActiveHubs() async throws -> [HubRecord]
 
+    // MARK: - An toàn nội dung: chặn & báo cáo (App Store Guideline 1.2)
+    func fetchBlockedUserIds() async throws -> Set<String>
+    func blockUser(_ blockedUid: String) async throws
+    func unblockUser(_ blockedUid: String) async throws
+    func submitReport(_ report: ContentReport, reason: ContentReport.Reason, note: String) async throws
+
     // MARK: - Kênh 1: Kho đồ 0đ Cộng đồng (P2P Catalog)
     func publishCatalogItem(_ item: CatalogItem) async throws
     func fetchCatalogPickupAddress(itemId: String) async -> String?
@@ -253,6 +259,52 @@ final class FirestoreService: FirestoreServiceProtocol {
     /// Đổi Timestamp sang Date để tầng Core (CampaignRecord) không phụ thuộc Firebase.
     private static func plainValues(_ data: [String: Any]) -> [String: Any] {
         data.mapValues { value in (value as? Timestamp)?.dateValue() ?? value }
+    }
+
+    // MARK: - Chặn & báo cáo vi phạm
+
+    private func blocksCollection(_ uid: String) -> CollectionReference {
+        db.collection(Constants.FirestoreCollections.users).document(uid).collection("blocks")
+    }
+
+    /// Những người mình đã chặn. Rules chỉ cho chính chủ đọc; ai chặn mình thì app không biết,
+    /// nhưng rules vẫn từ chối tin nhắn giữa hai bên.
+    func fetchBlockedUserIds() async throws -> Set<String> {
+        guard let uid = AuthService.shared.currentUserId, !uid.isEmpty else { return [] }
+        let snapshot = try await blocksCollection(uid).limit(to: 500).getDocuments()
+        return Set(snapshot.documents.map(\.documentID))
+    }
+
+    func blockUser(_ blockedUid: String) async throws {
+        guard let uid = AuthService.shared.currentUserId, !uid.isEmpty, blockedUid != uid else { return }
+        try await blocksCollection(uid).document(blockedUid).setData([
+            "blockedUid": blockedUid,
+            "createdAt": FieldValue.serverTimestamp()
+        ])
+    }
+
+    func unblockUser(_ blockedUid: String) async throws {
+        guard let uid = AuthService.shared.currentUserId, !uid.isEmpty else { return }
+        try await blocksCollection(uid).document(blockedUid).delete()
+    }
+
+    func submitReport(_ report: ContentReport, reason: ContentReport.Reason, note: String) async throws {
+        guard let uid = AuthService.shared.currentUserId, !uid.isEmpty else {
+            throw NSError(domain: "ReShare", code: 401, userInfo: [NSLocalizedDescriptionKey: "Bạn cần đăng nhập để báo cáo."])
+        }
+        var data: [String: Any] = [
+            "reporterId": uid,
+            "targetType": report.targetType.rawValue,
+            "targetId": report.targetId,
+            "targetUserId": report.targetUserId,
+            "reason": reason.rawValue,
+            "status": "open",
+            "createdAt": FieldValue.serverTimestamp()
+        ]
+        if let conversationId = report.conversationId { data["conversationId"] = conversationId }
+        let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { data["note"] = String(trimmed.prefix(500)) }
+        _ = try await db.collection("reports").addDocument(data: data)
     }
 
     // MARK: - Catalog Operations (Kênh 1: Kho đồ 0đ P2P)

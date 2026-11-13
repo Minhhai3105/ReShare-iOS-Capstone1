@@ -18,6 +18,7 @@ const { createReportsApi } = require('./reports-api.cjs');
 const { createBeneficiariesApi } = require('./beneficiaries-api.cjs');
 const { createDashboardApi } = require('./dashboard-api.cjs');
 const { createCampaignsApi } = require('./campaigns-api.cjs');
+const { createModerationApi } = require('./moderation-api.cjs');
 const { errorBody } = require('./error-body.cjs');
 const { createReservationExpiry } = require('./p2p-reservation-expiry.cjs');
 
@@ -57,6 +58,7 @@ const reportsApi = createReportsApi({ db, verifyToken, serverTimestamp: () => Fi
 const beneficiariesApi = createBeneficiariesApi({ db, auth: getAuth(), verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const dashboardApi = createDashboardApi({ db, verifyToken });
 const campaignsApi = createCampaignsApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
+const moderationApi = createModerationApi({ db, auth: getAuth(), verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const adminWebOrigins = new Set((process.env.ADMIN_WEB_ORIGINS || '')
   .split(',').map(origin => origin.trim()).filter(Boolean));
 
@@ -93,6 +95,8 @@ const server = http.createServer(async (request, response) => {
     /^\/v1\/admin\/beneficiaries\/[^/]+(\/(audit|update|verify))?$/.test(pathname);
   const isDashboardPath = pathname === '/v1/admin/dashboard/metrics';
   // Neo chính xác như beneficiaries để route có tiền tố trùng sau này không bị nuốt.
+  const isModerationPath = pathname === '/v1/admin/moderation/reports' ||
+    /^\/v1\/admin\/moderation\/reports\/[^/]+\/resolve$/.test(pathname);
   const isCampaignPath = pathname === '/v1/admin/campaigns' ||
     /^\/v1\/admin\/campaigns\/[^/]+(\/(update|status))?$/.test(pathname);
   const isAdminImageRead = pathname === '/v1/images/read-access';
@@ -155,6 +159,7 @@ const server = http.createServer(async (request, response) => {
       : isBeneficiaryPath ? beneficiariesApi
       : isDashboardPath ? dashboardApi
       : isCampaignPath ? campaignsApi
+      : isModerationPath ? moderationApi
       : isDonationAdminPath ? donationReviewApi
       : isAdminApi ? staffApi
       : api;

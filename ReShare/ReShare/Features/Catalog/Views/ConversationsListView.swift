@@ -15,6 +15,8 @@ struct ConversationsListView: View {
 
     // Dữ liệu cuộc trò chuyện thời gian thực từ Cloud Firestore (100% Real Data)
     @State private var conversations: [ChatConversation] = []
+    // Người mình đã chặn: vẫn hiện hội thoại (để còn bỏ chặn được) nhưng gắn nhãn rõ ràng.
+    @State private var blockedUserIds: Set<String> = []
     @State private var listenerRegistration: ListenerRegistration? = nil
 
     private var currentUserId: String {
@@ -97,6 +99,11 @@ struct ConversationsListView: View {
 
     private func startRealtimeListener() {
         guard !currentUserId.isEmpty else { return }
+        Task {
+            if let ids = try? await FirestoreService.shared.fetchBlockedUserIds() {
+                blockedUserIds = ids
+            }
+        }
         listenerRegistration?.remove()
         listenerRegistration = FirestoreService.shared.observeUserConversations(userId: currentUserId) { liveConvs in
             withAnimation(.easeOut(duration: 0.25)) {
@@ -132,6 +139,7 @@ struct ConversationsListView: View {
 
     private func conversationRow(for conv: ChatConversation) -> some View {
         let isMyDonation = (conv.donorId == currentUserId)
+        let partnerId = isMyDonation ? conv.requesterId : conv.donorId
         let hasNewIncoming = conv.hasUnread(for: currentUserId)
 
         return HStack(alignment: .center, spacing: 12) {
@@ -177,6 +185,16 @@ struct ConversationsListView: View {
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
                             .background(Color.blue.opacity(0.1))
+                            .clipShape(Capsule())
+                    }
+
+                    if blockedUserIds.contains(partnerId) {
+                        Text("Đã chặn")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(.red)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.red.opacity(0.1))
                             .clipShape(Capsule())
                     }
 

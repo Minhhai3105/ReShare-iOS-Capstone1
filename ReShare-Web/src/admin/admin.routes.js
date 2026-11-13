@@ -17,6 +17,7 @@ const adminPageRoutes = [
   { path: '', name: ADMIN_ROUTE.home, component: () => import('./AdminHome.vue'), meta: ADMIN_PAGE_META },
   { path: 'staff', name: ADMIN_ROUTE.staff, component: () => import('./staff/StaffManagement.vue'), meta: SYSTEM_ADMIN_META },
   { path: 'contacts', name: ADMIN_ROUTE.contacts, component: () => import('./contacts/ContactInbox.vue'), meta: SYSTEM_ADMIN_META },
+  { path: 'moderation', name: ADMIN_ROUTE.moderation, component: () => import('./moderation/ModerationInbox.vue'), meta: SYSTEM_ADMIN_META },
   { path: 'campaigns', name: ADMIN_ROUTE.campaignList, component: () => import('./campaigns/CampaignList.vue'), meta: SYSTEM_ADMIN_META },
   { path: 'campaigns/new', name: ADMIN_ROUTE.campaignNew, component: () => import('./campaigns/CampaignForm.vue'), meta: SYSTEM_ADMIN_META },
   { path: 'campaigns/:campaignId', name: ADMIN_ROUTE.campaignDetail, component: () => import('./campaigns/CampaignDetail.vue'), meta: SYSTEM_ADMIN_META },

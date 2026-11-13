@@ -36,6 +36,10 @@ struct ChatConversationView: View {
     @State private var now: Date = Date()
     // Địa chỉ chính xác chỉ người đăng và người đang được giữ đồ đọc được (catalog_items/{id}/private/pickup).
     @State private var privatePickupAddress: String? = nil
+    // Báo cáo / chặn (App Store Guideline 1.2)
+    @State private var reportTarget: ContentReport? = nil
+    @State private var showBlockConfirm: Bool = false
+    @State private var isBlockedByMe: Bool = false
 
     @FocusState private var isInputFocused: Bool
 
@@ -106,6 +110,10 @@ struct ChatConversationView: View {
             // 4. Gợi ý trả lời nhanh (Quick Response Chips)
             quickRepliesSection
 
+            if isBlockedByMe {
+                blockedBanner
+            }
+
             // 5. Thanh nhập tin nhắn (Input Bar)
             inputBarSection
         }
@@ -139,6 +147,39 @@ struct ChatConversationView: View {
                 }
             }
 
+            if !partnerId.isEmpty {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button {
+                            reportTarget = ContentReport(targetType: .user, targetId: partnerId, targetUserId: partnerId)
+                        } label: {
+                            Label("Báo cáo người dùng", systemImage: "exclamationmark.bubble")
+                        }
+                        if isBlockedByMe {
+                            Button { setBlocked(false) } label: { Label("Bỏ chặn", systemImage: "hand.raised.slash") }
+                        } else {
+                            Button(role: .destructive) { showBlockConfirm = true } label: {
+                                Label("Chặn người dùng", systemImage: "hand.raised")
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(primaryGreen)
+                            .frame(width: 44, height: 44)
+                    }
+                    .accessibilityLabel("Báo cáo hoặc chặn \(partnerDisplayName)")
+                }
+            }
+        }
+        .sheet(item: $reportTarget) { report in
+            ReportContentSheet(report: report)
+        }
+        .confirmationDialog("Chặn \(partnerDisplayName)?", isPresented: $showBlockConfirm, titleVisibility: .visible) {
+            Button("Chặn người này", role: .destructive) { setBlocked(true) }
+            Button("Huỷ", role: .cancel) {}
+        } message: {
+            Text("Hai bên sẽ không nhắn tin được cho nhau và bạn không thấy bài của người này trong Kho đồ 0đ nữa.")
         }
         .sheet(isPresented: $showAppointmentPickerSheet) {
             appointmentProposalSheet
@@ -163,6 +204,11 @@ struct ChatConversationView: View {
         .onAppear {
             now = Date()
             startRealtimeListeners()
+            Task {
+                if let ids = try? await FirestoreService.shared.fetchBlockedUserIds() {
+                    isBlockedByMe = ids.contains(partnerId)
+                }
+            }
             Task {
                 do {
                     try await FirestoreService.shared.markConversationAsRead(
@@ -283,6 +329,47 @@ struct ChatConversationView: View {
     private var isDeadlineExpired: Bool {
         guard let deadline = reservationDeadline else { return false }
         return now >= deadline
+    }
+
+    /// Người còn lại trong cuộc trò chuyện (để báo cáo / chặn).
+    private var partnerId: String {
+        if isDonor { return activeConversation?.requesterId ?? "" }
+        return activeItem.donorId
+    }
+
+    private var blockedBanner: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "hand.raised.fill").foregroundColor(.red)
+            Text("Bạn đã chặn người này. Hai bên không nhắn tin được cho nhau.")
+                .font(.system(size: 12))
+                .foregroundColor(.primary)
+            Spacer()
+            Button("Bỏ chặn") { setBlocked(false) }
+                .font(.system(size: 13, weight: .bold))
+                .foregroundColor(primaryGreen)
+                .frame(minHeight: 44)
+        }
+        .padding(.horizontal, 14)
+        .background(Color.red.opacity(0.06))
+    }
+
+    private func setBlocked(_ blocked: Bool) {
+        let target = partnerId
+        guard !target.isEmpty else { return }
+        Task {
+            do {
+                if blocked {
+                    try await FirestoreService.shared.blockUser(target)
+                } else {
+                    try await FirestoreService.shared.unblockUser(target)
+                }
+                isBlockedByMe = blocked
+            } catch {
+                alertTitle = blocked ? "Chưa chặn được" : "Chưa bỏ chặn được"
+                actionErrorMessage = "Kiểm tra kết nối rồi thử lại."
+                showActionAlert = true
+            }
+        }
     }
 
     private var partnerDisplayName: String {
@@ -667,8 +754,16 @@ struct ChatConversationView: View {
             // Tin nhắn của tôi
             userMessageView(msg: msg)
         } else {
-            // Tin nhắn đối phương
+            // Tin nhắn đối phương — nhấn giữ để báo cáo (Guideline 1.2)
             partnerMessageView(msg: msg)
+                .contextMenu {
+                    Button {
+                        reportTarget = ContentReport(targetType: .message, targetId: msg.id,
+                                                     targetUserId: msg.senderId, conversationId: activeChatId)
+                    } label: {
+                        Label("Báo cáo tin nhắn", systemImage: "exclamationmark.bubble")
+                    }
+                }
         }
     }
 
@@ -1198,6 +1293,18 @@ struct ChatConversationView: View {
 
     /// Gửi tin nhắn văn bản thông thường
     private func sendMessage(text: String) {
+        if isBlockedByMe {
+            alertTitle = "Bạn đã chặn người này"
+            actionErrorMessage = "Bỏ chặn để tiếp tục trò chuyện."
+            showActionAlert = true
+            return
+        }
+        if ContentFilter.containsBlockedWord(text) {
+            alertTitle = "Không thể gửi tin nhắn"
+            actionErrorMessage = ContentFilter.rejectionMessage
+            showActionAlert = true
+            return
+        }
         let senderId = currentUserId
         let senderName = AuthService.shared.currentDisplayName ?? "Tôi"
         let formatter = DateFormatter()
@@ -1272,7 +1379,11 @@ struct ChatConversationView: View {
                     messages.removeAll { $0.id == newMsg.id }
                     if messageText.isEmpty { messageText = text }
                     alertTitle = "Không thể gửi tin nhắn"
-                    actionErrorMessage = error.localizedDescription
+                    // Rules từ chối khi một bên đã chặn bên kia (app không đọc được danh sách chặn của người khác).
+                    let nsError = error as NSError
+                    actionErrorMessage = (nsError.domain == "FIRFirestoreErrorDomain" && nsError.code == 7)
+                        ? "Không gửi được: người này có thể đã chặn bạn, hoặc nội dung vi phạm Điều khoản sử dụng."
+                        : error.localizedDescription
                     showActionAlert = true
                 }
             }
