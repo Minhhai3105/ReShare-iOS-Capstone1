@@ -63,3 +63,9 @@ test('Chính sách nói đúng quyền xem khi có báo cáo vi phạm, loại �
   assert.match(page, /Ảnh đơn quyên góp lưu ở chế độ cần cấp quyền/)
   assert.match(page, /bàn giao dở/)
 })
+
+test('Chính sách nêu đăng nhập Google: chỉ nhận tên và email, Google là bên thứ ba xử lý', () => {
+  const page = read('src/landing/PrivacyPolicyPage.vue')
+  assert.match(page, /đăng nhập bằng Google, ReShare chỉ nhận tên hiển thị và email/)
+  assert.match(page, /Google Sign-In/)
+})
