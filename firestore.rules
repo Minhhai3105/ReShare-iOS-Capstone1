@@ -392,6 +392,9 @@ service cloud.firestore {
         && request.resource.data.lastSenderId == request.auth.uid
         && !blockedEitherWay(request.resource.data.donorId, request.resource.data.requesterId)
         && !isSuspended()
+        // App tạo hội thoại kèm luôn tin đầu tiên làm bản xem trước: lọc như tin nhắn và như nhánh
+        // update, nếu không người hỏi lách bộ lọc bằng cách đặt chữ thô tục vào lastMessage lúc tạo.
+        && cleanText(request.resource.data.get('lastMessage', ''))
         && validConversationState();
 
       // Thành viên chỉ được cập nhật các trường metadata tin nhắn, lịch hẹn và bàn giao
