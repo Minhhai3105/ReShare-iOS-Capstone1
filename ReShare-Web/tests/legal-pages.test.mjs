@@ -53,3 +53,13 @@ test('Màn đăng ký iOS: tiếng Việt, link tới cả điều khoản và c
   assert.match(register, /Constants\.Links\.privacyPolicy/)
   assert.match(register, /16 tuổi/)
 })
+
+test('Chính sách nói đúng quyền xem khi có báo cáo vi phạm, loại ảnh công khai và điều kiện xoá tài khoản', () => {
+  const page = read('src/landing/PrivacyPolicyPage.vue')
+  // Quản trị hệ thống xem được tin nhắn bị báo cáo qua trang Báo cáo vi phạm: phải nói rõ, không ghi "chỉ hai người".
+  assert.match(page, /Ngoại lệ duy nhất: khi một tin nhắn bị báo cáo vi phạm/)
+  // Ảnh Kho đồ 0đ là delivery 'upload' (công khai), ảnh đơn quyên góp là 'authenticated' (image-api.cjs).
+  assert.match(page, /Ảnh bài Kho đồ 0đ là ảnh công khai/)
+  assert.match(page, /Ảnh đơn quyên góp lưu ở chế độ cần cấp quyền/)
+  assert.match(page, /bàn giao dở/)
+})
