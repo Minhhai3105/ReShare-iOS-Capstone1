@@ -9,6 +9,8 @@ struct ForgotPasswordView: View {
 
     @State private var isSending = false
     @State private var didSend = false
+    /// Email của lần gửi gần nhất: thông báo dùng giá trị này, không dùng ô nhập (có thể bị sửa khi đang gửi).
+    @State private var sentEmail = ""
     @State private var errorMessage: String?
     @FocusState private var emailFocused: Bool
 
@@ -22,10 +24,11 @@ struct ForgotPasswordView: View {
                     Label("Đã gửi yêu cầu", systemImage: "envelope.badge.fill")
                         .font(.system(size: 17, weight: .bold))
                         .foregroundColor(AppColors.primary)
-                    Text("Nếu \(trimmedEmail) có tài khoản ReShare, bạn sẽ nhận được thư đặt lại mật khẩu trong vài phút. Kiểm tra cả mục Spam hoặc Quảng cáo. Mở liên kết trong thư để đặt mật khẩu mới rồi quay lại đăng nhập.")
+                    Text("Nếu \(sentEmail) có tài khoản ReShare, bạn sẽ nhận được thư đặt lại mật khẩu trong vài phút. Kiểm tra cả mục Spam hoặc Quảng cáo. Mở liên kết trong thư để đặt mật khẩu mới rồi quay lại đăng nhập.")
                         .font(.system(size: 15))
                         .foregroundColor(AppColors.textPrimary)
-                    Button("Gửi lại") {
+                    Button("Gửi lại hoặc dùng email khác") {
+                        email = sentEmail
                         didSend = false
                     }
                     .font(.system(size: 15, weight: .semibold))
@@ -43,6 +46,7 @@ struct ForgotPasswordView: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .focused($emailFocused)
+                        .disabled(isSending)
                         .submitLabel(.send)
                         .onSubmit(send)
                         .padding(.horizontal, 14)
@@ -89,12 +93,14 @@ struct ForgotPasswordView: View {
 
     private func send() {
         guard canSend else { return }
+        let target = trimmedEmail
         emailFocused = false
         errorMessage = nil
         isSending = true
+        sentEmail = target
         Task {
             do {
-                try await AuthService.shared.sendPasswordReset(email: trimmedEmail)
+                try await AuthService.shared.sendPasswordReset(email: target)
                 didSend = true
             } catch let error as NSError
                 where error.domain == AuthErrorDomain && AuthErrorCode(rawValue: error.code) == .userNotFound {
