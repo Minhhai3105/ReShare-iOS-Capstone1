@@ -264,25 +264,63 @@ struct LoginView: View {
     }
 
     // MARK: - 7. Google Sign In Button
-    // Dùng nút chính thức của Google (đúng quy định nhận diện thương hiệu). Lần đầu đăng nhập sẽ tự tạo tài khoản.
+    // Nút theo kiểu nút của app (trắng, bo 16, cao 52) nhưng giữ đúng quy định thương hiệu Google: logo "G"
+    // chuẩn lấy nguyên từ SDK GoogleSignIn (không vẽ lại, không đổi màu) và câu chữ được Google chấp nhận
+    // ("Tiếp tục với Google"). Không tải được logo thì dùng nút chính thức của SDK. Lần đầu đăng nhập sẽ tự tạo tài khoản.
     private var googleSignInButton: some View {
-        ZStack {
-            GoogleSignInButton(
-                scheme: .light,
-                style: .wide,
-                state: viewModel.isGoogleLoading || viewModel.isLoading ? .disabled : .normal
-            ) {
-                viewModel.loginWithGoogle(appState: appState)
-            }
-            .disabled(viewModel.isGoogleLoading || viewModel.isLoading)
-            .accessibilityIdentifier("googleSignInButton")
-
-            if viewModel.isGoogleLoading {
-                ProgressView()
+        Group {
+            if let logo = Self.googleLogo {
+                Button(action: { viewModel.loginWithGoogle(appState: appState) }) {
+                    HStack(spacing: 10) {
+                        if viewModel.isGoogleLoading {
+                            ProgressView()
+                                .frame(width: 20, height: 20)
+                        } else {
+                            Image(uiImage: logo)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 20, height: 20)
+                                .accessibilityHidden(true)
+                        }
+                        Text(viewModel.isGoogleLoading ? "Đang mở Google…" : "Tiếp tục với Google")
+                            .font(.system(size: 15, weight: .semibold))
+                    }
+                    .foregroundColor(AppColors.textPrimary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+                    .background(Color.white)
+                    .cornerRadius(16)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(AppColors.border.opacity(0.8), lineWidth: 1)
+                    )
+                    .shadow(color: Color.black.opacity(0.02), radius: 6, x: 0, y: 2)
+                }
+                .buttonStyle(.plain)
+                .disabled(viewModel.isGoogleLoading || viewModel.isLoading)
+                .opacity(viewModel.isLoading ? 0.6 : 1)
+                .accessibilityLabel("Tiếp tục với Google")
+            } else {
+                GoogleSignInButton(
+                    scheme: .light,
+                    style: .wide,
+                    state: viewModel.isGoogleLoading || viewModel.isLoading ? .disabled : .normal
+                ) {
+                    viewModel.loginWithGoogle(appState: appState)
+                }
+                .disabled(viewModel.isGoogleLoading || viewModel.isLoading)
             }
         }
+        .accessibilityIdentifier("googleSignInButton")
         .frame(maxWidth: .infinity)
     }
+
+    /// Logo "G" chuẩn đi kèm SDK GoogleSignIn (resource bundle `GoogleSignIn_GoogleSignIn.bundle`).
+    private static let googleLogo: UIImage? = {
+        guard let url = Bundle.main.url(forResource: "GoogleSignIn_GoogleSignIn", withExtension: "bundle"),
+              let bundle = Bundle(url: url) else { return nil }
+        return UIImage(named: "google", in: bundle, compatibleWith: nil)
+    }()
 
     // Đăng nhập Google lần đầu là tạo tài khoản mà không qua màn Đăng ký, nên nói rõ việc đồng ý
     // Điều khoản & Chính sách ngay dưới nút (giống ô đồng ý ở màn Đăng ký, App Store 1.2 và 5.1.1).
