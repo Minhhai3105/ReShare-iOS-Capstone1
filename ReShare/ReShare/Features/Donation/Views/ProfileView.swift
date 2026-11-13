@@ -45,6 +45,7 @@ struct ProfileView: View {
     @State private var showHistoryScreen: Bool = false
     @State private var showProfileEditor: Bool = false
     @State private var showSignOutAlert: Bool = false
+    @State private var showDeleteAccount: Bool = false
 
     var body: some View {
         NavigationStack {
@@ -264,6 +265,31 @@ struct ProfileView: View {
                         .padding(.horizontal, 20)
                     }
 
+                    // MARK: 3b. QUYỀN RIÊNG TƯ & HỖ TRỢ (App Store 1.5, 5.1.1(i))
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("QUYỀN RIÊNG TƯ & HỖ TRỢ")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(Color(red: 0.32, green: 0.40, blue: 0.36))
+                            .padding(.horizontal, 20)
+
+                        VStack(spacing: 0) {
+                            Link(destination: Constants.Links.privacyPolicy) {
+                                MenuActionRow(icon: "hand.raised.fill", title: "Chính sách quyền riêng tư", valueText: "Mở trên web")
+                            }
+                            Divider().padding(.leading, 50)
+                            Link(destination: Constants.Links.supportMail) {
+                                MenuActionRow(icon: "envelope.fill", title: "Liên hệ hỗ trợ", valueText: Constants.Links.supportEmail)
+                            }
+                        }
+                        .padding(.horizontal, 14)
+                        .background(RoundedRectangle(cornerRadius: 18).fill(Color.white))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 18)
+                                .stroke(Color.black.opacity(0.08), lineWidth: 1)
+                        )
+                        .padding(.horizontal, 20)
+                    }
+
                     // MARK: 4. NÚT ĐĂNG XUẤT (SIGN OUT)
                     Button(action: { showProfileEditor = true }) {
                         Label("Chỉnh sửa hồ sơ", systemImage: "person.crop.circle.badge.pencil")
@@ -292,6 +318,15 @@ struct ProfileView: View {
                     .buttonStyle(ScaleButtonStyle())
                     .padding(.horizontal, 20)
                     .padding(.top, 4)
+
+                    // Xoá tài khoản ngay trong app (App Store Guideline 5.1.1(v))
+                    Button(action: { showDeleteAccount = true }) {
+                        Text("Xoá tài khoản")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(Color.red.opacity(0.85))
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .padding(.horizontal, 20)
 
                     // Footer
                     Text("ReShare Non-Profit Network • Made with care in Vietnam")
@@ -332,6 +367,12 @@ struct ProfileView: View {
             }
             .sheet(isPresented: $showProfileEditor) {
                 UserProfileView()
+            }
+            .sheet(isPresented: $showDeleteAccount) {
+                DeleteAccountView(onDeleted: {
+                    // Tài khoản đã bị xoá trên máy chủ: dọn phiên cục bộ để quay về màn đăng nhập.
+                    try? appState.logout()
+                })
             }
             // Alert Đăng xuất
             .alert("Sign Out", isPresented: $showSignOutAlert) {

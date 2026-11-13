@@ -18,6 +18,8 @@ const { createReportsApi } = require('./reports-api.cjs');
 const { createBeneficiariesApi } = require('./beneficiaries-api.cjs');
 const { createDashboardApi } = require('./dashboard-api.cjs');
 const { createCampaignsApi } = require('./campaigns-api.cjs');
+const { createAccountApi } = require('./account-api.cjs');
+const { cloudinaryCatalogImageDeleter, createImageCleanupJobs } = require('./image-cleanup-jobs.cjs');
 const { createModerationApi } = require('./moderation-api.cjs');
 const { errorBody } = require('./error-body.cjs');
 const { createReservationExpiry } = require('./p2p-reservation-expiry.cjs');
@@ -58,6 +60,8 @@ const reportsApi = createReportsApi({ db, verifyToken, serverTimestamp: () => Fi
 const beneficiariesApi = createBeneficiariesApi({ db, auth: getAuth(), verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const dashboardApi = createDashboardApi({ db, verifyToken });
 const campaignsApi = createCampaignsApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
+const deleteCatalogImage = cloudinaryCatalogImageDeleter(cloudinary);
+const accountApi = createAccountApi({ db, auth: getAuth(), verifyToken, deleteCatalogImage });
 const moderationApi = createModerationApi({ db, auth: getAuth(), verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const adminWebOrigins = new Set((process.env.ADMIN_WEB_ORIGINS || '')
   .split(',').map(origin => origin.trim()).filter(Boolean));
@@ -101,6 +105,7 @@ const server = http.createServer(async (request, response) => {
     /^\/v1\/admin\/campaigns\/[^/]+(\/(update|status))?$/.test(pathname);
   const isAdminImageRead = pathname === '/v1/images/read-access';
   const isContactPath = pathname === '/v1/contact';
+  const isAccountPath = pathname === '/v1/account/delete';
   const origin = request.headers.origin;
   const allowedAdminOrigin = origin && (adminWebOrigins.has(origin) ||
     /^http:\/\/(localhost|127\.0\.0\.1):\d{2,5}$/.test(origin));
@@ -150,6 +155,7 @@ const server = http.createServer(async (request, response) => {
     // phải đứng trước isDonationAdminPath; isAdminApi là nhánh bắt tất cả cuối cùng.
     const handler = isContactPath ? contactApi
       : isDonationResubmitPath ? donationResubmitApi
+      : isAccountPath ? accountApi
       : isReceiptPath ? receiptApi
       : isStockIntakePath ? stockIntakeApi
       : isInventoryPath ? inventoryApi
@@ -178,4 +184,7 @@ server.listen(Number(process.env.PORT || 3000), '0.0.0.0');
 // Chỉ chạy khi backend được vận hành; cold start/sleep phải được kiểm chứng ở môi trường demo.
 const reservationExpiry = createReservationExpiry({ db });
 reservationExpiry.start();
-server.on('close', () => reservationExpiry.stop());
+// Dọn tiếp ảnh Cloudinary còn sót sau khi xoá tài khoản (mỗi 15 phút khi server đang chạy).
+const imageCleanupJobs = createImageCleanupJobs({ db, deleteCatalogImage });
+imageCleanupJobs.start();
+server.on('close', () => { reservationExpiry.stop(); imageCleanupJobs.stop(); });
