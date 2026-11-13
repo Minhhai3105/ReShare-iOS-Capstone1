@@ -17,6 +17,9 @@ struct LoginView: View {
     // Điều hướng sang màn hình Đăng ký (RegisterView)
     @State private var navigateToRegister: Bool = false
 
+    // Màn Quên mật khẩu (gửi thư đặt lại qua Firebase Auth)
+    @State private var showForgotPassword: Bool = false
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -50,18 +53,15 @@ struct LoginView: View {
                                 .accessibilityIdentifier("loginError")
                         }
 
-                        // Nút Đăng nhập chính (Log In)
+                        // Nút Đăng nhập chính
                         loginButton
                             .padding(.top, 4)
 
-                        // Vạch phân cách: OR CONTINUE WITH
-                        orDividerView
-                            .padding(.vertical, 4)
+                        // Không có nút Sign in with Apple: nhóm chưa có tài khoản Apple Developer trả phí
+                        // nên không bật được capability. App chỉ dùng tài khoản email của ReShare
+                        // (Guideline 4.8 không áp dụng khi không có đăng nhập bên thứ ba).
 
-                        // Nút Đăng nhập với Apple
-                        appleSignInButton
-
-                        // Link chuyển sang trang Đăng ký (Sign Up)
+                        // Link chuyển sang trang Đăng ký
                         signUpLinkView
                             .padding(.top, 8)
 
@@ -73,7 +73,10 @@ struct LoginView: View {
                     .padding(.horizontal, 20)
                 }
             }
-            // Điều hướng sang RegisterView khi bấm "Sign Up"
+            .sheet(isPresented: $showForgotPassword) {
+                ForgotPasswordView(email: viewModel.email.trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+            // Điều hướng sang RegisterView khi bấm "Đăng ký"
             .navigationDestination(isPresented: $navigateToRegister) {
                 RegisterView(onNavigateToLogin: {
                     navigateToRegister = false
@@ -115,11 +118,11 @@ struct LoginView: View {
             }
 
             VStack(alignment: .leading, spacing: 6) {
-                Text("Welcome back")
+                Text("Chào mừng trở lại")
                     .font(.system(size: 30, weight: .bold))
                     .foregroundColor(AppColors.textPrimary)
 
-                Text("Sign in to continue using ReShare.")
+                Text("Đăng nhập để tiếp tục dùng ReShare.")
                     .font(.system(size: 14, weight: .regular))
                     .foregroundColor(AppColors.textSecondary)
             }
@@ -138,7 +141,7 @@ struct LoginView: View {
                         .foregroundStyle(AppColors.textTertiary)
                         .frame(width: 20)
 
-                    TextField("Email address", text: $viewModel.email)
+                    TextField("Địa chỉ email", text: $viewModel.email)
                         .font(.system(size: 15))
                         .textContentType(.emailAddress)
                         .keyboardType(.emailAddress)
@@ -148,7 +151,7 @@ struct LoginView: View {
             }
 
             // Password Input
-            inputSection(title: "Password") {
+            inputSection(title: "Mật khẩu") {
                 HStack(spacing: 12) {
                     Image(systemName: "lock")
                         .font(.system(size: 17))
@@ -156,11 +159,11 @@ struct LoginView: View {
                         .frame(width: 20)
 
                     if isPasswordVisible {
-                        TextField("Password", text: $viewModel.password)
+                        TextField("Mật khẩu", text: $viewModel.password)
                             .font(.system(size: 15))
                             .textContentType(.none)
                     } else {
-                        SecureField("Password", text: $viewModel.password)
+                        SecureField("Mật khẩu", text: $viewModel.password)
                             .font(.system(size: 15))
                     }
 
@@ -168,7 +171,9 @@ struct LoginView: View {
                         Image(systemName: isPasswordVisible ? "eye" : "eye.slash")
                             .font(.system(size: 15))
                             .foregroundStyle(AppColors.textTertiary)
+                            .frame(width: 44, height: 44)
                     }
+                    .accessibilityLabel(isPasswordVisible ? "Ẩn mật khẩu" : "Hiện mật khẩu")
                 }
             }
         }
@@ -196,12 +201,11 @@ struct LoginView: View {
     private var forgotPasswordView: some View {
         HStack {
             Spacer()
-            Button(action: {
-                // Action quên mật khẩu (sẽ tích hợp gửi mail reset)
-            }) {
-                Text("Forgot password?")
+            Button(action: { showForgotPassword = true }) {
+                Text("Quên mật khẩu?")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(AppColors.primary)
+                    .frame(minHeight: 44)
             }
         }
     }
@@ -216,7 +220,7 @@ struct LoginView: View {
                     ProgressView()
                         .tint(.white)
                 } else {
-                    Text("Log In")
+                    Text("Đăng nhập")
                         .font(.system(size: 16, weight: .semibold))
                 }
             }
@@ -230,59 +234,14 @@ struct LoginView: View {
         .disabled(!isFormValid || viewModel.isLoading)
     }
 
-    // MARK: - 6. Or Divider
-    private var orDividerView: some View {
-        HStack(spacing: 12) {
-            Rectangle()
-                .fill(AppColors.border.opacity(0.6))
-                .frame(height: 1)
-
-            Text("OR CONTINUE WITH")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundColor(AppColors.textTertiary)
-                .lineLimit(1)
-                .fixedSize()
-
-            Rectangle()
-                .fill(AppColors.border.opacity(0.6))
-                .frame(height: 1)
-        }
-        .padding(.horizontal, 4)
-    }
-
-    // MARK: - 7. Apple Sign In Button
-    private var appleSignInButton: some View {
-        Button(action: {
-            // Sẽ gắn Sign in with Apple ở Sprint tiếp theo
-        }) {
-            HStack(spacing: 8) {
-                Image(systemName: "apple.logo")
-                    .font(.system(size: 17, weight: .medium))
-
-                Text("Sign in with Apple")
-                    .font(.system(size: 15, weight: .semibold))
-            }
-            .foregroundColor(AppColors.textPrimary)
-            .frame(maxWidth: .infinity)
-            .frame(height: 52)
-            .background(Color.white)
-            .cornerRadius(16)
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(AppColors.border.opacity(0.8), lineWidth: 1)
-            )
-            .shadow(color: Color.black.opacity(0.02), radius: 6, x: 0, y: 2)
-        }
-    }
-
     // MARK: - 8. Sign Up Link
     private var signUpLinkView: some View {
         HStack(spacing: 5) {
-            Text("Don't have an account?")
+            Text("Chưa có tài khoản?")
                 .font(.system(size: 14))
                 .foregroundColor(AppColors.textSecondary)
 
-            Button("Sign Up") {
+            Button("Đăng ký") {
                 navigateToRegister = true
             }
             .font(.system(size: 14, weight: .bold))
@@ -297,7 +256,7 @@ struct LoginView: View {
                 .font(.system(size: 13))
                 .foregroundColor(AppColors.textTertiary)
 
-            Text("Safe & verified neighborhood exchange")
+            Text("Trao đổi đồ an toàn trong cộng đồng")
                 .font(.system(size: 12, weight: .regular))
                 .foregroundColor(AppColors.textTertiary)
         }
