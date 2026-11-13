@@ -23,6 +23,9 @@ function loadHandler(extraEnv = {}) {
       if (name === 'cloudinary') return { v2: { config() {} } };
       if (name === './error-body.cjs') return { errorBody };
       if (name === './p2p-reservation-expiry.cjs') return { createReservationExpiry: () => ({ start() {}, stop() {} }) };
+      if (name === './image-cleanup-jobs.cjs') {
+        return { cloudinaryCatalogImageDeleter: () => async () => {}, createImageCleanupJobs: () => ({ start() {}, stop() {} }) };
+      }
       return factories;
     },
   }, { filename: 'server.cjs' });

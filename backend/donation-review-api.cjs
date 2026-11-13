@@ -6,6 +6,9 @@ const { staffEmails } = require('./staff-emails.cjs');
 const { publicHistory, mergeDonationHistory } = require('./donation-history.cjs');
 
 function donationSender(data, profile = {}) {
+  // Donor đã tự xoá tài khoản (account-api.cjs): đơn được giữ để khớp chứng từ kho nhưng không còn
+  // gắn với người nào, nên không hiện tên hay email cũ.
+  if (data.donorAccountDeleted === true) return { name: 'Người dùng đã xoá tài khoản', email: null };
   const name = [profile.displayName, data.donorName]
     .find(value => typeof value === 'string' && value.trim() && value.trim() !== data.donorId);
   return {
@@ -389,4 +392,5 @@ function createDonationReviewApi({ db, auth, verifyToken, serverTimestamp }) {
 
 module.exports = {
   createDonationReviewApi,
+  donationSender,
 };
