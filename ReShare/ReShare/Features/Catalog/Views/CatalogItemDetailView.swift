@@ -115,7 +115,7 @@ struct CatalogItemDetailView: View {
             Button("Chặn người này", role: .destructive) { blockDonor() }
             Button("Huỷ", role: .cancel) {}
         } message: {
-            Text("Bạn sẽ không thấy bài của người này trong Kho đồ 0đ, và hai bên không nhắn tin được cho nhau. Có thể bỏ chặn trong cuộc trò chuyện.")
+            Text("Bạn sẽ không thấy bài của người này trong Kho đồ 0đ, và hai bên không nhắn tin được cho nhau. Lịch hẹn đang có giữa hai bên sẽ bị huỷ. Có thể bỏ chặn trong Tài khoản > Người dùng đã chặn.")
         }
         .alert("Chưa chặn được", isPresented: Binding(get: { safetyErrorMessage != nil }, set: { if !$0 { safetyErrorMessage = nil } })) {
             Button("Đóng", role: .cancel) {}
@@ -127,8 +127,10 @@ struct CatalogItemDetailView: View {
     private func blockDonor() {
         Task {
             do {
-                try await FirestoreService.shared.blockUser(item.donorId)
+                try await FirestoreService.shared.blockUser(item.donorId, displayName: item.donorName)
                 dismiss()
+            } catch let error as NSError where error.domain == "ReShare" {
+                safetyErrorMessage = error.localizedDescription
             } catch {
                 safetyErrorMessage = "Kiểm tra kết nối rồi thử lại."
             }

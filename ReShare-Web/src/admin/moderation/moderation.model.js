@@ -30,9 +30,16 @@ const ACTIONS = Object.freeze([
     confirm: 'Đóng báo cáo này mà không xử lý gì?' },
 ])
 
+const FINISH_SUSPEND = Object.freeze({ action: 'suspend_user', label: 'Hoàn tất khoá tài khoản', danger: true,
+  confirm: 'Lần trước đã chặn tài khoản này ghi dữ liệu nhưng chưa khoá xong đăng nhập. Chạy tiếp bước khoá đăng nhập?' })
+
 export function actionsFor(report) {
   if (report?.status !== 'open') return []
-  return ACTIONS.filter((item) => item.types.includes(report.targetType))
+  // Khoá dở (Auth lỗi): chỉ cho chạy tiếp đúng thao tác đó, backend cũng từ chối thao tác khác.
+  if (report.pendingAction === 'suspend_user') return [FINISH_SUSPEND]
+  return ACTIONS.filter((item) => item.types.includes(report.targetType)
+    // Báo cáo khai người bị báo cáo khác chủ nội dung thật: không cho khoá từ báo cáo này.
+    && !(item.action === 'suspend_user' && report.attributionMismatch === true))
 }
 
 const LISTING_STATUS = Object.freeze({ available: 'đang mở', reserved: 'đang có người giữ', completed: 'đã trao', removed: 'đã gỡ' })
@@ -53,6 +60,9 @@ const ERROR_MESSAGES = Object.freeze({
   'Staff accounts cannot be suspended here; revoke staff access first': 'Không khoá được tài khoản nhân sự ở đây. Thu hồi quyền nhân sự trước.',
   'System Admin access required': 'Chỉ Quản trị hệ thống mới xử lý được báo cáo.',
   'Staff access changed; reload session': 'Quyền của bạn vừa thay đổi. Đăng nhập lại.',
+  'Account suspension is incomplete; retry to finish': 'Đã chặn tài khoản ghi dữ liệu nhưng chưa khoá được đăng nhập. Bấm “Hoàn tất khoá tài khoản” để chạy tiếp.',
+  'Another action is in progress for this report': 'Báo cáo này đang khoá tài khoản dở. Bấm “Hoàn tất khoá tài khoản”.',
+  'Reported user does not own the content': 'Người bị báo cáo không phải chủ nội dung này, nên không khoá từ báo cáo này được.',
 })
 
 export function moderationErrorMessage(error) {

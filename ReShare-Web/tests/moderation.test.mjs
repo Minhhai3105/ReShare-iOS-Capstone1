@@ -10,6 +10,15 @@ test('chỉ hiện nút xử lý hợp với loại báo cáo và chỉ khi báo
   assert.deepEqual(actionsFor({ status: 'resolved', targetType: 'listing' }), [])
 })
 
+test('báo cáo gán sai chủ nội dung không có nút khoá; khoá dở chỉ còn nút hoàn tất', () => {
+  assert.deepEqual(actionsFor({ status: 'open', targetType: 'listing', attributionMismatch: true }).map((a) => a.action),
+    ['remove_listing', 'dismiss'])
+  const finish = actionsFor({ status: 'open', targetType: 'user', pendingAction: 'suspend_user' })
+  assert.deepEqual(finish.map((a) => [a.action, a.label]), [['suspend_user', 'Hoàn tất khoá tài khoản']])
+  assert.match(moderationErrorMessage({ status: 502, message: 'Account suspension is incomplete; retry to finish' }), /Hoàn tất khoá/)
+  assert.match(moderationErrorMessage({ status: 409, message: 'Reported user does not own the content' }), /không phải chủ/)
+})
+
 test('tóm tắt nội dung bị báo cáo bằng tiếng Việt', () => {
   assert.equal(targetSummary({ targetType: 'listing', target: { exists: true, title: 'Nồi cơm', status: 'removed' } }), 'Nồi cơm (đã gỡ)')
   assert.equal(targetSummary({ targetType: 'message', target: { exists: true, text: 'Xin chào' } }), '“Xin chào”')

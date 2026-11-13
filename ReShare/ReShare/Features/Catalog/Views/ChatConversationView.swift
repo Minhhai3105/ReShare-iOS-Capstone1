@@ -179,7 +179,7 @@ struct ChatConversationView: View {
             Button("Chặn người này", role: .destructive) { setBlocked(true) }
             Button("Huỷ", role: .cancel) {}
         } message: {
-            Text("Hai bên sẽ không nhắn tin được cho nhau và bạn không thấy bài của người này trong Kho đồ 0đ nữa.")
+            Text("Hai bên sẽ không nhắn tin được cho nhau và bạn không thấy bài của người này trong Kho đồ 0đ nữa. Lịch hẹn đang có giữa hai bên sẽ bị huỷ. Có thể bỏ chặn trong Tài khoản > Người dùng đã chặn.")
         }
         .sheet(isPresented: $showAppointmentPickerSheet) {
             appointmentProposalSheet
@@ -359,14 +359,15 @@ struct ChatConversationView: View {
         Task {
             do {
                 if blocked {
-                    try await FirestoreService.shared.blockUser(target)
+                    try await FirestoreService.shared.blockUser(target, displayName: partnerDisplayName)
                 } else {
                     try await FirestoreService.shared.unblockUser(target)
                 }
                 isBlockedByMe = blocked
             } catch {
                 alertTitle = blocked ? "Chưa chặn được" : "Chưa bỏ chặn được"
-                actionErrorMessage = "Kiểm tra kết nối rồi thử lại."
+                let nsError = error as NSError
+                actionErrorMessage = nsError.domain == "ReShare" ? nsError.localizedDescription : "Kiểm tra kết nối rồi thử lại."
                 showActionAlert = true
             }
         }

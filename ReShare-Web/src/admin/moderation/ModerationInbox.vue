@@ -45,6 +45,10 @@ async function resolve(report, option) {
     await moderationRepository.resolve(report.id, option.action, notes.value[report.id] || '')
     reports.value = reports.value.filter((item) => item.id !== report.id)
   } catch (error) {
+    if (error?.code === 'SUSPEND_INCOMPLETE') {
+      // Báo cáo vẫn mở ở trạng thái khoá dở: đổi nút thành "Hoàn tất khoá tài khoản".
+      reports.value = reports.value.map((item) => (item.id === report.id ? { ...item, pendingAction: 'suspend_user' } : item))
+    }
     actionError.value = { ...actionError.value, [report.id]: moderationErrorMessage(error) }
   } finally {
     pending.value = ''
@@ -101,6 +105,12 @@ async function resolve(report, option) {
           <div><dt>Người bị báo cáo</dt><dd>{{ report.targetUser.name || report.targetUser.id }}<span v-if="report.targetUser.suspended"> · đã khoá</span></dd></div>
           <div><dt>Người báo cáo</dt><dd>{{ report.reporter.name || report.reporter.id }}</dd></div>
         </dl>
+        <p v-if="report.attributionMismatch" class="mod-card__warn" role="note">
+          Người báo cáo khai sai chủ nội dung. Danh sách hiển thị chủ thật; không khoá tài khoản từ báo cáo này.
+        </p>
+        <p v-if="report.pendingAction === 'suspend_user'" class="mod-card__warn" role="note">
+          Đã chặn tài khoản này ghi dữ liệu nhưng chưa khoá xong đăng nhập. Bấm “Hoàn tất khoá tài khoản”.
+        </p>
         <p v-if="report.note" class="mod-card__note">Ghi chú của người báo cáo: {{ report.note }}</p>
         <p v-if="report.resolutionNote" class="mod-card__note">Ghi chú xử lý: {{ report.resolutionNote }}</p>
 
@@ -152,6 +162,7 @@ async function resolve(report, option) {
 .mod-card__actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .mod-danger { background: #b3261e; border-color: #b3261e; }
 .mod-card__error { color: #c62828; }
+.mod-card__warn { padding: 8px 10px; border-radius: 10px; background: #fff4e5; color: #8a4b00; font-size: 13px; }
 .mod-muted { color: #708090; font-size: 13px; }
 .mod-state { width: min(720px, 100%); min-height: 240px; margin: 24px auto; display: grid; place-items: center; align-content: center; gap: 12px; padding: 28px; text-align: center; background: #fff; border: 1px solid #e7edf5; border-radius: 20px; }
 .mod-state--inline { min-height: 160px; width: 100%; margin: 0; }

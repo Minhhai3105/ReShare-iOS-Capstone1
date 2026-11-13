@@ -36,7 +36,8 @@ protocol FirestoreServiceProtocol {
 
     // MARK: - An toàn nội dung: chặn & báo cáo (App Store Guideline 1.2)
     func fetchBlockedUserIds() async throws -> Set<String>
-    func blockUser(_ blockedUid: String) async throws
+    func fetchBlockedUsers() async throws -> [BlockedUser]
+    func blockUser(_ blockedUid: String, displayName: String) async throws
     func unblockUser(_ blockedUid: String) async throws
     func submitReport(_ report: ContentReport, reason: ContentReport.Reason, note: String) async throws
 
@@ -275,12 +276,73 @@ final class FirestoreService: FirestoreServiceProtocol {
         return Set(snapshot.documents.map(\.documentID))
     }
 
-    func blockUser(_ blockedUid: String) async throws {
+    /// Danh sách đầy đủ cho màn "Người dùng đã chặn" (mới chặn lên trước).
+    func fetchBlockedUsers() async throws -> [BlockedUser] {
+        guard let uid = AuthService.shared.currentUserId, !uid.isEmpty else { return [] }
+        let snapshot = try await blocksCollection(uid).limit(to: 500).getDocuments()
+        return snapshot.documents.map { doc in
+            let name = (doc.data()["displayName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return BlockedUser(
+                id: doc.documentID,
+                displayName: name.isEmpty ? "Người dùng ReShare" : name,
+                blockedAt: (doc.data()["createdAt"] as? Timestamp)?.dateValue()
+            )
+        }
+        .sorted { ($0.blockedAt ?? .distantPast) > ($1.blockedAt ?? .distantPast) }
+    }
+
+    /// Chặn một người. Trước đó huỷ lịch hẹn đang có giữa hai người: sau khi chặn thì không ai huỷ được
+    /// nữa (huỷ hẹn cũng ghi một tin nhắn, mà Rules chặn tin nhắn giữa hai bên), món sẽ kẹt ở "đang giữ".
+    /// Đã có người xác nhận bàn giao thì không huỷ được hẹn, nên cũng không chặn — báo để người dùng
+    /// hoàn tất bàn giao hoặc gửi báo cáo.
+    func blockUser(_ blockedUid: String, displayName: String) async throws {
         guard let uid = AuthService.shared.currentUserId, !uid.isEmpty, blockedUid != uid else { return }
+        try await releaseReservations(between: uid, and: blockedUid)
         try await blocksCollection(uid).document(blockedUid).setData([
             "blockedUid": blockedUid,
+            "displayName": String(displayName.trimmingCharacters(in: .whitespacesAndNewlines).prefix(80)),
             "createdAt": FieldValue.serverTimestamp()
         ])
+    }
+
+    private func releaseReservations(between uid: String, and otherUid: String) async throws {
+        // Một điều kiện array-contains rồi lọc trong bộ nhớ: không cần composite index.
+        let snapshot = try await db.collection(Constants.FirestoreCollections.conversations)
+            .whereField("participantIds", arrayContains: uid)
+            .limit(to: 500)
+            .getDocuments()
+        let reserved = snapshot.documents.filter { doc in
+            let data = doc.data()
+            return (data["participantIds"] as? [String])?.contains(otherUid) == true
+                && (data["isReserved"] as? Bool) == true
+        }
+        for doc in reserved {
+            guard let itemId = doc.data()["itemId"] as? String, !itemId.isEmpty else { continue }
+            let isDonor = (doc.data()["donorId"] as? String) == uid
+            let cancelMessage = ChatMessageItem(
+                id: UUID().uuidString,
+                senderId: uid,
+                senderName: isDonor ? "Người cho" : "Người nhận",
+                text: "⚠️ Lịch hẹn đã được hủy. Món đồ được mở lại ở trạng thái 'Sẵn sàng nhận đồ' cho những người khác.",
+                timeString: "Vừa xong",
+                isCurrentUser: false,
+                createdAt: Date(),
+                messageType: "text"
+            )
+            do {
+                try await cancelReservation(chatId: doc.documentID, itemId: itemId, operatorUserId: uid, cancelMessage: cancelMessage)
+            } catch let error as NSError where error.domain == "ReShare" && error.code == 409 {
+                throw NSError(domain: "ReShare", code: 409, userInfo: [NSLocalizedDescriptionKey:
+                    "Hai bạn đang bàn giao dở (đã có người bấm xác nhận) nên chưa chặn được. Hãy hoàn tất bàn giao, hoặc gửi Báo cáo để ReShare hỗ trợ."])
+            } catch let error as NSError where error.domain == "ReShare" && (error.code == 403 || error.code == 404) {
+                // Hội thoại ghi "đang giữ" nhưng món đã đổi người giữ/không còn: không có gì để huỷ.
+                continue
+            } catch let error as NSError
+                where error.domain == FirestoreErrorDomain && error.code == FirestoreErrorCode.permissionDenied.rawValue {
+                // Bên kia đã chặn mình trước nên Rules không cho ghi tin huỷ hẹn: vẫn cho mình chặn lại.
+                continue
+            }
+        }
     }
 
     func unblockUser(_ blockedUid: String) async throws {

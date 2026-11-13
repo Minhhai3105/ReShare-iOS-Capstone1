@@ -92,3 +92,95 @@ test('Báo cáo vi phạm: chỉ System Admin xem và xử lý; gỡ bài, gỡ 
     await deleteApp(app);
   }
 });
+
+test('Báo cáo vi phạm: không khoá nhầm người từ báo cáo gán sai, khoá dở thì bấm lại được, gỡ tin cuối thì gỡ cả xem trước', {
+  skip: !process.env.FIRESTORE_EMULATOR_HOST,
+}, async () => {
+  const app = initializeApp({ projectId: 'demo-reshare' }, 'moderation-api-emulator-test-2');
+  const db = getFirestore(app);
+  const paths = [
+    'staff_assignments/mod2-sa', 'users/mod2-owner', 'users/mod2-innocent', 'users/mod2-flaky',
+    'catalog_items/cat_mod2-1', 'conversations/mod2-chat', 'conversations/mod2-chat/messages/m-old',
+    'conversations/mod2-chat/messages/m-new', 'reports/rep2-forged', 'reports/rep2-flaky', 'reports/rep2-revoke',
+    'reports/rep2-old', 'reports/rep2-new', 'users/mod2-revoke',
+  ];
+  try {
+    await db.doc('staff_assignments/mod2-sa').set({ active: true, role: 'system_admin', warehouseIds: [] });
+    await db.doc('users/mod2-owner').set({ displayName: 'Chủ bài' });
+    await db.doc('users/mod2-innocent').set({ displayName: 'Người vô can' });
+    await db.doc('users/mod2-flaky').set({ displayName: 'Người vi phạm' });
+    await db.doc('catalog_items/cat_mod2-1').set({ donorId: 'mod2-owner', title: 'Bài vi phạm', status: 'available' });
+    await db.doc('conversations/mod2-chat').set({ donorId: 'mod2-owner', requesterId: 'mod2-flaky',
+      participantIds: ['mod2-owner', 'mod2-flaky'], lastMessage: 'Tin mới vi phạm', lastSenderId: 'mod2-flaky' });
+    await db.doc('conversations/mod2-chat/messages/m-old').set({ senderId: 'mod2-flaky', text: 'Tin cũ vi phạm', createdAt: new Date(Date.UTC(2026, 10, 13, 8)) });
+    await db.doc('conversations/mod2-chat/messages/m-new').set({ senderId: 'mod2-flaky', text: 'Tin mới vi phạm', createdAt: new Date(Date.UTC(2026, 10, 13, 9)) });
+    const report = (id, extra) => db.doc(`reports/${id}`).set({ reporterId: 'mod2-reporter', reason: 'scam', status: 'open',
+      createdAt: new Date(Date.UTC(2026, 10, 13, 10)), ...extra });
+    // Dữ liệu cũ/giả: bài của mod2-owner nhưng báo cáo khai người bị báo cáo là mod2-innocent.
+    await report('rep2-forged', { targetType: 'listing', targetId: 'cat_mod2-1', targetUserId: 'mod2-innocent' });
+    await report('rep2-flaky', { targetType: 'user', targetId: 'mod2-flaky', targetUserId: 'mod2-flaky' });
+    await report('rep2-revoke', { targetType: 'user', targetId: 'mod2-revoke', targetUserId: 'mod2-revoke' });
+    await report('rep2-old', { targetType: 'message', targetId: 'm-old', conversationId: 'mod2-chat', targetUserId: 'mod2-flaky' });
+    await report('rep2-new', { targetType: 'message', targetId: 'm-new', conversationId: 'mod2-chat', targetUserId: 'mod2-flaky' });
+
+    const failures = { updateUser: 0, revoke: 0 };
+    const authCalls = [];
+    const api = createModerationApi({
+      db, verifyToken: async token => ({ uid: token }), serverTimestamp: () => FieldValue.serverTimestamp(),
+      auth: {
+        updateUser: async uid => {
+          authCalls.push(['updateUser', uid]);
+          if (failures.updateUser-- > 0) throw Object.assign(new Error('unavailable'), { code: 'auth/internal-error' });
+        },
+        revokeRefreshTokens: async uid => {
+          authCalls.push(['revoke', uid]);
+          if (failures.revoke-- > 0) throw Object.assign(new Error('unavailable'), { code: 'auth/internal-error' });
+        },
+      },
+    });
+    const SA2 = { authorization: 'Bearer mod2-sa' };
+    const listPath = '/v1/admin/moderation/reports';
+    const resolve = (id, body) => api.handle('POST', `${listPath}/${id}/resolve`, SA2, body);
+    const listOpen = async () => (await api.handle('GET', listPath, SA2, null, `${listPath}?status=open`)).body.reports;
+
+    // R90-1: hiển thị và khoá theo chủ nội dung thật, không theo UID người báo cáo khai.
+    const forged = (await listOpen()).find(item => item.id === 'rep2-forged');
+    assert.equal(forged.targetUser.id, 'mod2-owner');
+    assert.equal(forged.attributionMismatch, true);
+    await assert.rejects(resolve('rep2-forged', { action: 'suspend_user' }), { status: 409, code: 'ATTRIBUTION_MISMATCH' });
+    assert.equal((await db.doc('users/mod2-innocent').get()).data().suspended, undefined, 'không khoá người vô can');
+    assert.equal(authCalls.length, 0);
+    assert.equal((await db.doc('reports/rep2-forged').get()).data().status, 'open');
+
+    // R90-2: Auth lỗi thì báo cáo chưa đóng; bấm lại hoàn tất được; không đổi sang thao tác khác giữa chừng.
+    failures.updateUser = 1;
+    await assert.rejects(resolve('rep2-flaky', { action: 'suspend_user', note: 'Quấy rối nhiều lần' }), { status: 502, code: 'SUSPEND_INCOMPLETE' });
+    let pending = (await db.doc('reports/rep2-flaky').get()).data();
+    assert.equal(pending.status, 'open');
+    assert.equal(pending.pendingAction, 'suspend_user');
+    assert.equal((await db.doc('users/mod2-flaky').get()).data().suspended, true, 'Rules chặn ghi ngay dù Auth chưa khoá xong');
+    assert.equal((await listOpen()).find(item => item.id === 'rep2-flaky').pendingAction, 'suspend_user');
+    await assert.rejects(resolve('rep2-flaky', { action: 'dismiss' }), { status: 409 });
+    await resolve('rep2-flaky', { action: 'suspend_user' });
+    pending = (await db.doc('reports/rep2-flaky').get()).data();
+    assert.equal(pending.status, 'resolved');
+    assert.equal(pending.pendingAction, null);
+    assert.equal(pending.resolutionNote, 'Quấy rối nhiều lần', 'giữ ghi chú của lần bấm đầu');
+    assert.deepEqual(authCalls.filter(call => call[1] === 'mod2-flaky').map(call => call[0]), ['updateUser', 'updateUser', 'revoke']);
+
+    failures.revoke = 1;
+    await assert.rejects(resolve('rep2-revoke', { action: 'suspend_user' }), { code: 'SUSPEND_INCOMPLETE' });
+    assert.equal((await db.doc('reports/rep2-revoke').get()).data().status, 'open', 'thu hồi phiên lỗi cũng chưa đóng');
+    await resolve('rep2-revoke', { action: 'suspend_user' });
+    assert.equal((await db.doc('reports/rep2-revoke').get()).data().status, 'resolved');
+
+    // R90-4: gỡ tin cũ không đụng xem trước của tin mới hơn; gỡ tin mới nhất thì thay luôn xem trước.
+    await resolve('rep2-old', { action: 'remove_message' });
+    assert.equal((await db.doc('conversations/mod2-chat').get()).data().lastMessage, 'Tin mới vi phạm');
+    await resolve('rep2-new', { action: 'remove_message' });
+    assert.equal((await db.doc('conversations/mod2-chat').get()).data().lastMessage, REMOVED_MESSAGE);
+  } finally {
+    await Promise.allSettled(paths.map(path => db.doc(path).delete()));
+    await deleteApp(app);
+  }
+});
