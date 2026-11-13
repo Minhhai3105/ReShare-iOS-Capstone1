@@ -70,9 +70,12 @@ struct RegisterView: View {
             Spacer()
             
             HStack(spacing: 5) {
-                Image(systemName: "leaf.fill")
-                    .font(.system(size: 12))
-                    .foregroundStyle(AppColors.primary)
+                // Logo ReShare (cùng asset với Splash/Onboarding và icon app)
+                Image("AvatarApp")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 16, height: 16)
+                    .accessibilityHidden(true)
                 
                 Text("ReShare VN")
                     .font(.system(size: 13, weight: .semibold, design: .rounded))

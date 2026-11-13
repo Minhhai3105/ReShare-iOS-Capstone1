@@ -98,9 +98,12 @@ struct LoginView: View {
     // MARK: - 1. Top Bar Pill
     private var topBarPillView: some View {
         HStack(spacing: 6) {
-            Image(systemName: "arrow.3.trianglepath")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(AppColors.primary)
+            // Logo ReShare (cùng asset với Splash/Onboarding và icon app)
+            Image("AvatarApp")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 16, height: 16)
+                .accessibilityHidden(true)
 
             Text("ReShare VN")
                 .font(.system(size: 13, weight: .semibold))
@@ -115,16 +118,12 @@ struct LoginView: View {
     // MARK: - 2. Logo & Header
     private var headerView: some View {
         VStack(alignment: .leading, spacing: 14) {
-            // Icon hộp vuông bo góc chứa lá trắng
-            ZStack {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(AppColors.primary)
-                    .frame(width: 54, height: 54)
-
-                Image(systemName: "leaf.fill")
-                    .font(.system(size: 24))
-                    .foregroundColor(.white)
-            }
+            // Logo ReShare: cùng asset AvatarApp với màn Splash, Onboarding và icon app
+            Image("AvatarApp")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 54, height: 54)
+                .accessibilityLabel("Logo ReShare")
 
             VStack(alignment: .leading, spacing: 6) {
                 Text("Chào mừng trở lại")
