@@ -315,10 +315,9 @@ struct HistoryItemCard: View {
         }) { DonationResubmitView(item: item, onResubmitted: { didResubmit = true }) }
     }
 
+    // Tên lưu kèm đơn lúc gửi đứng trước; đơn cũ lấy tên điểm đang hoạt động; còn lại nhãn chung.
     private var hubDisplayName: String {
-        guard item.hubId != nil else { return "Chưa chọn điểm tiếp nhận" }
-        guard let hub else { return "Điểm tiếp nhận" }
-        return hub.isDemo ? "\(hub.name) (minh hoạ)" : hub.name
+        HubDisplayName.label(hubId: item.hubId, savedName: item.hubName, currentName: hub?.name, currentIsDemo: hub?.isDemo)
     }
 
     private var declaredQuantityLabel: String {
