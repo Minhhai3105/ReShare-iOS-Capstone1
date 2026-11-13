@@ -1,11 +1,16 @@
-# Giữ backend Render khỏi spin-down.
+# Ping /health của backend Render theo lịch.
 #
 # Render free tier ngủ sau ~15 phút không có request; đo thực tế cold start
-# mất 19–22 giây, đủ để làm hỏng nhịp demo trước Hội đồng.
+# mất 19–22 giây.
 #
-# Chạy mỗi 5 phút (khoảng ngắn nhất GitHub cho phép). GitHub hay trễ lịch
-# vài phút khi tải cao, nên cố ý đặt 5 phút thay vì 10 để kể cả bị trễ vẫn
-# còn nằm trong cửa sổ 15 phút.
+# THỰC TẾ (đo 11–13/11/2026): lịch '*/5' KHÔNG giữ được backend thức. GitHub
+# không đảm bảo giờ chạy của scheduled workflow; các lần chạy thật cách nhau
+# 4–8 tiếng chứ không phải 5 phút. Workflow này chỉ còn tác dụng kiểm tra
+# định kỳ backend còn sống (job đỏ nếu /health không trả 200).
+#
+# Quyết định của nhóm (13/11/2026): chấp nhận backend ngủ. Trước buổi demo
+# hoặc bảo vệ, mở https://reshare-ios-capstone1-1.onrender.com/health (hoặc
+# bấm "Run workflow" ở tab Actions) rồi chờ 20–30 giây cho backend dậy.
 #
 # Repo đang PUBLIC nên GitHub Actions không tính phút — không tốn gì.
 # Lưu ý: GitHub tự tắt scheduled workflow sau 60 ngày repo không có commit.
