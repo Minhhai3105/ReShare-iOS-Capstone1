@@ -178,3 +178,25 @@ test('Tài khoản bị khoá: Rules chặn ghi nội dung ngay dù ID token cũ
     await env.cleanup();
   }
 });
+
+test('Tạo hội thoại mới: bản xem trước (lastMessage) cũng qua bộ lọc từ ngữ', async () => {
+  const env = await initializeTestEnvironment({ projectId: 'demo-reshare', firestore: { rules: rules() } });
+  try {
+    await seedChat(env);
+    const asker = env.authenticatedContext('asker').firestore();
+    const conversation = lastMessage => ({
+      itemId: 'cat_ugc', donorId: 'donor', requesterId: 'asker', participantIds: ['donor', 'asker'],
+      donorName: 'Người cho', requesterName: 'Người hỏi', lastSenderId: 'asker', lastMessage, lastMessageTime: new Date(),
+    });
+    for (const [index, bad] of ['Đồ đéo gì', 'ĐÉO'.normalize('NFD'), 'dòng 1\nfuck', 'l\u00f4\u0300n'].entries()) {
+      await assertFails(asker.doc(`conversations/chat_bad_${index}`).set(conversation(bad)), JSON.stringify(bad));
+    }
+    await assertSucceeds(asker.doc('conversations/chat_ok').set(conversation('Cho mình xin cái đĩa nhé')));
+    await assertSucceeds(asker.doc('conversations/chat_ok_nfd').set(conversation('Đeo khẩu trang'.normalize('NFD'))));
+    const { lastMessage, lastMessageTime, ...withoutPreview } = conversation('x');
+    await assertSucceeds(asker.doc('conversations/chat_no_preview').set(withoutPreview), 'không có bản xem trước vẫn tạo được');
+  } finally {
+    await env.clearFirestore();
+    await env.cleanup();
+  }
+});
