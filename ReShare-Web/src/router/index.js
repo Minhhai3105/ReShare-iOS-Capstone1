@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { adminRoutes, installAdminAuth } from '@/admin/admin.routes'
 import LandingPage from '@/landing/LandingPage.vue'
-import { PRIVACY_POLICY_PATH } from '@/landing/legal.js'
+import { PRIVACY_POLICY_PATH, TERMS_OF_USE_PATH } from '@/landing/legal.js'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -13,6 +13,12 @@ const router = createRouter({
       name: 'privacy-policy',
       component: () => import('@/landing/PrivacyPolicyPage.vue'),
       meta: { legal: true, title: 'Chính sách quyền riêng tư — ReShare' },
+    },
+    {
+      path: TERMS_OF_USE_PATH,
+      name: 'terms-of-use',
+      component: () => import('@/landing/TermsOfUsePage.vue'),
+      meta: { legal: true, title: 'Điều khoản sử dụng — ReShare' },
     },
     ...adminRoutes,
   ],

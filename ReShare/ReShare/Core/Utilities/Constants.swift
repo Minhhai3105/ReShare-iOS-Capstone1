@@ -24,6 +24,7 @@ enum Constants {
     /// Path phải khớp ReShare-Web/src/landing/legal.js; test web kiểm tra hai bên trùng nhau.
     enum Links {
         static let privacyPolicy = URL(string: "https://reshare.pages.dev/chinh-sach-quyen-rieng-tu")!
+        static let termsOfUse = URL(string: "https://reshare.pages.dev/dieu-khoan-su-dung")!
         static let supportEmail = "haicao206@gmail.com"
         static var supportMail: URL {
             URL(string: "mailto:\(supportEmail)?subject=ReShare%20-%20H%E1%BB%97%20tr%E1%BB%A3")!

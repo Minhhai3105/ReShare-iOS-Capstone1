@@ -1,6 +1,6 @@
 <script setup>
 import logo from '../assets/logo.png'
-import { LEGAL_CONTACT_EMAIL, PRIVACY_POLICY_PATH } from '../legal.js'
+import { LEGAL_CONTACT_EMAIL, PRIVACY_POLICY_PATH, TERMS_OF_USE_PATH } from '../legal.js'
 
 const footerLinks = [
   { label: 'ReShare là gì', href: '#about' },
@@ -45,7 +45,7 @@ const footerLinks = [
       </div>
       <div class="footer-bottom">
         <span>© 2026 ReShare. Cùng trao đúng, chia sẻ bền lâu.</span>
-        <span><RouterLink :to="PRIVACY_POLICY_PATH">Chính sách quyền riêng tư</RouterLink> · Cổng nội bộ</span>
+        <span><RouterLink :to="PRIVACY_POLICY_PATH">Chính sách quyền riêng tư</RouterLink> · <RouterLink :to="TERMS_OF_USE_PATH">Điều khoản sử dụng</RouterLink> · Cổng nội bộ</span>
       </div>
     </div>
   </footer>
