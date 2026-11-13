@@ -29,6 +29,8 @@ struct HomeView: View {
 
     // Chiến dịch khẩn cấp đang tiếp nhận (đọc từ Firestore); không có thì ẩn thẻ
     @State private var urgentCampaign: DonationCampaign? = nil
+    // Điểm tiếp nhận đang hoạt động (cờ isDemo quyết định nhãn "minh hoạ" trên các thẻ)
+    @State private var hubs: [HubRecord]? = nil
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -41,15 +43,16 @@ struct HomeView: View {
                     }
                 )
 
-                // 2. Mở danh sách điểm tiếp nhận mẫu (chưa có trạm hoạt động)
+                // 2. Mở danh sách điểm tiếp nhận (nhãn minh hoạ theo dữ liệu hubs)
                 NearbyHubHomeCard(
+                    hubs: hubs,
                     onAction: {
                         showHubsSheet = true
                     }
                 )
 
                 // 3. Nút kêu gọi Quyên góp nhanh bằng Camera AI (Đã Việt hóa 100%)
-                DonateActionCard(onAction: {
+                DonateActionCard(allHubsDemo: hubs.map { !$0.isEmpty && $0.allSatisfy(\.isDemo) }, onAction: {
                     showCamera = true
                 })
 
@@ -115,10 +118,12 @@ struct HomeView: View {
         .task {
             await loadRecentDonations()
             await loadUrgentCampaign()
+            await loadHubs()
         }
         .refreshable {
             await loadRecentDonations()
             await loadUrgentCampaign()
+            await loadHubs()
         }
         .onChange(of: showCamera) { _, isOpen in
             if !isOpen {
@@ -127,6 +132,11 @@ struct HomeView: View {
                 }
             }
         }
+    }
+
+    // Lỗi mạng thì giữ nil: thẻ hiện chữ chung, không khẳng định điểm nào đang hoạt động hay minh hoạ.
+    private func loadHubs() async {
+        if let records = try? await FirestoreService.shared.fetchActiveHubs() { hubs = records }
     }
 
     // Chiến dịch khẩn cấp đầu tiên trong danh sách đang tiếp nhận (đã sắp khẩn cấp lên trước)

@@ -1,13 +1,16 @@
 import SwiftUI
 
-/// Hero Card mở luồng chụp ảnh và tạo đơn quyên góp thử nghiệm
+/// Hero Card mở luồng chụp ảnh và tạo đơn quyên góp.
+/// Đơn luôn được lưu thật và kho duyệt; nhãn "minh hoạ" chỉ hiện khi mọi điểm tiếp nhận đang minh hoạ.
 struct DonateActionCard: View {
+    /// true: mọi điểm tiếp nhận đang hoạt động đều là điểm minh hoạ. nil: chưa tải được.
+    var allHubsDemo: Bool? = nil
     var onAction: () -> Void = {}
 
     var body: some View {
         Button(action: onAction) {
             VStack(alignment: .leading, spacing: 16) {
-                // Hàng 1: Icon Camera + Badge trạng thái thử nghiệm
+                // Hàng 1: Icon Camera + nhãn điểm tiếp nhận minh hoạ (nếu có)
                 HStack {
                     // Icon Camera trong khung mờ
                     ZStack {
@@ -22,15 +25,17 @@ struct DonateActionCard: View {
 
                     Spacer()
 
-                    Text("Bản thử nghiệm")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(
-                            Capsule()
-                                .fill(Color(red: 0.88, green: 0.55, blue: 0.22)) // Màu cam đất nhạt
-                        )
+                    if allHubsDemo == true {
+                        Text("Điểm nhận đang minh hoạ")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(
+                                Capsule()
+                                    .fill(Color(red: 0.88, green: 0.55, blue: 0.22)) // Màu cam đất nhạt
+                            )
+                    }
                 }
 
                 // Hàng 2: Tiêu đề & Mô tả
@@ -39,7 +44,7 @@ struct DonateActionCard: View {
                         .font(.system(size: 20, weight: .bold))
                         .foregroundColor(.white)
 
-                    Text("Chụp ít nhất 3 ảnh, tự chọn danh mục và lưu đơn thử nghiệm. Chưa có trạm nhận đồ thật.")
+                    Text("Chụp ít nhất 3 ảnh, AI gợi ý danh mục, bạn xác nhận rồi gửi đơn để kho duyệt.")
                         .font(.system(size: 13, weight: .regular))
                         .foregroundColor(.white.opacity(0.85))
                         .lineSpacing(2)

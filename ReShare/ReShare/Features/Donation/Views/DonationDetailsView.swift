@@ -72,7 +72,9 @@ struct DonationDetailsView: View {
     @State private var isSubmitting: Bool = false
     @State private var submitStatus: String? = nil
     @State private var donationDocumentId: String = UUID().uuidString
-    @State private var confirmationCode: String = "#DEMO-\(Calendar.current.component(.year, from: Date()))-\(Int.random(in: 1000...9999))"
+    /// Mã đơn hiển thị cho người quyên góp, lấy từ mã tài liệu thật của đơn (không còn số ngẫu nhiên):
+    /// nhân sự đối chiếu được với mã đơn trên Web Admin.
+    private var confirmationCode: String { "RS-" + String(donationDocumentId.prefix(8)).uppercased() }
     @State private var submittedItem: DonationItem? = nil
     @State private var uploadedImageAssets: [CloudinaryUploadedImage] = []
     @State private var errorMessage: String? = nil
@@ -147,7 +149,8 @@ struct DonationDetailsView: View {
         .navigationDestination(isPresented: $navigateToSuccess) {
             DonationSuccessView(
                 item: submittedItem,
-                confirmationCode: confirmationCode,
+                confirmationCode: submittedItem?.confirmationCode ?? confirmationCode,
+                hubIsDemo: selectedHub?.isDemo ?? true,
                 onBackToHome: {
                     if let onBackToHome = onBackToHome {
                         onBackToHome()
@@ -450,21 +453,28 @@ struct DonationDetailsView: View {
                 .foregroundColor(sectionHeaderColor)
 
             HStack(spacing: 12) {
+                // Giữ cả hai hình thức để demo; phần nào chưa vận hành thì nói rõ ngay trên thẻ.
                 deliveryOptionCard(
-                    title: "Mô phỏng gửi tại điểm",
-                    subtitle: "Chưa nhận đồ thật",
+                    title: "Gửi tại điểm",
+                    subtitle: selectedHub?.isDemo == false ? "Mang đồ tới điểm đã chọn" : "Điểm đang minh hoạ",
                     icon: "figure.walk",
                     isSelected: deliveryMethod == 0,
                     onTap: { deliveryMethod = 0 }
                 )
 
                 deliveryOptionCard(
-                    title: "Mô phỏng nhận tận nơi",
-                    subtitle: "Chưa có người đến lấy",
+                    title: "Nhận tận nơi",
+                    subtitle: "Chưa vận hành",
                     icon: "bicycle",
                     isSelected: deliveryMethod == 1,
                     onTap: { deliveryMethod = 1 }
                 )
+            }
+
+            if deliveryMethod == 1 {
+                Text("Nhận tận nơi chưa vận hành: đơn vẫn được lưu và kho duyệt, nhưng chưa có người đến lấy đồ.")
+                    .font(.system(size: 12))
+                    .foregroundColor(Color(red: 0.85, green: 0.45, blue: 0.10))
             }
         }
     }
@@ -504,7 +514,8 @@ struct DonationDetailsView: View {
                     Text(submitStatus ?? "Đang lưu đơn...")
                         .font(.system(size: 15, weight: .semibold))
                 } else {
-                    Text(selectedHub?.isDemo == false ? "Gửi đơn quyên góp" : "Lưu đơn thử nghiệm")
+                    // Đơn luôn được lưu thật và kho duyệt; chỉ điểm tiếp nhận có thể đang minh hoạ (đã ghi rõ ở trên).
+                    Text("Gửi đơn quyên góp")
                         .font(.system(size: 16, weight: .bold))
                     Image(systemName: "arrow.right")
                         .font(.system(size: 14, weight: .bold))
@@ -614,9 +625,11 @@ struct DonationDetailsView: View {
                 imageProvider: "cloudinary",
                 imagePublicIds: finalAssets.map(\.publicId),
                 createdAt: Date(),
-                statusNote: selectedHub.isDemo
-                    ? "Đơn thử nghiệm; điểm \(selectedHub.name) chưa hoạt động và không tiếp nhận đồ thật."
-                    : "Chờ kho duyệt; mang đồ tới điểm \(selectedHub.name) sau khi đơn được duyệt.",
+                statusNote: deliveryText == "pickup"
+                    ? "Chờ kho duyệt; nhận tận nơi chưa vận hành nên chưa có người đến lấy."
+                    : selectedHub.isDemo
+                        ? "Chờ kho duyệt; điểm \(selectedHub.name) đang minh hoạ nên chưa mang đồ tới điểm này."
+                        : "Chờ kho duyệt; mang đồ tới điểm \(selectedHub.name) sau khi đơn được duyệt.",
                 campaignId: campaign?.id,
                 hubId: selectedHub.id,
                 deliveryMethod: deliveryText,
@@ -664,7 +677,7 @@ struct DonationDetailsView: View {
 
     private func defaultDescription(hub: ReShareHub) -> String {
         if let campaign { return "Quyên góp cho chiến dịch \(campaign.title)" }
-        return hub.isDemo ? "Đơn thử nghiệm tại điểm mẫu \(hub.name)" : "Quyên góp tại điểm \(hub.name)"
+        return "Quyên góp tại điểm \(hub.name)"
     }
 
     /// Hub đang hoạt động từ Firestore; có chiến dịch thì chỉ giữ Hub của chiến dịch.

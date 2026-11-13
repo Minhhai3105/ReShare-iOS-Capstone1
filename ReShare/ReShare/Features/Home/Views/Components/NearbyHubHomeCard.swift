@@ -1,8 +1,20 @@
 import SwiftUI
 
-/// Thẻ mở danh sách điểm tiếp nhận minh hoạ tại Đà Nẵng
+/// Thẻ mở danh sách điểm tiếp nhận. Nội dung theo dữ liệu `hubs` (cờ isDemo), không gõ cứng "demo".
 struct NearbyHubHomeCard: View {
+    /// Điểm đang hoạt động đọc từ Firestore; nil khi chưa tải được.
+    var hubs: [HubRecord]? = nil
     var onAction: () -> Void = {}
+
+    private var realCount: Int { hubs?.filter { !$0.isDemo }.count ?? 0 }
+    private var isAllDemo: Bool { guard let hubs, !hubs.isEmpty else { return false }; return realCount == 0 }
+
+    private var subtitle: String {
+        guard let hubs else { return "Xem các điểm nhận đồ quyên góp" }
+        if hubs.isEmpty { return "Chưa có điểm tiếp nhận nào" }
+        if isAllDemo { return "Các điểm đang minh hoạ, chưa nhận đồ thật" }
+        return "\(realCount) điểm đang nhận đồ"
+    }
 
     private let primaryGreen = Color(red: 0.11, green: 0.35, blue: 0.20)
     private let mintGreen = Color(red: 0.20, green: 0.65, blue: 0.38)
@@ -25,21 +37,23 @@ struct NearbyHubHomeCard: View {
                 // Thông tin trạm
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
-                        Text("Điểm tiếp nhận mẫu")
+                        Text("Điểm tiếp nhận")
                             .font(.system(size: 13, weight: .bold))
                             .foregroundColor(.primary)
                             .lineLimit(1)
 
-                        Text("Demo")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundColor(.orange)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.orange.opacity(0.12))
-                        .clipShape(Capsule())
+                        if isAllDemo {
+                            Text("Minh hoạ")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(.orange)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.orange.opacity(0.12))
+                            .clipShape(Capsule())
+                        }
                     }
 
-                    Text("Chưa có trạm nhận đồ thật tại Đà Nẵng")
+                    Text(subtitle)
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
                 }
