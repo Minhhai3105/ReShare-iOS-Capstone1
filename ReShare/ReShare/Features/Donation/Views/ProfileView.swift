@@ -252,6 +252,10 @@ struct ProfileView: View {
                                 MenuActionRow(icon: "hand.raised.fill", title: "Chính sách quyền riêng tư", valueText: "Mở trên web")
                             }
                             Divider().padding(.leading, 50)
+                            Link(destination: Constants.Links.termsOfUse) {
+                                MenuActionRow(icon: "doc.text.fill", title: "Điều khoản sử dụng", valueText: "Mở trên web")
+                            }
+                            Divider().padding(.leading, 50)
                             Link(destination: Constants.Links.supportMail) {
                                 MenuActionRow(icon: "envelope.fill", title: "Liên hệ hỗ trợ", valueText: Constants.Links.supportEmail)
                             }

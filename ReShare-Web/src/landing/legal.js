@@ -3,7 +3,9 @@
 export const LEGAL_CONTACT_EMAIL = 'haicao206@gmail.com'
 
 export const PRIVACY_POLICY_PATH = '/chinh-sach-quyen-rieng-tu'
+export const TERMS_OF_USE_PATH = '/dieu-khoan-su-dung'
 
 export const LEGAL_LINKS = Object.freeze([
   { label: 'Chính sách quyền riêng tư', to: PRIVACY_POLICY_PATH },
+  { label: 'Điều khoản sử dụng', to: TERMS_OF_USE_PATH },
 ])

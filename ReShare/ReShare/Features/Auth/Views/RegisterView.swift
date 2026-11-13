@@ -236,29 +236,34 @@ struct RegisterView: View {
         }
     }
     
+    // Đồng ý điều khoản trước khi tạo tài khoản (App Store Guideline 1.2: người dùng phải đồng ý
+    // điều khoản không dung thứ nội dung xấu). Hai link mở trang pháp lý trên website.
+    private var termsAgreementText: AttributedString {
+        let markdown = "Tôi đủ 16 tuổi (hoặc có cha mẹ, người giám hộ đồng ý) và đồng ý với "
+            + "[Điều khoản sử dụng](\(Constants.Links.termsOfUse.absoluteString)) cùng "
+            + "[Chính sách quyền riêng tư](\(Constants.Links.privacyPolicy.absoluteString)) của ReShare."
+        return (try? AttributedString(markdown: markdown)) ?? AttributedString(markdown)
+    }
+
     private var termsCheckboxView: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Button(action: { isAgreeToTerms.toggle()}) {
+        HStack(alignment: .top, spacing: 6) {
+            Button(action: { isAgreeToTerms.toggle() }) {
                 Image(systemName: isAgreeToTerms ? "checkmark.square.fill" : "square")
                     .font(.system(size: 20))
-                    .foregroundColor(isAgreeToTerms ? AppColors.primary: AppColors.textTertiary)
+                    .foregroundColor(isAgreeToTerms ? AppColors.primary : AppColors.textTertiary)
+                    .frame(width: 44, height: 44)
             }
-            
-            Text("I agree to the ")
+            .accessibilityLabel("Đồng ý điều khoản sử dụng và chính sách quyền riêng tư")
+            .accessibilityValue(isAgreeToTerms ? "Đã chọn" : "Chưa chọn")
+
+            Text(termsAgreementText)
                 .font(.system(size: 13))
                 .foregroundColor(AppColors.textSecondary)
-            +
-            Text("Community Donation Guidelines")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(AppColors.primary)
-                .underline()
-            +
-            Text(" & Terms ")
-                .font(.system(size: 13))
-                .foregroundColor(AppColors.textSecondary)
+                .tint(AppColors.primary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 12)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 2)
     }
     
     private var createAccountButton: some View {
@@ -340,7 +345,7 @@ struct RegisterView: View {
             return
         }
         guard isAgreeToTerms else {
-            viewModel.errorMessage = "Vui lòng đồng ý với Điều khoản cộng đồng"
+            viewModel.errorMessage = "Vui lòng đồng ý với Điều khoản sử dụng và Chính sách quyền riêng tư"
             return
         }
         viewModel.register(appState: appState)
