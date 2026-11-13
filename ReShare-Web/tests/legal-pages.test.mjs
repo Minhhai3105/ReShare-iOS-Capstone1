@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
-import { LEGAL_CONTACT_EMAIL, LEGAL_LINKS, PRIVACY_POLICY_PATH } from '../src/landing/legal.js'
+import { LEGAL_CONTACT_EMAIL, LEGAL_LINKS, PRIVACY_POLICY_PATH, TERMS_OF_USE_PATH } from '../src/landing/legal.js'
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')
 
@@ -31,4 +31,25 @@ test('Footer landing có link tới chính sách và email liên hệ thật tha
   assert.match(footer, /:to="PRIVACY_POLICY_PATH"/)
   assert.match(footer, /mailto:\$\{LEGAL_CONTACT_EMAIL\}/)
   assert.ok(!footer.includes('Kênh liên hệ sẽ được cập nhật'))
+})
+
+test('Điều khoản sử dụng: đường dẫn cố định, có mục không dung thứ, báo cáo/chặn, xử lý trong 24 giờ và tuổi tối thiểu', () => {
+  assert.equal(TERMS_OF_USE_PATH, '/dieu-khoan-su-dung')
+  assert.ok(LEGAL_LINKS.some((link) => link.to === TERMS_OF_USE_PATH))
+  const swiftConstants = read('../ReShare/ReShare/Core/Utilities/Constants.swift')
+  assert.ok(swiftConstants.includes(`https://reshare.pages.dev${TERMS_OF_USE_PATH}`))
+  assert.match(read('src/router/index.js'), /path: TERMS_OF_USE_PATH/)
+  const page = read('src/landing/TermsOfUsePage.vue')
+  for (const phrase of ['không dung thứ', 'báo cáo</strong>', 'chặn</strong>', '24 giờ', 'đủ 16 tuổi', 'Xoá tài khoản', 'minh hoạ']) {
+    assert.ok(page.includes(phrase), `thiếu "${phrase}"`)
+  }
+  assert.match(read('src/landing/components/LandingFooter.vue'), /:to="TERMS_OF_USE_PATH"/)
+})
+
+test('Màn đăng ký iOS: tiếng Việt, link tới cả điều khoản và chính sách, nêu tuổi tối thiểu', () => {
+  const register = read('../ReShare/ReShare/Features/Auth/Views/RegisterView.swift')
+  assert.ok(!register.includes('I agree to the'), 'bỏ chữ tiếng Anh cũ')
+  assert.match(register, /Constants\.Links\.termsOfUse/)
+  assert.match(register, /Constants\.Links\.privacyPolicy/)
+  assert.match(register, /16 tuổi/)
 })
