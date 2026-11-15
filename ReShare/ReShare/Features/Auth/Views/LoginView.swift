@@ -47,7 +47,7 @@ struct LoginView: View {
                         // Hiển thị lỗi từ Firebase nếu có
                         if let error = viewModel.errorMessage ?? appState.sessionError {
                             Text(error)
-                                .font(.system(size: 13, weight: .medium))
+                                .scaledFont(size: 13, weight: .medium)
                                 .foregroundColor(AppColors.rejected)
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal)
@@ -106,7 +106,7 @@ struct LoginView: View {
                 .accessibilityHidden(true)
 
             Text("ReShare VN")
-                .font(.system(size: 13, weight: .semibold))
+                .scaledFont(size: 13, weight: .semibold)
                 .foregroundStyle(AppColors.primary)
         }
         .padding(.horizontal, 14)
@@ -127,11 +127,11 @@ struct LoginView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 Text("Chào mừng trở lại")
-                    .font(.system(size: 30, weight: .bold))
+                    .scaledFont(size: 30, weight: .bold)
                     .foregroundColor(AppColors.textPrimary)
 
                 Text("Đăng nhập để tiếp tục dùng ReShare.")
-                    .font(.system(size: 14, weight: .regular))
+                    .scaledFont(size: 14, weight: .regular)
                     .foregroundColor(AppColors.textSecondary)
             }
         }
@@ -145,12 +145,12 @@ struct LoginView: View {
             inputSection(title: "Email") {
                 HStack(spacing: 12) {
                     Image(systemName: "envelope")
-                        .font(.system(size: 17))
+                        .scaledFont(size: 17)
                         .foregroundStyle(AppColors.textTertiary)
                         .frame(width: 20)
 
                     TextField("Địa chỉ email", text: $viewModel.email)
-                        .font(.system(size: 15))
+                        .scaledFont(size: 15)
                         .textContentType(.emailAddress)
                         .keyboardType(.emailAddress)
                         .textInputAutocapitalization(.never)
@@ -162,22 +162,22 @@ struct LoginView: View {
             inputSection(title: "Mật khẩu") {
                 HStack(spacing: 12) {
                     Image(systemName: "lock")
-                        .font(.system(size: 17))
+                        .scaledFont(size: 17)
                         .foregroundStyle(AppColors.textTertiary)
                         .frame(width: 20)
 
                     if isPasswordVisible {
                         TextField("Mật khẩu", text: $viewModel.password)
-                            .font(.system(size: 15))
+                            .scaledFont(size: 15)
                             .textContentType(.none)
                     } else {
                         SecureField("Mật khẩu", text: $viewModel.password)
-                            .font(.system(size: 15))
+                            .scaledFont(size: 15)
                     }
 
                     Button(action: { isPasswordVisible.toggle() }) {
                         Image(systemName: isPasswordVisible ? "eye" : "eye.slash")
-                            .font(.system(size: 15))
+                            .scaledFont(size: 15)
                             .foregroundStyle(AppColors.textTertiary)
                             .frame(width: 44, height: 44)
                     }
@@ -191,7 +191,7 @@ struct LoginView: View {
     private func inputSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
-                .font(.system(size: 14, weight: .semibold))
+                .scaledFont(size: 14, weight: .semibold)
                 .foregroundColor(AppColors.textPrimary)
 
             HStack {
@@ -211,7 +211,7 @@ struct LoginView: View {
             Spacer()
             Button(action: { showForgotPassword = true }) {
                 Text("Quên mật khẩu?")
-                    .font(.system(size: 14, weight: .semibold))
+                    .scaledFont(size: 14, weight: .semibold)
                     .foregroundColor(AppColors.primary)
                     .frame(minHeight: 44)
             }
@@ -229,7 +229,7 @@ struct LoginView: View {
                         .tint(.white)
                 } else {
                     Text("Đăng nhập")
-                        .font(.system(size: 16, weight: .semibold))
+                        .scaledFont(size: 16, weight: .semibold)
                 }
             }
             .frame(maxWidth: .infinity)
@@ -250,7 +250,7 @@ struct LoginView: View {
                 .frame(height: 1)
 
             Text("HOẶC")
-                .font(.system(size: 11, weight: .medium))
+                .scaledFont(size: 11, weight: .medium)
                 .foregroundColor(AppColors.textTertiary)
                 .lineLimit(1)
                 .fixedSize()
@@ -282,7 +282,7 @@ struct LoginView: View {
                                 .accessibilityHidden(true)
                         }
                         Text(viewModel.isGoogleLoading ? "Đang mở Google…" : "Tiếp tục với Google")
-                            .font(.system(size: 15, weight: .semibold))
+                            .scaledFont(size: 15, weight: .semibold)
                     }
                     .foregroundColor(AppColors.textPrimary)
                     .frame(maxWidth: .infinity)
@@ -325,7 +325,7 @@ struct LoginView: View {
     // Điều khoản & Chính sách ngay dưới nút (giống ô đồng ý ở màn Đăng ký, App Store 1.2 và 5.1.1).
     private var googleConsentText: some View {
         Text(googleConsentMarkdown)
-            .font(.system(size: 12))
+            .scaledFont(size: 12)
             .foregroundColor(AppColors.textSecondary)
             .tint(AppColors.primary)
             .multilineTextAlignment(.center)
@@ -343,13 +343,13 @@ struct LoginView: View {
     private var signUpLinkView: some View {
         HStack(spacing: 5) {
             Text("Chưa có tài khoản?")
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(AppColors.textSecondary)
 
             Button("Đăng ký") {
                 navigateToRegister = true
             }
-            .font(.system(size: 14, weight: .bold))
+            .scaledFont(size: 14, weight: .bold)
             .foregroundColor(AppColors.primary)
         }
     }
@@ -358,11 +358,11 @@ struct LoginView: View {
     private var trustBadgeView: some View {
         HStack(spacing: 6) {
             Image(systemName: "checkmark.shield")
-                .font(.system(size: 13))
+                .scaledFont(size: 13)
                 .foregroundColor(AppColors.textTertiary)
 
             Text("Trao đổi đồ an toàn trong cộng đồng")
-                .font(.system(size: 12, weight: .regular))
+                .scaledFont(size: 12, weight: .regular)
                 .foregroundColor(AppColors.textTertiary)
         }
     }

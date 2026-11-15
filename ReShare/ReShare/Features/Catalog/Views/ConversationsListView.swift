@@ -50,7 +50,7 @@ struct ConversationsListView: View {
                         Image(systemName: "line.3.horizontal.decrease.circle.fill")
                             .foregroundColor(primaryGreen)
                         Text("Người hỏi xin: \(title)")
-                            .font(.system(size: 12, weight: .bold))
+                            .scaledFont(size: 12, weight: .bold)
                             .foregroundColor(primaryGreen)
                             .lineLimit(1)
                         Spacer()
@@ -122,7 +122,7 @@ struct ConversationsListView: View {
                         }
                     }) {
                         Text(filter)
-                            .font(.system(size: 13, weight: selectedFilter == filter ? .bold : .medium))
+                            .scaledFont(size: 13, weight: selectedFilter == filter ? .bold : .medium)
                             .foregroundColor(selectedFilter == filter ? .white : Color.primary)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 7)
@@ -150,7 +150,7 @@ struct ConversationsListView: View {
                         .fill(isMyDonation ? Color(red: 0.11, green: 0.35, blue: 0.20) : Color.blue.opacity(0.8))
                         .frame(width: 48, height: 48)
                     Text(conv.partnerInitials(currentUserId: currentUserId))
-                        .font(.system(size: 14, weight: .bold))
+                        .scaledFont(size: 14, weight: .bold)
                         .foregroundColor(.white)
                 }
 
@@ -166,13 +166,13 @@ struct ConversationsListView: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text(conv.partnerName(currentUserId: currentUserId))
-                        .font(.system(size: 14, weight: .bold))
+                        .scaledFont(size: 14, weight: .bold)
                         .foregroundColor(.primary)
 
                     // Nhãn phân định vai trò rõ ràng
                     if isMyDonation {
                         Text("Khách xin")
-                            .font(.system(size: 9, weight: .bold))
+                            .scaledFont(size: 9, weight: .bold)
                             .foregroundColor(primaryGreen)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
@@ -180,7 +180,7 @@ struct ConversationsListView: View {
                             .clipShape(Capsule())
                     } else {
                         Text("Người cho")
-                            .font(.system(size: 9, weight: .bold))
+                            .scaledFont(size: 9, weight: .bold)
                             .foregroundColor(.blue)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
@@ -190,7 +190,7 @@ struct ConversationsListView: View {
 
                     if blockedUserIds.contains(partnerId) {
                         Text("Đã chặn")
-                            .font(.system(size: 9, weight: .bold))
+                            .scaledFont(size: 9, weight: .bold)
                             .foregroundColor(.red)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
@@ -200,7 +200,7 @@ struct ConversationsListView: View {
 
                     if conv.appointmentStatus == "completed" {
                         Text("Đã tặng")
-                            .font(.system(size: 9, weight: .bold))
+                            .scaledFont(size: 9, weight: .bold)
                             .foregroundColor(primaryGreen)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
@@ -208,7 +208,7 @@ struct ConversationsListView: View {
                             .clipShape(Capsule())
                     } else if conv.isReserved {
                         Text("Đã hẹn")
-                            .font(.system(size: 9, weight: .bold))
+                            .scaledFont(size: 9, weight: .bold)
                             .foregroundColor(.orange)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
@@ -216,7 +216,7 @@ struct ConversationsListView: View {
                             .clipShape(Capsule())
                     } else if conv.appointmentStatus == "proposed" {
                         Text("Đang hẹn")
-                            .font(.system(size: 9, weight: .bold))
+                            .scaledFont(size: 9, weight: .bold)
                             .foregroundColor(.purple)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
@@ -227,24 +227,24 @@ struct ConversationsListView: View {
                     Spacer()
 
                     Text(formatTime(conv.lastMessageTime))
-                        .font(.system(size: 11, weight: hasNewIncoming ? .bold : .regular))
+                        .scaledFont(size: 11, weight: hasNewIncoming ? .bold : .regular)
                         .foregroundColor(hasNewIncoming ? primaryGreen : .secondary)
                 }
 
                 // Món đồ liên quan
                 HStack(spacing: 4) {
                     Image(systemName: isMyDonation ? "arrow.up.heart.fill" : "arrow.down.heart.fill")
-                        .font(.system(size: 10))
+                        .scaledFont(size: 10)
                         .foregroundColor(isMyDonation ? primaryGreen : .blue)
                     Text(isMyDonation ? "Món của bạn: \(conv.itemTitle)" : "Đang xin: \(conv.itemTitle)")
-                        .font(.system(size: 11, weight: .semibold))
+                        .scaledFont(size: 11, weight: .semibold)
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                 }
 
                 // Nội dung tin nhắn cuối cùng
                 Text(conv.lastMessage)
-                    .font(.system(size: 12, weight: hasNewIncoming ? .semibold : .regular))
+                    .scaledFont(size: 12, weight: hasNewIncoming ? .semibold : .regular)
                     .foregroundColor(hasNewIncoming ? .primary : .secondary)
                     .lineLimit(1)
             }
@@ -256,13 +256,13 @@ struct ConversationsListView: View {
         VStack(spacing: 12) {
             Spacer()
             Image(systemName: "bubble.left.and.bubble.right")
-                .font(.system(size: 48))
+                .scaledFont(size: 48)
                 .foregroundColor(.secondary.opacity(0.35))
             Text("Chưa có tin nhắn phù hợp")
-                .font(.system(size: 16, weight: .bold))
+                .scaledFont(size: 16, weight: .bold)
                 .foregroundColor(primaryGreen)
             Text(emptyMessageForFilter)
-                .font(.system(size: 13))
+                .scaledFont(size: 13)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .lineSpacing(3)

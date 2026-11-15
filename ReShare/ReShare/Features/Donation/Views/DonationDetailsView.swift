@@ -137,12 +137,13 @@ struct DonationDetailsView: View {
             ToolbarItem(placement: .topBarLeading) {
                 Button(action: { dismiss() }) {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 14, weight: .bold))
+                        .scaledFont(size: 14, weight: .bold)
                         .foregroundColor(primaryGreen)
                         .frame(width: 36, height: 36)
                         .background(Circle().fill(Color.white))
                         .shadow(color: Color.black.opacity(0.06), radius: 4)
                 }
+                .accessibilityLabel("Quay lại")
             }
         }
         // Điều hướng sang Bước 3: Màn hình Thành công
@@ -187,7 +188,7 @@ struct DonationDetailsView: View {
     private var capturedPhotosCarousel: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("ẢNH ĐÃ CHỤP (\(capturedImages.count) TẤM)")
-                .font(.system(size: 12, weight: .bold))
+                .scaledFont(size: 12, weight: .bold)
                 .foregroundColor(sectionHeaderColor)
 
             ScrollView(.horizontal, showsIndicators: false) {
@@ -211,12 +212,12 @@ struct DonationDetailsView: View {
     private var itemInfoSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("CHI TIẾT MÓN ĐỒ")
-                .font(.system(size: 12, weight: .bold))
+                .scaledFont(size: 12, weight: .bold)
                 .foregroundColor(sectionHeaderColor)
 
             VStack(spacing: 12) {
                 TextField("Tên món đồ (VD: Áo ấm, Sách giáo khoa...)", text: $itemTitle)
-                    .font(.system(size: 15, weight: .medium))
+                    .scaledFont(size: 15, weight: .medium)
                     .foregroundColor(textDark)
                     .padding(14)
                     .background(Color.white)
@@ -229,12 +230,12 @@ struct DonationDetailsView: View {
                 // Phân loại danh mục
                 HStack {
                     Text("Danh mục")
-                        .font(.system(size: 14, weight: .semibold))
+                        .scaledFont(size: 14, weight: .semibold)
                         .foregroundColor(textDark)
                     Spacer()
                     if let campaign {
                         Label(campaign.categoryTitle, systemImage: "lock.fill")
-                            .font(.system(size: 14, weight: .semibold))
+                            .scaledFont(size: 14, weight: .semibold)
                             .foregroundColor(primaryGreen)
                     } else {
                         Picker("Danh mục", selection: Binding(
@@ -259,26 +260,26 @@ struct DonationDetailsView: View {
 
                 if isClassifying {
                     Text("Đang phân tích ảnh đầu tiên… Bạn vẫn có thể chọn danh mục thủ công.")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(textMuted)
                 } else if let aiPrediction {
                     Text("AI gợi ý: \(aiPrediction.category.title) · \(Int((aiPrediction.confidence * 100).rounded()))% tin cậy\(aiPrediction.confidence < 0.6 ? " (thấp, hãy chọn thủ công)" : "")")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(textMuted)
                     if let campaign, aiPrediction.confidence >= 0.6, aiPrediction.category != campaign.donationCategory {
                         Text("Ảnh có vẻ là \(aiPrediction.category.title.lowercased()), nhưng chiến dịch này chỉ nhận \(campaign.categoryTitle.lowercased()). Hãy kiểm tra lại món đồ hoặc quyên góp tự do.")
-                            .font(.system(size: 12, weight: .semibold))
+                            .scaledFont(size: 12, weight: .semibold)
                             .foregroundColor(Color(red: 0.85, green: 0.45, blue: 0.10))
                     }
                 } else if didClassify {
                     Text("Không có gợi ý AI. Bạn có thể chọn danh mục thủ công.")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(textMuted)
                 }
 
                 if didConfirmCategory {
                     Label("Đã xác nhận danh mục: \(selectedCategory.title)", systemImage: "checkmark.circle.fill")
-                        .font(.system(size: 15, weight: .semibold))
+                        .scaledFont(size: 15, weight: .semibold)
                         .foregroundColor(primaryGreen)
                         .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
                         .padding(.horizontal, 14)
@@ -289,7 +290,7 @@ struct DonationDetailsView: View {
                         didConfirmCategory = true
                     } label: {
                         Label("Chạm để xác nhận danh mục: \(selectedCategory.title)", systemImage: "checkmark.circle")
-                            .font(.system(size: 15, weight: .semibold))
+                            .scaledFont(size: 15, weight: .semibold)
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
                             .padding(.horizontal, 14)
@@ -302,7 +303,7 @@ struct DonationDetailsView: View {
                 HStack(spacing: 12) {
                     TextField("Số lượng (VD: 2)", text: $quantityText)
                         .keyboardType(.decimalPad)
-                        .font(.system(size: 15, weight: .medium))
+                        .scaledFont(size: 15, weight: .medium)
                         .foregroundColor(textDark)
 
                     Picker("Đơn vị", selection: $selectedUnit) {
@@ -324,7 +325,7 @@ struct DonationDetailsView: View {
                 // Chọn tình trạng đồ
                 HStack {
                     Text("Độ mới")
-                        .font(.system(size: 14, weight: .semibold))
+                        .scaledFont(size: 14, weight: .semibold)
                         .foregroundColor(textDark)
                     Spacer()
                     Picker("Độ mới", selection: $selectedCondition) {
@@ -350,17 +351,17 @@ struct DonationDetailsView: View {
     private var hubSelectionSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(campaign == nil ? "ĐIỂM TIẾP NHẬN" : "ĐIỂM TIẾP NHẬN CỦA CHIẾN DỊCH")
-                .font(.system(size: 12, weight: .bold))
+                .scaledFont(size: 12, weight: .bold)
                 .foregroundColor(sectionHeaderColor)
 
             if isLoadingHubs {
                 ProgressView("Đang tải điểm tiếp nhận…")
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else if let selectedHub {
                 if selectedHub.isDemo {
                     Text("Điểm này đang minh hoạ: đơn được lưu thật và kho sẽ duyệt, nhưng chưa mang đồ tới vị trí trên bản đồ.")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(Color(red: 0.85, green: 0.45, blue: 0.10))
                 }
                 hubPickerAndMap(selectedHub)
@@ -369,11 +370,11 @@ struct DonationDetailsView: View {
                     Text(hubsLoadFailed
                          ? "Không tải được điểm tiếp nhận. Kiểm tra kết nối rồi thử lại."
                          : "Chưa có điểm tiếp nhận nào đang hoạt động\(campaign == nil ? "" : " cho chiến dịch này"). Chưa thể gửi đơn.")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(Color(red: 0.85, green: 0.45, blue: 0.10))
                     if hubsLoadFailed {
                         Button("Thử lại") { Task { await loadHubs() } }
-                            .font(.system(size: 13, weight: .bold))
+                            .scaledFont(size: 13, weight: .bold)
                             .foregroundColor(primaryGreen)
                     }
                 }
@@ -397,13 +398,13 @@ struct DonationDetailsView: View {
                 MapAnnotation(coordinate: hub.coordinate) {
                     VStack(spacing: 2) {
                         Image(systemName: "mappin.circle.fill")
-                            .font(.system(size: 26))
+                            .scaledFont(size: 26)
                             .foregroundColor(primaryGreen)
                             .background(Circle().fill(Color.white).frame(width: 16, height: 16))
                             .shadow(radius: 4)
 
                         Text(hub.name)
-                            .font(.system(size: 10, weight: .bold))
+                            .scaledFont(size: 10, weight: .bold)
                             .foregroundColor(.white)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
@@ -423,14 +424,14 @@ struct DonationDetailsView: View {
             HStack(spacing: 8) {
                 Image(systemName: "mappin.circle.fill")
                     .foregroundColor(primaryGreen)
-                    .font(.system(size: 16))
+                    .scaledFont(size: 16)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(hub.address)
-                        .font(.system(size: 13, weight: .semibold))
+                        .scaledFont(size: 13, weight: .semibold)
                         .foregroundColor(textDark)
                     Text("⏰ \(hub.openHours)")
-                        .font(.system(size: 11, weight: .medium))
+                        .scaledFont(size: 11, weight: .medium)
                         .foregroundColor(textMuted)
                 }
             }
@@ -449,7 +450,7 @@ struct DonationDetailsView: View {
     private var deliveryMethodSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("HÌNH THỨC GỬI ĐỒ")
-                .font(.system(size: 12, weight: .bold))
+                .scaledFont(size: 12, weight: .bold)
                 .foregroundColor(sectionHeaderColor)
 
             HStack(spacing: 12) {
@@ -473,7 +474,7 @@ struct DonationDetailsView: View {
 
             if deliveryMethod == 1 {
                 Text("Nhận tận nơi chưa vận hành: đơn vẫn được lưu và kho duyệt, nhưng chưa có người đến lấy đồ.")
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(Color(red: 0.85, green: 0.45, blue: 0.10))
             }
         }
@@ -483,15 +484,15 @@ struct DonationDetailsView: View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 6) {
                 Image(systemName: icon)
-                    .font(.system(size: 20))
+                    .scaledFont(size: 20)
                     .foregroundColor(isSelected ? primaryGreen : textMuted)
 
                 Text(title)
-                    .font(.system(size: 14, weight: .bold))
+                    .scaledFont(size: 14, weight: .bold)
                     .foregroundColor(textDark)
 
                 Text(subtitle)
-                    .font(.system(size: 11, weight: .medium))
+                    .scaledFont(size: 11, weight: .medium)
                     .foregroundColor(textMuted)
             }
             .padding(12)
@@ -512,13 +513,13 @@ struct DonationDetailsView: View {
                 if isSubmitting {
                     ProgressView().tint(.white)
                     Text(submitStatus ?? "Đang lưu đơn...")
-                        .font(.system(size: 15, weight: .semibold))
+                        .scaledFont(size: 15, weight: .semibold)
                 } else {
                     // Đơn luôn được lưu thật và kho duyệt; chỉ điểm tiếp nhận có thể đang minh hoạ (đã ghi rõ ở trên).
                     Text("Gửi đơn quyên góp")
-                        .font(.system(size: 16, weight: .bold))
+                        .scaledFont(size: 16, weight: .bold)
                     Image(systemName: "arrow.right")
-                        .font(.system(size: 14, weight: .bold))
+                        .scaledFont(size: 14, weight: .bold)
                 }
             }
             .frame(maxWidth: .infinity)
@@ -704,14 +705,14 @@ struct DonationDetailsView: View {
     private func campaignBanner(_ campaign: DonationCampaign) -> some View {
         HStack(spacing: 10) {
             Image(systemName: campaign.imageSystemName)
-                .font(.system(size: 18))
+                .scaledFont(size: 18)
                 .foregroundColor(primaryGreen)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Quyên góp cho chiến dịch")
-                    .font(.system(size: 11, weight: .semibold))
+                    .scaledFont(size: 11, weight: .semibold)
                     .foregroundColor(textMuted)
                 Text(campaign.title)
-                    .font(.system(size: 14, weight: .bold))
+                    .scaledFont(size: 14, weight: .bold)
                     .foregroundColor(textDark)
                     .lineLimit(2)
             }

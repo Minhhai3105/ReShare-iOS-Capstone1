@@ -19,7 +19,7 @@ struct DonateActionCard: View {
                             .frame(width: 44, height: 44)
 
                         Image(systemName: "camera")
-                            .font(.system(size: 20, weight: .semibold))
+                            .scaledFont(size: 20, weight: .semibold)
                             .foregroundColor(.white)
                     }
 
@@ -27,7 +27,7 @@ struct DonateActionCard: View {
 
                     if allHubsDemo == true {
                         Text("Điểm nhận đang minh hoạ")
-                            .font(.system(size: 12, weight: .bold))
+                            .scaledFont(size: 12, weight: .bold)
                             .foregroundColor(.white)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
@@ -41,11 +41,11 @@ struct DonateActionCard: View {
                 // Hàng 2: Tiêu đề & Mô tả
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Quyên góp đồ dùng")
-                        .font(.system(size: 20, weight: .bold))
+                        .scaledFont(size: 20, weight: .bold)
                         .foregroundColor(.white)
 
                     Text("Chụp ít nhất 3 ảnh, AI gợi ý danh mục, bạn xác nhận rồi gửi đơn để kho duyệt.")
-                        .font(.system(size: 13, weight: .regular))
+                        .scaledFont(size: 13, weight: .regular)
                         .foregroundColor(.white.opacity(0.85))
                         .lineSpacing(2)
                         .multilineTextAlignment(.leading)
@@ -54,7 +54,7 @@ struct DonateActionCard: View {
                 // Hàng 3: Thời gian ước tính + Nút mũi tên tròn
                 HStack {
                     Text("Chụp 3–6 ảnh món đồ")
-                        .font(.system(size: 12, weight: .medium))
+                        .scaledFont(size: 12, weight: .medium)
                         .foregroundColor(Color(red: 0.65, green: 0.88, blue: 0.70)) // Xanh bạc hà nhạt
 
                     Spacer()
@@ -66,7 +66,7 @@ struct DonateActionCard: View {
                             .frame(width: 32, height: 32)
 
                         Image(systemName: "arrow.right")
-                            .font(.system(size: 13, weight: .bold))
+                            .scaledFont(size: 13, weight: .bold)
                             .foregroundColor(Color(red: 0.11, green: 0.27, blue: 0.16))
                     }
                 }

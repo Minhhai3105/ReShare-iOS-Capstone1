@@ -81,7 +81,7 @@ struct CommunityCatalogView: View {
                             Text(loadError)
                             Button("Thử lại") { Task { await loadCatalog() } }
                         }
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(.red)
                     }
                     itemsGridView
@@ -108,9 +108,9 @@ struct CommunityCatalogView: View {
             Button(action: { showPublishCamera = true }) {
                 HStack(spacing: 8) {
                     Image(systemName: "camera.fill")
-                        .font(.system(size: 15, weight: .bold))
+                        .scaledFont(size: 15, weight: .bold)
                     Text("Đăng tặng đồ")
-                        .font(.system(size: 14, weight: .bold))
+                        .scaledFont(size: 14, weight: .bold)
                 }
                 .foregroundColor(.white)
                 .padding(.horizontal, 18)
@@ -199,16 +199,17 @@ struct CommunityCatalogView: View {
                 if isSheet {
                     Button(action: { dismiss() }) {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 15, weight: .bold))
+                            .scaledFont(size: 15, weight: .bold)
                             .foregroundColor(Color(red: 0.11, green: 0.35, blue: 0.20))
                             .frame(width: 38, height: 38)
                             .background(Circle().fill(Color.white))
                             .shadow(color: Color.black.opacity(0.05), radius: 4)
                     }
+                    .accessibilityLabel("Quay lại")
                 }
 
                 Text("Kho đồ 0đ")
-                    .font(.system(size: 24, weight: .bold))
+                    .scaledFont(size: 24, weight: .bold)
                     .foregroundColor(Color(red: 0.11, green: 0.35, blue: 0.20))
 
                 Spacer()
@@ -224,10 +225,10 @@ struct CommunityCatalogView: View {
                     Image(systemName: "mappin.circle.fill")
                         .foregroundColor(Color(red: 0.20, green: 0.65, blue: 0.38))
                     Text("📍 \(selectedDistrict) • \(filteredItems.count) món phù hợp")
-                        .font(.system(size: 13, weight: .semibold))
+                        .scaledFont(size: 13, weight: .semibold)
                         .foregroundColor(.secondary)
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 10, weight: .bold))
+                        .scaledFont(size: 10, weight: .bold)
                         .foregroundColor(.secondary)
                 }
             }
@@ -241,13 +242,14 @@ struct CommunityCatalogView: View {
                 .foregroundColor(.secondary)
 
             TextField("Tìm quần áo, sách vở, đồ dùng 0đ...", text: $searchText)
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
 
             if !searchText.isEmpty {
                 Button(action: { searchText = "" }) {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundColor(.secondary)
                 }
+                .accessibilityLabel("Xoá nội dung tìm kiếm")
             }
         }
         .padding(.horizontal, 14)
@@ -268,7 +270,7 @@ struct CommunityCatalogView: View {
                         }
                     }) {
                         Text(categories[idx])
-                            .font(.system(size: 13, weight: selectedCategoryIndex == idx ? .bold : .medium))
+                            .scaledFont(size: 13, weight: selectedCategoryIndex == idx ? .bold : .medium)
                             .foregroundColor(selectedCategoryIndex == idx ? .white : Color.primary)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 8)
@@ -289,12 +291,12 @@ struct CommunityCatalogView: View {
             if filteredItems.isEmpty {
                 VStack(spacing: 12) {
                     Image(systemName: "tray.fill")
-                        .font(.system(size: 38))
+                        .scaledFont(size: 38)
                         .foregroundColor(.secondary.opacity(0.4))
                         .padding(.top, 30)
 
                     Text("Chưa có món đồ nào phù hợp với bộ lọc")
-                        .font(.system(size: 14, weight: .medium))
+                        .scaledFont(size: 14, weight: .medium)
                         .foregroundColor(.secondary)
 
                     Button(action: {
@@ -303,7 +305,7 @@ struct CommunityCatalogView: View {
                         searchText = ""
                     }) {
                         Text("Đặt lại bộ lọc")
-                            .font(.system(size: 13, weight: .bold))
+                            .scaledFont(size: 13, weight: .bold)
                             .foregroundColor(Color(red: 0.11, green: 0.35, blue: 0.20))
                             .padding(.horizontal, 14)
                             .padding(.vertical, 6)
@@ -330,7 +332,7 @@ struct CommunityCatalogView: View {
     private var loadMoreSection: some View {
         VStack(spacing: 6) {
             Text("Đang hiển thị \(catalogItems.count) món mới nhất. Bộ lọc và tìm kiếm chỉ áp dụng trên các món đã tải.")
-                .font(.system(size: 11))
+                .scaledFont(size: 11)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
 
@@ -340,7 +342,7 @@ struct CommunityCatalogView: View {
                         ProgressView()
                     }
                     Text(isLoadingMore ? "Đang tải..." : "Xem thêm đồ cũ hơn")
-                        .font(.system(size: 13, weight: .bold))
+                        .scaledFont(size: 13, weight: .bold)
                 }
                 .foregroundColor(Color(red: 0.11, green: 0.35, blue: 0.20))
                 .padding(.horizontal, 14)
@@ -373,7 +375,7 @@ struct CommunityCatalogView: View {
                 // Huy hiệu Free / 0đ hoặc Đã có người hẹn
                 HStack(spacing: 3) {
                     Text(item.status == .reserved ? "Đã hẹn lấy" : "Free / 0đ")
-                        .font(.system(size: 10, weight: .bold))
+                        .scaledFont(size: 10, weight: .bold)
                         .foregroundColor(item.status == .reserved ? Color.orange : Color(red: 0.08, green: 0.35, blue: 0.18))
                 }
                 .padding(.horizontal, 8)
@@ -388,7 +390,7 @@ struct CommunityCatalogView: View {
                         Image(systemName: "person.fill")
                         Text("Đồ của bạn")
                     }
-                    .font(.system(size: 9, weight: .bold))
+                    .scaledFont(size: 9, weight: .bold)
                     .foregroundColor(.white)
                     .padding(.horizontal, 7)
                     .padding(.vertical, 4)
@@ -402,22 +404,22 @@ struct CommunityCatalogView: View {
             // Thông tin món đồ
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.title)
-                    .font(.system(size: 13, weight: .bold))
+                    .scaledFont(size: 13, weight: .bold)
                     .foregroundColor(.primary)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
 
                 HStack(spacing: 4) {
                     Image(systemName: "mappin.circle")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(.secondary)
                     Text("\(item.district), Đà Nẵng")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(.secondary)
                 }
 
                 Text(item.timeAgo)
-                    .font(.system(size: 10))
+                    .scaledFont(size: 10)
                     .foregroundColor(.secondary.opacity(0.8))
             }
             .padding(.horizontal, 4)
@@ -437,16 +439,16 @@ struct CommunityCatalogView: View {
                     .fill(Color(red: 0.11, green: 0.35, blue: 0.20))
                     .frame(width: 40, height: 40)
                 Image(systemName: "arrow.3.trianglepath")
-                    .font(.system(size: 16, weight: .bold))
+                    .scaledFont(size: 16, weight: .bold)
                     .foregroundColor(.white)
             }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Mục tiêu tuần hoàn Đà Nẵng")
-                    .font(.system(size: 13, weight: .bold))
+                    .scaledFont(size: 13, weight: .bold)
                     .foregroundColor(Color(red: 0.11, green: 0.35, blue: 0.20))
                 Text("Trao tặng trực tiếp tận tay giữa các gia đình trong thành phố.")
-                    .font(.system(size: 11))
+                    .scaledFont(size: 11)
                     .foregroundColor(.secondary)
             }
 

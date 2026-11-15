@@ -124,25 +124,26 @@ struct ChatConversationView: View {
             ToolbarItem(placement: .topBarLeading) {
                 Button(action: { dismiss() }) {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 14, weight: .bold))
+                        .scaledFont(size: 14, weight: .bold)
                         .foregroundColor(primaryGreen)
                         .frame(width: 36, height: 36)
                         .background(Circle().fill(Color.white))
                         .shadow(color: Color.black.opacity(0.06), radius: 4)
                 }
+                .accessibilityLabel("Quay lại")
             }
 
             ToolbarItem(placement: .principal) {
                 VStack(spacing: 1) {
                     HStack(spacing: 5) {
                         Text(partnerDisplayName)
-                            .font(.system(size: 15, weight: .bold))
+                            .scaledFont(size: 15, weight: .bold)
                         Image(systemName: "message.fill")
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                             .foregroundColor(mintGreen)
                     }
                     Text("Trao đổi qua tin nhắn")
-                        .font(.system(size: 10))
+                        .scaledFont(size: 10)
                         .foregroundColor(.secondary)
                 }
             }
@@ -164,7 +165,7 @@ struct ChatConversationView: View {
                         }
                     } label: {
                         Image(systemName: "ellipsis.circle")
-                            .font(.system(size: 17, weight: .semibold))
+                            .scaledFont(size: 17, weight: .semibold)
                             .foregroundColor(primaryGreen)
                             .frame(width: 44, height: 44)
                     }
@@ -341,11 +342,11 @@ struct ChatConversationView: View {
         HStack(spacing: 10) {
             Image(systemName: "hand.raised.fill").foregroundColor(.red)
             Text("Bạn đã chặn người này. Hai bên không nhắn tin được cho nhau.")
-                .font(.system(size: 12))
+                .scaledFont(size: 12)
                 .foregroundColor(.primary)
             Spacer()
             Button("Bỏ chặn") { setBlocked(false) }
-                .font(.system(size: 13, weight: .bold))
+                .scaledFont(size: 13, weight: .bold)
                 .foregroundColor(primaryGreen)
                 .frame(minHeight: 44)
         }
@@ -404,12 +405,12 @@ struct ChatConversationView: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(activeItem.title)
-                        .font(.system(size: 13, weight: .bold))
+                        .scaledFont(size: 13, weight: .bold)
                         .foregroundColor(.primary)
                         .lineLimit(1)
 
                     Text(isDonor ? "Món của bạn" : "Bạn đang xin")
-                        .font(.system(size: 9, weight: .bold))
+                        .scaledFont(size: 9, weight: .bold)
                         .foregroundColor(isDonor ? primaryGreen : .blue)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
@@ -419,7 +420,7 @@ struct ChatConversationView: View {
 
                 HStack(spacing: 6) {
                     Text("Free / 0đ")
-                        .font(.system(size: 10, weight: .bold))
+                        .scaledFont(size: 10, weight: .bold)
                         .foregroundColor(Color(red: 0.08, green: 0.35, blue: 0.18))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
@@ -427,7 +428,7 @@ struct ChatConversationView: View {
                         .clipShape(Capsule())
 
                     Text("• Nhận tại: \(pickupAddressText)")
-                        .font(.system(size: 10))
+                        .scaledFont(size: 10)
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                 }
@@ -469,15 +470,15 @@ struct ChatConversationView: View {
     private var completedHandoverBanner: some View {
         HStack(spacing: 12) {
             Image(systemName: "checkmark.seal.fill")
-                .font(.system(size: 26))
+                .scaledFont(size: 26)
                 .foregroundColor(primaryGreen)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text("🎉 ĐÃ TRAO TẶNG THÀNH CÔNG (100% 0Đ)")
-                    .font(.system(size: 12, weight: .bold))
+                    .scaledFont(size: 12, weight: .bold)
                     .foregroundColor(primaryGreen)
                 Text("Hai bên đã xác nhận hoàn tất nhận đồ tại Đà Nẵng. Cảm ơn hai bạn đã lan tỏa tinh thần sẻ chia!")
-                    .font(.system(size: 10))
+                    .scaledFont(size: 10)
                     .foregroundColor(.secondary)
             }
             Spacer()
@@ -496,23 +497,23 @@ struct ChatConversationView: View {
             // Hàng tiêu đề giờ hẹn & nút hủy
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "calendar.badge.checkmark")
-                    .font(.system(size: 18))
+                    .scaledFont(size: 18)
                     .foregroundColor(primaryGreen)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Đã chốt hẹn nhận món đồ này!")
-                        .font(.system(size: 12, weight: .bold))
+                        .scaledFont(size: 12, weight: .bold)
                         .foregroundColor(primaryGreen)
 
                     if let pickup = pickupTime {
                         Text("📅 Giờ hẹn: \(formatPickupDate(pickup))")
-                            .font(.system(size: 11, weight: .medium))
+                            .scaledFont(size: 11, weight: .medium)
                             .foregroundColor(.primary)
                     }
 
                     if let deadline = reservationDeadline {
                         Text("⏳ Hạn giữ đồ: \(formatDeadlineDate(deadline)) (+2h dự phòng)")
-                            .font(.system(size: 10))
+                            .scaledFont(size: 10)
                             .foregroundColor(.secondary)
                     }
                 }
@@ -522,7 +523,7 @@ struct ChatConversationView: View {
                 if !isDeadlineExpired && !donorHandoverConfirmed && !requesterHandoverConfirmed {
                     Button(action: { showCancelReservationDialog = true }) {
                         Text("Hủy hẹn")
-                            .font(.system(size: 11, weight: .bold))
+                            .scaledFont(size: 11, weight: .bold)
                             .foregroundColor(.red)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
@@ -540,9 +541,9 @@ struct ChatConversationView: View {
                 HStack(spacing: 4) {
                     Image(systemName: donorHandoverConfirmed ? "checkmark.circle.fill" : "circle.dashed")
                         .foregroundColor(donorHandoverConfirmed ? primaryGreen : .secondary)
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                     Text(donorHandoverConfirmed ? "Người cho: Đã trao" : "Người cho: Chưa trao")
-                        .font(.system(size: 10, weight: donorHandoverConfirmed ? .bold : .regular))
+                        .scaledFont(size: 10, weight: donorHandoverConfirmed ? .bold : .regular)
                         .foregroundColor(donorHandoverConfirmed ? primaryGreen : .secondary)
                 }
                 .padding(.horizontal, 8)
@@ -554,9 +555,9 @@ struct ChatConversationView: View {
                 HStack(spacing: 4) {
                     Image(systemName: requesterHandoverConfirmed ? "checkmark.circle.fill" : "circle.dashed")
                         .foregroundColor(requesterHandoverConfirmed ? primaryGreen : .secondary)
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                     Text(requesterHandoverConfirmed ? "Người nhận: Đã nhận" : "Người nhận: Chưa nhận")
-                        .font(.system(size: 10, weight: requesterHandoverConfirmed ? .bold : .regular))
+                        .scaledFont(size: 10, weight: requesterHandoverConfirmed ? .bold : .regular)
                         .foregroundColor(requesterHandoverConfirmed ? primaryGreen : .secondary)
                 }
                 .padding(.horizontal, 8)
@@ -577,11 +578,11 @@ struct ChatConversationView: View {
                                 .scaleEffect(0.8)
                         } else {
                             Image(systemName: isDonor ? "shippingbox.fill" : "gift.fill")
-                                .font(.system(size: 13))
+                                .scaledFont(size: 13)
                         }
 
                         Text(isDonor ? "📦 Xác nhận: ĐÃ TRAO ĐỒ cho bạn này" : "🎁 Xác nhận: ĐÃ NHẬN ĐƯỢC ĐỒ")
-                            .font(.system(size: 12, weight: .bold))
+                            .scaledFont(size: 12, weight: .bold)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 9)
@@ -594,9 +595,9 @@ struct ChatConversationView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundColor(primaryGreen)
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                     Text("Bạn đã bấm xác nhận bàn giao. Đang chờ \(partnerDisplayName) xác nhận để hoàn tất (1/2)...")
-                        .font(.system(size: 11, weight: .medium))
+                        .scaledFont(size: 11, weight: .medium)
                         .foregroundColor(primaryGreen)
                     Spacer()
                 }
@@ -608,13 +609,13 @@ struct ChatConversationView: View {
                 if !donorHandoverConfirmed && !requesterHandoverConfirmed {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("⚠️ Đã quá 2 tiếng dự phòng sau giờ hẹn mà chưa bên nào xác nhận.")
-                            .font(.system(size: 10, weight: .medium))
+                            .scaledFont(size: 10, weight: .medium)
                             .foregroundColor(.red)
 
                         if isDonor {
                             Button(action: handleCancelReservation) {
                                 Text("Mở lại món đồ cho người khác (Quá hạn hẹn)")
-                                    .font(.system(size: 11, weight: .bold))
+                                    .scaledFont(size: 11, weight: .bold)
                                     .foregroundColor(.red)
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 6)
@@ -626,7 +627,7 @@ struct ChatConversationView: View {
                     .padding(.top, 2)
                 } else {
                     Text("⏳ Đã có 1 bên xác nhận bàn giao. Món đồ được giữ để đối soát, không tự động hủy.")
-                        .font(.system(size: 10))
+                        .scaledFont(size: 10)
                         .foregroundColor(.orange)
                 }
             }
@@ -644,9 +645,9 @@ struct ChatConversationView: View {
         HStack(spacing: 8) {
             Image(systemName: "lock.fill")
                 .foregroundColor(.orange)
-                .font(.system(size: 13))
+                .scaledFont(size: 13)
             Text("Món đồ này hiện đã có người khác chốt hẹn nhận trước. Bạn vẫn có thể trao đổi dự phòng nếu người hẹn trước không đến nhận.")
-                .font(.system(size: 11, weight: .medium))
+                .scaledFont(size: 11, weight: .medium)
                 .foregroundColor(.secondary)
         }
         .frame(maxWidth: .infinity)
@@ -664,17 +665,17 @@ struct ChatConversationView: View {
                 Button(action: { showAppointmentPickerSheet = true }) {
                     HStack(spacing: 8) {
                         Image(systemName: "calendar.badge.clock")
-                            .font(.system(size: 14, weight: .semibold))
+                            .scaledFont(size: 14, weight: .semibold)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Hẹn lịch đến nhận món đồ này (100% 0đ)")
-                                .font(.system(size: 12, weight: .bold))
+                                .scaledFont(size: 12, weight: .bold)
                             Text("Chủ động đề xuất giờ đến lấy trực tiếp tại nhà người cho")
-                                .font(.system(size: 10))
+                                .scaledFont(size: 10)
                                 .foregroundColor(primaryGreen.opacity(0.85))
                         }
                         Spacer()
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 12, weight: .bold))
+                            .scaledFont(size: 12, weight: .bold)
                     }
                     .padding(.horizontal, 14)
                     .padding(.vertical, 9)
@@ -689,9 +690,9 @@ struct ChatConversationView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "info.circle.fill")
                         .foregroundColor(mintGreen)
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                     Text("Món đồ đang sẵn sàng. Khi người nhận gửi đề xuất lịch hẹn, bạn có thể bấm 'Đồng ý' để giữ đồ.")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(.secondary)
                 }
                 .padding(.horizontal, 14)
@@ -710,10 +711,10 @@ struct ChatConversationView: View {
         HStack(spacing: 8) {
             Image(systemName: "shield.lefthalf.filled")
                 .foregroundColor(mintGreen)
-                .font(.system(size: 13))
+                .scaledFont(size: 13)
 
             Text("Nền tảng 100% 0đ tại Đà Nẵng. Hai bên gặp mặt trao nhận đồ trực tiếp, tuyệt đối không chuyển khoản cọc.")
-                .font(.system(size: 11))
+                .scaledFont(size: 11)
                 .foregroundColor(.secondary)
                 .lineLimit(2)
         }
@@ -728,13 +729,13 @@ struct ChatConversationView: View {
     private var emptyMessagesPlaceholder: some View {
         VStack(spacing: 8) {
             Image(systemName: "bubble.left.and.bubble.right.fill")
-                .font(.system(size: 32))
+                .scaledFont(size: 32)
                 .foregroundColor(mintGreen.opacity(0.6))
             Text("Chưa có tin nhắn nào")
-                .font(.system(size: 14, weight: .bold))
+                .scaledFont(size: 14, weight: .bold)
                 .foregroundColor(primaryGreen)
             Text("Hãy gửi tin nhắn để trao đổi chi tiết và hẹn thời gian nhận đồ nhé!")
-                .font(.system(size: 12))
+                .scaledFont(size: 12)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 24)
@@ -779,16 +780,16 @@ struct ChatConversationView: View {
             HStack(spacing: 6) {
                 Image(systemName: "calendar.badge.clock")
                     .foregroundColor(primaryGreen)
-                    .font(.system(size: 14))
+                    .scaledFont(size: 14)
                 Text("ĐỀ XUẤT LỊCH HẸN NHẬN ĐỒ")
-                    .font(.system(size: 11, weight: .bold))
+                    .scaledFont(size: 11, weight: .bold)
                     .foregroundColor(primaryGreen)
 
                 Spacer()
 
                 if isProposalAccepted {
                     Text("✓ Đã đồng ý & Giữ đồ")
-                        .font(.system(size: 10, weight: .bold))
+                        .scaledFont(size: 10, weight: .bold)
                         .foregroundColor(primaryGreen)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
@@ -796,7 +797,7 @@ struct ChatConversationView: View {
                         .clipShape(Capsule())
                 } else if isProposalDeclined {
                     Text("✕ Đã từ chối")
-                        .font(.system(size: 10, weight: .bold))
+                        .scaledFont(size: 10, weight: .bold)
                         .foregroundColor(.red)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
@@ -804,7 +805,7 @@ struct ChatConversationView: View {
                         .clipShape(Capsule())
                 } else {
                     Text("⏳ Chờ phản hồi")
-                        .font(.system(size: 10, weight: .bold))
+                        .scaledFont(size: 10, weight: .bold)
                         .foregroundColor(.orange)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
@@ -819,9 +820,9 @@ struct ChatConversationView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "clock.fill")
                             .foregroundColor(primaryGreen)
-                            .font(.system(size: 13))
+                            .scaledFont(size: 13)
                         Text(formatPickupDate(aptTime))
-                            .font(.system(size: 13, weight: .bold))
+                            .scaledFont(size: 13, weight: .bold)
                             .foregroundColor(primaryGreen)
                     }
                 }
@@ -829,9 +830,9 @@ struct ChatConversationView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "mappin.and.ellipse")
                         .foregroundColor(.secondary)
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                     Text("Tại: \(pickupAddressText)")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                 }
@@ -843,7 +844,7 @@ struct ChatConversationView: View {
 
             if !msg.text.isEmpty {
                 Text(msg.text)
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(.primary)
             }
 
@@ -858,10 +859,10 @@ struct ChatConversationView: View {
                                         ProgressView().tint(.white).scaleEffect(0.8)
                                     } else {
                                         Image(systemName: "checkmark")
-                                            .font(.system(size: 12, weight: .bold))
+                                            .scaledFont(size: 12, weight: .bold)
                                     }
                                     Text("Đồng ý giữ đồ")
-                                        .font(.system(size: 12, weight: .bold))
+                                        .scaledFont(size: 12, weight: .bold)
                                 }
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 8)
@@ -874,9 +875,9 @@ struct ChatConversationView: View {
                             Button(action: { handleDeclineAppointment(proposalMsg: msg) }) {
                                 HStack(spacing: 4) {
                                     Image(systemName: "xmark")
-                                        .font(.system(size: 12, weight: .bold))
+                                        .scaledFont(size: 12, weight: .bold)
                                     Text("Từ chối")
-                                        .font(.system(size: 12, weight: .bold))
+                                        .scaledFont(size: 12, weight: .bold)
                                 }
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 8)
@@ -888,20 +889,20 @@ struct ChatConversationView: View {
                         }
                     } else if isReservedByThisChat {
                         Text("✓ Lịch hẹn trong cuộc chat này đã được chấp nhận.")
-                            .font(.system(size: 11, weight: .medium))
+                            .scaledFont(size: 11, weight: .medium)
                             .foregroundColor(primaryGreen)
                     } else {
                         Text("⚠️ Món đồ hiện đang được giữ cho một người khác.")
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                             .foregroundColor(.secondary)
                     }
                 } else {
                     // Góc nhìn Người nhận (B)
                     HStack(spacing: 4) {
                         Image(systemName: "hourglass")
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                         Text("Đang chờ \(partnerDisplayName) xác nhận đề xuất...")
-                            .font(.system(size: 11, weight: .medium))
+                            .scaledFont(size: 11, weight: .medium)
                     }
                     .foregroundColor(.orange)
                 }
@@ -909,14 +910,14 @@ struct ChatConversationView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "checkmark.seal.fill")
                         .foregroundColor(primaryGreen)
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                     Text("Hai bên đã chốt lịch hẹn này. Hãy đến đúng giờ bạn nhé!")
-                        .font(.system(size: 11, weight: .medium))
+                        .scaledFont(size: 11, weight: .medium)
                         .foregroundColor(primaryGreen)
                 }
             } else if isProposalDeclined {
                 Text("⚠️ Người cho chưa tiện khung giờ này. Hai bạn vui lòng nhắn tin để chọn khung giờ khác nhé.")
-                    .font(.system(size: 11))
+                    .scaledFont(size: 11)
                     .foregroundColor(.secondary)
             }
 
@@ -924,7 +925,7 @@ struct ChatConversationView: View {
             HStack {
                 Spacer()
                 Text(msg.timeString)
-                    .font(.system(size: 10))
+                    .scaledFont(size: 10)
                     .foregroundColor(.secondary.opacity(0.8))
             }
         }
@@ -942,7 +943,7 @@ struct ChatConversationView: View {
     // 4.2 Tin nhắn hệ thống
     private func systemMessageView(text: String) -> some View {
         Text(text)
-            .font(.system(size: 11, weight: .medium))
+            .scaledFont(size: 11, weight: .medium)
             .foregroundColor(.secondary)
             .multilineTextAlignment(.center)
             .padding(.horizontal, 14)
@@ -959,7 +960,7 @@ struct ChatConversationView: View {
 
             VStack(alignment: .trailing, spacing: 3) {
                 Text(msg.text)
-                    .font(.system(size: 14))
+                    .scaledFont(size: 14)
                     .foregroundColor(.white)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
@@ -967,7 +968,7 @@ struct ChatConversationView: View {
                     .cornerRadius(16)
 
                 Text(msg.timeString)
-                    .font(.system(size: 10))
+                    .scaledFont(size: 10)
                     .foregroundColor(.secondary.opacity(0.8))
                     .padding(.horizontal, 4)
             }
@@ -982,13 +983,13 @@ struct ChatConversationView: View {
                 .frame(width: 28, height: 28)
                 .overlay(
                     Text(partnerDisplayName.prefix(1).uppercased())
-                        .font(.system(size: 11, weight: .bold))
+                        .scaledFont(size: 11, weight: .bold)
                         .foregroundColor(.white)
                 )
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(msg.text)
-                    .font(.system(size: 14))
+                    .scaledFont(size: 14)
                     .foregroundColor(.primary)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
@@ -996,7 +997,7 @@ struct ChatConversationView: View {
                     .cornerRadius(16)
 
                 Text(msg.timeString)
-                    .font(.system(size: 10))
+                    .scaledFont(size: 10)
                     .foregroundColor(.secondary.opacity(0.8))
                     .padding(.horizontal, 4)
             }
@@ -1014,7 +1015,7 @@ struct ChatConversationView: View {
                         sendMessage(text: reply)
                     }) {
                         Text(reply)
-                            .font(.system(size: 12, weight: .medium))
+                            .scaledFont(size: 12, weight: .medium)
                             .foregroundColor(primaryGreen)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
@@ -1035,13 +1036,14 @@ struct ChatConversationView: View {
             if isAvailable && isRequester {
                 Button(action: { showAppointmentPickerSheet = true }) {
                     Image(systemName: "calendar.badge.clock")
-                        .font(.system(size: 19))
+                        .scaledFont(size: 19)
                         .foregroundColor(primaryGreen)
                 }
+                .accessibilityLabel("Đề xuất lịch hẹn")
             }
 
             TextField("Nhắn tin với \(partnerDisplayName)...", text: $messageText)
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .focused($isInputFocused)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
@@ -1055,7 +1057,7 @@ struct ChatConversationView: View {
                 messageText = ""
             }) {
                 Image(systemName: "paperplane.fill")
-                    .font(.system(size: 16, weight: .bold))
+                    .scaledFont(size: 16, weight: .bold)
                     .foregroundColor(.white)
                     .frame(width: 38, height: 38)
                     .background(
@@ -1064,6 +1066,7 @@ struct ChatConversationView: View {
                     )
                     .clipShape(Circle())
             }
+            .accessibilityLabel("Gửi tin nhắn")
             .disabled(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
         .padding(.horizontal, 16)
@@ -1078,7 +1081,7 @@ struct ChatConversationView: View {
                 // Tóm tắt món đồ
                 HStack(spacing: 10) {
                     Image(systemName: activeItem.imageName)
-                        .font(.system(size: 20))
+                        .scaledFont(size: 20)
                         .foregroundColor(primaryGreen)
                         .frame(width: 40, height: 40)
                         .background(lightGreenBg)
@@ -1086,10 +1089,10 @@ struct ChatConversationView: View {
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(activeItem.title)
-                            .font(.system(size: 13, weight: .bold))
+                            .scaledFont(size: 13, weight: .bold)
                             .lineLimit(1)
                         Text("Nhận tại: \(pickupAddressText)")
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                             .foregroundColor(.secondary)
                             .lineLimit(1)
                     }
@@ -1100,7 +1103,7 @@ struct ChatConversationView: View {
                 .cornerRadius(10)
 
                 Text("Chọn khung giờ bạn có thể đến lấy:")
-                    .font(.system(size: 13, weight: .bold))
+                    .scaledFont(size: 13, weight: .bold)
                     .foregroundColor(.primary)
 
                 // Các mốc giờ gợi ý nhanh
@@ -1121,7 +1124,7 @@ struct ChatConversationView: View {
                     displayedComponents: [.date, .hourAndMinute]
                 )
                 .datePickerStyle(.compact)
-                .font(.system(size: 13))
+                .scaledFont(size: 13)
                 .padding(12)
                 .background(Color.white)
                 .cornerRadius(10)
@@ -1129,7 +1132,7 @@ struct ChatConversationView: View {
 
                 // Lời nhắn thêm
                 TextField("Lời nhắn thêm (ví dụ: Em đi xe máy qua chở luôn ạ)...", text: $appointmentNote)
-                    .font(.system(size: 13))
+                    .scaledFont(size: 13)
                     .padding(12)
                     .background(Color.white)
                     .cornerRadius(10)
@@ -1139,9 +1142,9 @@ struct ChatConversationView: View {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "info.circle.fill")
                         .foregroundColor(primaryGreen)
-                        .font(.system(size: 14))
+                        .scaledFont(size: 14)
                     Text("Lời đề xuất này chưa khóa món đồ. Chỉ khi người cho bấm 'Đồng ý', món đồ mới chuyển sang 'Đã có người hẹn' để giữ cho bạn.")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(.secondary)
                 }
                 .padding(10)
@@ -1154,9 +1157,9 @@ struct ChatConversationView: View {
                 Button(action: handleSendAppointmentProposal) {
                     HStack(spacing: 6) {
                         Image(systemName: "paperplane.fill")
-                            .font(.system(size: 13))
+                            .scaledFont(size: 13)
                         Text("Gửi đề xuất lịch hẹn")
-                            .font(.system(size: 14, weight: .bold))
+                            .scaledFont(size: 14, weight: .bold)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
@@ -1173,7 +1176,7 @@ struct ChatConversationView: View {
                     Button("Đóng") {
                         showAppointmentPickerSheet = false
                     }
-                    .font(.system(size: 13, weight: .medium))
+                    .scaledFont(size: 13, weight: .medium)
                     .foregroundColor(primaryGreen)
                 }
             }
@@ -1186,7 +1189,7 @@ struct ChatConversationView: View {
             selectedAppointmentDate = date
         }) {
             Text(title)
-                .font(.system(size: 11, weight: .medium))
+                .scaledFont(size: 11, weight: .medium)
                 .foregroundColor(primaryGreen)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)

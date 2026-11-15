@@ -111,9 +111,10 @@ struct OnboardingView: View {
                     }
                 }) {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 18, weight: .semibold))
+                        .scaledFont(size: 18, weight: .semibold)
                         .foregroundColor(AppColors.primary)
                 }
+                .accessibilityLabel("Trang trước")
             } else {
                 HStack(spacing: 6) {
                     Image("AvatarApp")
@@ -121,7 +122,7 @@ struct OnboardingView: View {
                         .frame(width: 24, height: 24)
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                     Text("ReShare")
-                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .scaledFont(size: 16, weight: .bold, design: .rounded)
                         .foregroundColor(AppColors.primary)
                 }
             }
@@ -135,7 +136,7 @@ struct OnboardingView: View {
                         .frame(width: 24, height: 24)
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                     Text("ReShare")
-                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .scaledFont(size: 16, weight: .bold, design: .rounded)
                         .foregroundColor(AppColors.primary)
                 }
                 Spacer()
@@ -145,7 +146,7 @@ struct OnboardingView: View {
                 Button("Bỏ qua") {
                     finishOnboarding()
                 }
-                .font(.system(size: 14, weight: .medium))
+                .scaledFont(size: 14, weight: .medium)
                 .foregroundColor(AppColors.textSecondary)
             } else if currentPage > 0 {
                 Color.clear.frame(width: 44, height: 20)
@@ -176,7 +177,7 @@ struct OnboardingView: View {
                             .frame(height: 210)
                     } else {
                         Image(systemName: step.badgeIcon)
-                            .font(.system(size: 80))
+                            .scaledFont(size: 80)
                             .foregroundColor(AppColors.primary.opacity(0.3))
                             .frame(height: 210)
                     }
@@ -187,9 +188,9 @@ struct OnboardingView: View {
                 // Chip Badge nhỏ ở góc dưới card
                 HStack(spacing: 4) {
                     Image(systemName: step.badgeIcon)
-                        .font(.system(size: 11, weight: .semibold))
+                        .scaledFont(size: 11, weight: .semibold)
                     Text(step.badgeText)
-                        .font(.system(size: 11, weight: .bold))
+                        .scaledFont(size: 11, weight: .bold)
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
@@ -203,12 +204,12 @@ struct OnboardingView: View {
             // 2. Tiêu đề và nội dung (Khóa chiều cao để thẻ trắng không bị nhảy vị trí khi lướt)
             VStack(spacing: 10) {
                 Text(step.title)
-                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .scaledFont(size: 24, weight: .bold, design: .rounded)
                     .foregroundColor(AppColors.primary)
                     .multilineTextAlignment(.center)
                 
                 Text(step.description)
-                    .font(.system(size: 15, weight: .regular))
+                    .scaledFont(size: 15, weight: .regular)
                     .foregroundColor(AppColors.textSecondary)
                     .multilineTextAlignment(.center)
                     .lineSpacing(4)
@@ -243,9 +244,9 @@ struct OnboardingView: View {
         }) {
             HStack(spacing: 8) {
                 Text(currentPage == steps.count - 1 ? "Bắt đầu ngay" : "Tiếp tục")
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .scaledFont(size: 16, weight: .semibold, design: .rounded)
                 Image(systemName: "arrow.right")
-                    .font(.system(size: 14, weight: .semibold))
+                    .scaledFont(size: 14, weight: .semibold)
             }
             .frame(maxWidth: .infinity)
             .frame(height: 52)
@@ -260,9 +261,9 @@ struct OnboardingView: View {
         let currentItem = steps[currentPage]
         return HStack(spacing: 6) {
             Image(systemName: currentItem.footerIcon)
-                .font(.system(size: 11))
+                .scaledFont(size: 11)
             Text(currentItem.footerText)
-                .font(.system(size: 11, weight: .medium))
+                .scaledFont(size: 11, weight: .medium)
         }
         .foregroundColor(AppColors.textTertiary)
     }

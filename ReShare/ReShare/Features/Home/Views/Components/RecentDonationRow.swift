@@ -13,7 +13,7 @@ struct RecentDonationRow: View {
                     .frame(width: 48, height: 48)
 
                 Image(systemName: item.category.iconName)
-                    .font(.system(size: 20))
+                    .scaledFont(size: 20)
                     .foregroundColor(Color(red: 0.11, green: 0.35, blue: 0.20))
                     .frame(width: 48, height: 48)
 
@@ -27,12 +27,12 @@ struct RecentDonationRow: View {
             // Cột 2: Tên món đồ + Danh mục + Ngày tạo
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.title)
-                    .font(.system(size: 14, weight: .bold))
+                    .scaledFont(size: 14, weight: .bold)
                     .foregroundColor(Color.primary)
                     .lineLimit(1)
 
                 Text("\(item.category.title) · \(formattedDate(item.createdAt))")
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(.secondary)
                     .lineLimit(1)
             }
@@ -48,7 +48,7 @@ struct RecentDonationRow: View {
                         .frame(width: 6, height: 6)
 
                     Text(item.status.title)
-                        .font(.system(size: 11, weight: .bold))
+                        .scaledFont(size: 11, weight: .bold)
                         .foregroundColor(item.status.color)
                 }
                 .padding(.horizontal, 8)
@@ -60,7 +60,7 @@ struct RecentDonationRow: View {
 
                 // Note mô tả ngắn trạng thái từ admin
                 Text(item.statusNote ?? item.status.statusDescription)
-                    .font(.system(size: 11))
+                    .scaledFont(size: 11)
                     .foregroundColor(.secondary)
                     .lineLimit(1)
             }

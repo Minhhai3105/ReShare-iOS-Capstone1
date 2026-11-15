@@ -14,7 +14,7 @@ struct BlockedUsersView: View {
     var body: some View {
         List {
             if let actionError {
-                Section { Text(actionError).foregroundColor(.red).font(.system(size: 14)) }
+                Section { Text(actionError).foregroundColor(.red).scaledFont(size: 14) }
             }
             if isLoading && users.isEmpty {
                 HStack(spacing: 10) {
@@ -23,7 +23,7 @@ struct BlockedUsersView: View {
                 }
             } else if let loadError {
                 Section {
-                    Text(loadError).foregroundColor(.red).font(.system(size: 14))
+                    Text(loadError).foregroundColor(.red).scaledFont(size: 14)
                     Button("Thử lại") { Task { await load() } }
                         .frame(minHeight: 44)
                 }
@@ -49,10 +49,10 @@ struct BlockedUsersView: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(user.displayName)
-                    .font(.system(size: 15, weight: .semibold))
+                    .scaledFont(size: 15, weight: .semibold)
                 if let date = user.blockedAt {
                     Text("Đã chặn ngày \(date.formatted(date: .abbreviated, time: .omitted))")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(.secondary)
                 }
             }

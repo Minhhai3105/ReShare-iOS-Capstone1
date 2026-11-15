@@ -9,7 +9,7 @@ struct ItemCardPreview: View {
                 // Status Badge
                 HStack {
                     Text("AI: Quần áo")
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .scaledFont(size: 12, weight: .medium, design: .rounded)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background(Color.brandPrimarySoft)
@@ -19,16 +19,16 @@ struct ItemCardPreview: View {
                     Spacer()
                     
                     Text("Đã phân phối")
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .scaledFont(size: 12, weight: .medium, design: .rounded)
                         .foregroundColor(.statusDistributed)
                 }
                 
                 Text("Áo khoác gió mùa đông")
-                    .font(.system(size: 18, weight: .bold))
+                    .scaledFont(size: 18, weight: .bold)
                     .foregroundColor(.textPrimary)
                 
                 Text("Kho quận Hải Châu • 1.2 km")
-                    .font(.system(size: 14, design: .rounded))
+                    .scaledFont(size: 14, design: .rounded)
                     .foregroundColor(.textSecondary)
                 
                 Divider().background(Color.borderSubtle)
@@ -36,7 +36,7 @@ struct ItemCardPreview: View {
                 // Primary Action Button
                 Button(action: {}) {
                     Text("Liên hệ nhận đồ")
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .scaledFont(size: 15, weight: .semibold, design: .rounded)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
                         .background(Color.brandAccent)

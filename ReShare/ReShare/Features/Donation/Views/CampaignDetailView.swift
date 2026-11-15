@@ -25,7 +25,7 @@ struct CampaignDetailView: View {
             VStack(spacing: 20) {
                 if didLoadHubs && hasDemoHub {
                     Text("ĐIỂM TIẾP NHẬN ĐANG MINH HOẠ — ĐƠN ĐƯỢC LƯU THẬT NHƯNG CHƯA MANG ĐỒ TỚI ĐIỂM NÀY")
-                        .font(.system(size: 12, weight: .bold))
+                        .scaledFont(size: 12, weight: .bold)
                         .foregroundColor(.orange)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -59,12 +59,13 @@ struct CampaignDetailView: View {
             ToolbarItem(placement: .topBarLeading) {
                 Button(action: { dismiss() }) {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 14, weight: .bold))
+                        .scaledFont(size: 14, weight: .bold)
                         .foregroundColor(Color(red: 0.11, green: 0.35, blue: 0.20))
                         .frame(width: 36, height: 36)
                         .background(Circle().fill(Color.white))
                         .shadow(color: Color.black.opacity(0.06), radius: 4)
                 }
+                .accessibilityLabel("Quay lại")
             }
 
         }
@@ -117,7 +118,7 @@ struct CampaignDetailView: View {
 
             // Icon minh họa lớn chìm
             Image(systemName: campaign.imageSystemName)
-                .font(.system(size: 90))
+                .scaledFont(size: 90)
                 .foregroundColor(.white.opacity(0.12))
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                 .padding(16)
@@ -130,7 +131,7 @@ struct CampaignDetailView: View {
                             .fill(campaign.urgentLevel.badgeColor)
                             .frame(width: 7, height: 7)
                         Text(campaign.urgentLevel.rawValue)
-                            .font(.system(size: 11, weight: .bold))
+                            .scaledFont(size: 11, weight: .bold)
                             .foregroundColor(campaign.urgentLevel.badgeColor)
                     }
                     .padding(.horizontal, 10)
@@ -139,7 +140,7 @@ struct CampaignDetailView: View {
                     .clipShape(Capsule())
 
                     Text(campaign.daysLeftText)
-                        .font(.system(size: 11, weight: .semibold))
+                        .scaledFont(size: 11, weight: .semibold)
                         .foregroundColor(.white)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 5)
@@ -153,7 +154,7 @@ struct CampaignDetailView: View {
 
                 // Thẻ danh mục
                 Text(campaign.categoryTitle)
-                    .font(.system(size: 12, weight: .bold))
+                    .scaledFont(size: 12, weight: .bold)
                     .foregroundColor(Color(red: 0.08, green: 0.35, blue: 0.18))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
@@ -168,20 +169,20 @@ struct CampaignDetailView: View {
     private var titleAndOrganizerSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(campaign.title)
-                .font(.system(size: 22, weight: .bold))
+                .scaledFont(size: 22, weight: .bold)
                 .foregroundColor(.primary)
 
             Text(campaign.subtitle)
-                .font(.system(size: 13))
+                .scaledFont(size: 13)
                 .foregroundColor(.secondary)
                 .lineSpacing(2)
 
             HStack(spacing: 6) {
                 Image(systemName: "building.2.fill")
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(mintGreen)
                 Text(campaign.organizer)
-                    .font(.system(size: 12, weight: .medium))
+                    .scaledFont(size: 12, weight: .medium)
                     .foregroundColor(.secondary)
             }
             .padding(.top, 4)
@@ -194,13 +195,13 @@ struct CampaignDetailView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("TIẾN ĐỘ (ĐỒ ĐÃ NHẬP KHO)")
-                    .font(.system(size: 11, weight: .bold))
+                    .scaledFont(size: 11, weight: .bold)
                     .foregroundColor(.secondary)
 
                 Spacer()
 
                 Text(campaign.progressPercentageString)
-                    .font(.system(size: 16, weight: .black))
+                    .scaledFont(size: 16, weight: .black)
                     .foregroundColor(primaryGreen)
             }
 
@@ -226,18 +227,18 @@ struct CampaignDetailView: View {
 
             HStack {
                 Text("Đã nhập kho: \(campaign.receivedText)")
-                    .font(.system(size: 12, weight: .bold))
+                    .scaledFont(size: 12, weight: .bold)
                     .foregroundColor(primaryGreen)
 
                 Spacer()
 
                 Text("Mục tiêu: \(campaign.targetText)")
-                    .font(.system(size: 12, weight: .semibold))
+                    .scaledFont(size: 12, weight: .semibold)
                     .foregroundColor(.secondary)
             }
 
             Text("\(campaign.receivedDonationCount) lượt quyên góp đã vào kho. Số lượng bạn khai báo chỉ được cộng sau khi kho kiểm đếm thực tế.")
-                .font(.system(size: 11))
+                .scaledFont(size: 11)
                 .foregroundColor(.secondary)
         }
         .padding(14)
@@ -250,11 +251,11 @@ struct CampaignDetailView: View {
     private var descriptionCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("VỀ CHIẾN DỊCH NÀY")
-                .font(.system(size: 11, weight: .bold))
+                .scaledFont(size: 11, weight: .bold)
                 .foregroundColor(.secondary)
 
             Text(campaign.description.isEmpty ? campaign.subtitle : campaign.description)
-                .font(.system(size: 13))
+                .scaledFont(size: 13)
                 .foregroundColor(.primary.opacity(0.85))
                 .lineSpacing(4)
         }
@@ -272,7 +273,7 @@ struct CampaignDetailView: View {
                 Image(systemName: "checkmark.shield.fill")
                     .foregroundColor(mintGreen)
                 Text("TIÊU CHUẨN ĐỒ ĐƯỢC TIẾP NHẬN")
-                    .font(.system(size: 11, weight: .bold))
+                    .scaledFont(size: 11, weight: .bold)
                     .foregroundColor(.secondary)
             }
 
@@ -280,12 +281,12 @@ struct CampaignDetailView: View {
                 ForEach(campaign.acceptanceGuidelines, id: \.self) { rule in
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 13))
+                            .scaledFont(size: 13)
                             .foregroundColor(mintGreen)
                             .padding(.top, 1)
 
                         Text(rule)
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                             .foregroundColor(.primary)
                             .lineSpacing(2)
                     }
@@ -303,20 +304,20 @@ struct CampaignDetailView: View {
     private var participatingHubsCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("ĐIỂM TIẾP NHẬN CỦA CHIẾN DỊCH")
-                .font(.system(size: 11, weight: .bold))
+                .scaledFont(size: 11, weight: .bold)
                 .foregroundColor(.secondary)
 
             ForEach(Array(zip(campaign.hubIds, campaign.hubs)), id: \.0) { hubId, hubName in
                 HStack(spacing: 10) {
                     Image(systemName: "mappin.circle.fill")
-                        .font(.system(size: 18))
+                        .scaledFont(size: 18)
                         .foregroundColor(primaryGreen)
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(hubName)
-                            .font(.system(size: 13, weight: .bold))
+                            .scaledFont(size: 13, weight: .bold)
                         Text(hubSubtitle(for: hubId))
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                             .foregroundColor(hubDetails[hubId]?.isDemo == false ? .secondary : .orange)
                     }
 
@@ -341,9 +342,9 @@ struct CampaignDetailView: View {
             }) {
                 HStack(spacing: 8) {
                     Image(systemName: "camera.fill")
-                        .font(.system(size: 16, weight: .bold))
+                        .scaledFont(size: 16, weight: .bold)
                     Text(campaign.isAcceptingDonations ? "Chụp ảnh và gửi đồ cho chiến dịch" : "Chiến dịch đã ngừng nhận đơn")
-                        .font(.system(size: 16, weight: .bold))
+                        .scaledFont(size: 16, weight: .bold)
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: 52)
@@ -357,7 +358,7 @@ struct CampaignDetailView: View {
             Text(hasDemoHub
                  ? "Đơn được lưu thật và kho sẽ duyệt; điểm tiếp nhận đang minh hoạ nên chưa mang đồ tới."
                  : "Kho duyệt đơn trước, sau đó bạn mang đồ tới điểm tiếp nhận đã chọn.")
-                .font(.system(size: 10, weight: .medium))
+                .scaledFont(size: 10, weight: .medium)
                 .foregroundColor(.secondary)
         }
         .padding(.horizontal, 18)

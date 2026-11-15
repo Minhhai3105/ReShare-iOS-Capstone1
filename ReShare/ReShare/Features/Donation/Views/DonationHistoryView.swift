@@ -22,7 +22,7 @@ struct DonationHistoryView: View {
                         ForEach(filters, id: \.self) { filter in
                             Button(action: { selectedFilter = filter }) {
                                 Text(filter)
-                                    .font(.system(size: 13, weight: .bold))
+                                    .scaledFont(size: 13, weight: .bold)
                                     .foregroundColor(selectedFilter == filter ? .white : Color(red: 0.20, green: 0.25, blue: 0.22))
                                     .padding(.horizontal, 14)
                                     .padding(.vertical, 7)
@@ -55,13 +55,13 @@ struct DonationHistoryView: View {
                     VStack(spacing: 12) {
                         Spacer()
                         Image(systemName: "shippingbox")
-                            .font(.system(size: 48))
+                            .scaledFont(size: 48)
                             .foregroundColor(.secondary.opacity(0.35))
                         Text("Chưa có đơn quyên góp nào")
-                            .font(.system(size: 16, weight: .bold))
+                            .scaledFont(size: 16, weight: .bold)
                             .foregroundColor(Color(red: 0.15, green: 0.35, blue: 0.20))
                         Text("Đơn quyên góp bạn gửi sẽ xuất hiện tại đây, kèm trạng thái kho duyệt và tiếp nhận.")
-                            .font(.system(size: 13))
+                            .scaledFont(size: 13)
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
                             .lineSpacing(3)
@@ -97,7 +97,7 @@ struct DonationHistoryView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Xong") { dismiss() }
-                        .font(.system(size: 15, weight: .bold))
+                        .scaledFont(size: 15, weight: .bold)
                         .foregroundColor(Color(red: 0.15, green: 0.35, blue: 0.20))
                 }
             }
@@ -221,7 +221,7 @@ struct HistoryItemCard: View {
                 // Hàng 1: Danh mục + Badge trạng thái
                 HStack {
                     Text("\(item.category.title.uppercased()) • \(declaredQuantityLabel)")
-                        .font(.system(size: 10, weight: .bold))
+                        .scaledFont(size: 10, weight: .bold)
                         .foregroundColor(Color(red: 0.35, green: 0.45, blue: 0.35))
 
                     Spacer()
@@ -233,7 +233,7 @@ struct HistoryItemCard: View {
                             .frame(width: 5, height: 5)
 
                         Text(item.status.title)
-                            .font(.system(size: 11, weight: .bold))
+                            .scaledFont(size: 11, weight: .bold)
                             .foregroundColor(item.status.color)
                     }
                     .padding(.horizontal, 8)
@@ -243,7 +243,7 @@ struct HistoryItemCard: View {
 
                 // Hàng 2: Tên món đồ (Font Serif sang trọng)
                 Text(item.title)
-                    .font(.system(size: 15, weight: .bold, design: .serif))
+                    .scaledFont(size: 15, weight: .bold, design: .serif)
                     .foregroundColor(Color(red: 0.11, green: 0.27, blue: 0.16))
                     .lineLimit(1)
 
@@ -251,9 +251,9 @@ struct HistoryItemCard: View {
                 if item.status == .rejected, let reason = item.statusNote {
                     HStack(alignment: .top, spacing: 4) {
                         Image(systemName: "exclamationmark.circle.fill")
-                            .font(.system(size: 10))
+                            .scaledFont(size: 10)
                         Text(reason)
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                             .lineLimit(2)
                     }
                     .foregroundColor(Color.red.opacity(0.85))
@@ -263,9 +263,9 @@ struct HistoryItemCard: View {
                 } else if item.reviewState == "needs_information", let message = item.statusNote {
                     HStack(alignment: .top, spacing: 4) {
                         Image(systemName: "questionmark.circle.fill")
-                            .font(.system(size: 10))
+                            .scaledFont(size: 10)
                         Text("Yêu cầu bổ sung: \(message)")
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                             .lineLimit(2)
                     }
                     .foregroundColor(Color.orange.opacity(0.95))
@@ -277,21 +277,21 @@ struct HistoryItemCard: View {
                 // Hàng 4: Thời gian gửi & Trạm tiếp nhận
                 if item.status == .pending && item.reviewState == "needs_information" {
                     Button("Bổ sung và gửi duyệt lại") { showResubmit = true }
-                        .font(.system(size: 12, weight: .semibold))
+                        .scaledFont(size: 12, weight: .semibold)
                 }
                 HStack {
                     HStack(spacing: 4) {
                         Image(systemName: "clock")
-                            .font(.system(size: 10))
+                            .scaledFont(size: 10)
                         Text(item.createdAt.formatted(date: .abbreviated, time: .shortened))
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                     }
                     .foregroundColor(Color(red: 0.40, green: 0.46, blue: 0.42))
 
                     Spacer()
 
                     Text(hubDisplayName)
-                        .font(.system(size: 11, weight: .medium))
+                        .scaledFont(size: 11, weight: .medium)
                         .foregroundColor(Color(red: 0.40, green: 0.46, blue: 0.42))
                 }
                 .padding(.top, 2)
@@ -330,7 +330,7 @@ struct HistoryItemCard: View {
     // Icon placeholder khi chưa có ảnh mạng
     private var placeholderIcon: some View {
         Image(systemName: item.category.iconName)
-            .font(.system(size: 26))
+            .scaledFont(size: 26)
             .foregroundColor(Color(red: 0.25, green: 0.40, blue: 0.30).opacity(0.75))
             .frame(width: 68, height: 68)
     }

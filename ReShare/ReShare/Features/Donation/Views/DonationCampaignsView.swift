@@ -112,20 +112,20 @@ struct DonationCampaignsView: View {
         VStack(spacing: 12) {
             if let icon {
                 Image(systemName: icon)
-                    .font(.system(size: 28))
+                    .scaledFont(size: 28)
                     .foregroundColor(primaryGreen)
             } else {
                 ProgressView()
             }
             Text(message)
-                .font(.system(size: 13))
+                .scaledFont(size: 13)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
             if showsRetry {
                 Button("Thử lại") {
                     Task { await loadCampaigns() }
                 }
-                .font(.system(size: 14, weight: .bold))
+                .scaledFont(size: 14, weight: .bold)
                 .foregroundColor(primaryGreen)
             }
         }
@@ -140,11 +140,11 @@ struct DonationCampaignsView: View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Chiến dịch Quyên góp")
-                    .font(.system(size: 24, weight: .bold))
+                    .scaledFont(size: 24, weight: .bold)
                     .foregroundColor(primaryGreen)
 
                 Text("Tiến độ chỉ tính đồ đã được kho tiếp nhận")
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(.secondary)
             }
 
@@ -163,7 +163,7 @@ struct DonationCampaignsView: View {
                         }
                     }) {
                         Text(filter)
-                            .font(.system(size: 13, weight: selectedFilter == filter ? .bold : .medium))
+                            .scaledFont(size: 13, weight: selectedFilter == filter ? .bold : .medium)
                             .foregroundColor(selectedFilter == filter ? .white : Color.primary)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 8)
@@ -196,7 +196,7 @@ struct DonationCampaignsView: View {
 
                 // Icon trang trí lớn
                 Image(systemName: camp.imageSystemName)
-                    .font(.system(size: 96))
+                    .scaledFont(size: 96)
                     .foregroundColor(.white.opacity(0.10))
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                     .padding(14)
@@ -206,7 +206,7 @@ struct DonationCampaignsView: View {
                         HStack(spacing: 4) {
                             Circle().fill(camp.urgentLevel.badgeColor).frame(width: 6, height: 6)
                             Text(camp.urgentLevel.rawValue)
-                                .font(.system(size: 10, weight: .bold))
+                                .scaledFont(size: 10, weight: .bold)
                                 .foregroundColor(camp.urgentLevel.badgeColor)
                         }
                         .padding(.horizontal, 8)
@@ -215,7 +215,7 @@ struct DonationCampaignsView: View {
                         .clipShape(Capsule())
 
                         Text("⏰ \(camp.daysLeftText)")
-                            .font(.system(size: 10, weight: .semibold))
+                            .scaledFont(size: 10, weight: .semibold)
                             .foregroundColor(.white)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
@@ -227,12 +227,12 @@ struct DonationCampaignsView: View {
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(camp.title)
-                            .font(.system(size: 17, weight: .bold))
+                            .scaledFont(size: 17, weight: .bold)
                             .foregroundColor(.white)
                             .lineLimit(1)
 
                         Text(camp.subtitle)
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                             .foregroundColor(.white.opacity(0.85))
                             .lineLimit(2)
                     }
@@ -241,11 +241,11 @@ struct DonationCampaignsView: View {
                     VStack(spacing: 4) {
                         HStack {
                             Text("Đã nhập kho: \(camp.progressText)")
-                                .font(.system(size: 11, weight: .semibold))
+                                .scaledFont(size: 11, weight: .semibold)
                                 .foregroundColor(.white.opacity(0.9))
                             Spacer()
                             Text(camp.progressPercentageString)
-                                .font(.system(size: 12, weight: .bold))
+                                .scaledFont(size: 12, weight: .bold)
                                 .foregroundColor(Color(red: 0.55, green: 0.92, blue: 0.70))
                         }
 
@@ -273,7 +273,7 @@ struct DonationCampaignsView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("CHIẾN DỊCH ĐANG TIẾP NHẬN (\(filteredCampaigns.count))")
-                    .font(.system(size: 11, weight: .bold))
+                    .scaledFont(size: 11, weight: .bold)
                     .foregroundColor(.secondary)
                 Spacer()
             }
@@ -299,26 +299,26 @@ struct DonationCampaignsView: View {
                         .fill(Color(red: 0.92, green: 0.95, blue: 0.90))
                         .frame(width: 50, height: 50)
                     Image(systemName: camp.imageSystemName)
-                        .font(.system(size: 24))
+                        .scaledFont(size: 24)
                         .foregroundColor(primaryGreen)
                 }
 
                 VStack(alignment: .leading, spacing: 3) {
                     HStack {
                         Text(camp.title)
-                            .font(.system(size: 14, weight: .bold))
+                            .scaledFont(size: 14, weight: .bold)
                             .foregroundColor(.primary)
                             .lineLimit(1)
 
                         Spacer()
 
                         Text(camp.daysLeftText)
-                            .font(.system(size: 10, weight: .semibold))
+                            .scaledFont(size: 10, weight: .semibold)
                             .foregroundColor(.secondary)
                     }
 
                     Text(camp.subtitle)
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(.secondary)
                         .lineLimit(2)
                 }
@@ -328,13 +328,13 @@ struct DonationCampaignsView: View {
             VStack(spacing: 4) {
                 HStack {
                     Text("\(camp.categoryTitle) • Tiếp nhận tại \(camp.hubs.count) điểm")
-                        .font(.system(size: 10, weight: .medium))
+                        .scaledFont(size: 10, weight: .medium)
                         .foregroundColor(.secondary)
 
                     Spacer()
 
                     Text("\(camp.progressText) (\(camp.progressPercentageString))")
-                        .font(.system(size: 11, weight: .bold))
+                        .scaledFont(size: 11, weight: .bold)
                         .foregroundColor(primaryGreen)
                 }
 
@@ -368,16 +368,16 @@ struct DonationCampaignsView: View {
                         .fill(softMint)
                         .frame(width: 44, height: 44)
                     Image(systemName: "camera.viewfinder")
-                        .font(.system(size: 20))
+                        .scaledFont(size: 20)
                         .foregroundColor(primaryGreen)
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Quyên góp đồ dùng khác (Tự do)")
-                        .font(.system(size: 14, weight: .bold))
+                        .scaledFont(size: 14, weight: .bold)
                         .foregroundColor(primaryGreen)
                     Text("Bạn có đồ dùng ngoài các chiến dịch trên? Bấm vào đây để chụp ảnh gửi kiểm định về Kho tổng ReShare.")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(.secondary)
                         .lineLimit(2)
                 }
@@ -385,7 +385,7 @@ struct DonationCampaignsView: View {
                 Spacer()
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
+                    .scaledFont(size: 12, weight: .semibold)
                     .foregroundColor(.secondary)
             }
             .padding(14)

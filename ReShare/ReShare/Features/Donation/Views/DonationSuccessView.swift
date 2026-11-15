@@ -39,7 +39,7 @@ struct DonationSuccessView: View {
                         .frame(width: 6, height: 6)
 
                     Text("ĐÃ GỬI ĐƠN")
-                        .font(.system(size: 11, weight: .bold))
+                        .scaledFont(size: 11, weight: .bold)
                         .foregroundColor(Color(red: 0.15, green: 0.35, blue: 0.20))
                 }
                 .padding(.horizontal, 14)
@@ -51,12 +51,13 @@ struct DonationSuccessView: View {
                 // Nút Đóng (X) góc phải
                 Button(action: onBackToHome) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 13, weight: .bold))
+                        .scaledFont(size: 13, weight: .bold)
                         .foregroundColor(.secondary)
                         .frame(width: 36, height: 36)
                         .background(Circle().fill(Color.white))
                         .shadow(color: Color.black.opacity(0.06), radius: 4, x: 0, y: 2)
                 }
+                .accessibilityLabel("Về trang chủ")
             }
             .padding(.horizontal, 20)
             .padding(.top, 12)
@@ -76,7 +77,7 @@ struct DonationSuccessView: View {
                 // Icon hộp quà mầm cây 🌱
                 VStack(spacing: 4) {
                     Image(systemName: "gift.fill")
-                        .font(.system(size: 54))
+                        .scaledFont(size: 54)
                         .foregroundColor(Color(red: 0.20, green: 0.38, blue: 0.24))
                 }
                 .frame(width: 140, height: 140)
@@ -88,7 +89,7 @@ struct DonationSuccessView: View {
                         .frame(width: 32, height: 32)
 
                     Image(systemName: "checkmark")
-                        .font(.system(size: 14, weight: .bold))
+                        .scaledFont(size: 14, weight: .bold)
                         .foregroundColor(.white)
                 }
                 .offset(x: 6, y: 6)
@@ -97,11 +98,11 @@ struct DonationSuccessView: View {
             // MARK: 3. LỜI CẢM ƠN
             VStack(spacing: 6) {
                 Text("Đã gửi đơn quyên góp")
-                    .font(.system(size: 26, weight: .bold, design: .serif))
+                    .scaledFont(size: 26, weight: .bold, design: .serif)
                     .foregroundColor(Color(red: 0.11, green: 0.27, blue: 0.16))
 
                 Text(nextStepText)
-                    .font(.system(size: 13))
+                    .scaledFont(size: 13)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
             }
@@ -111,7 +112,7 @@ struct DonationSuccessView: View {
                 // Header của Receipt + Badge "Under Review"
                 HStack {
                     Text("THÔNG TIN ĐƠN")
-                        .font(.system(size: 11, weight: .bold))
+                        .scaledFont(size: 11, weight: .bold)
                         .foregroundColor(Color(red: 0.32, green: 0.40, blue: 0.36))
 
                     Spacer()
@@ -121,7 +122,7 @@ struct DonationSuccessView: View {
                             .fill(Color(red: 0.88, green: 0.55, blue: 0.22))
                             .frame(width: 6, height: 6)
                         Text("Chờ duyệt")
-                            .font(.system(size: 11, weight: .bold))
+                            .scaledFont(size: 11, weight: .bold)
                             .foregroundColor(Color(red: 0.88, green: 0.55, blue: 0.22))
                     }
                     .padding(.horizontal, 8)
@@ -139,7 +140,7 @@ struct DonationSuccessView: View {
                 // Hàng Mã đơn có nút Copy
                 HStack {
                     Text("Mã đơn")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(Color(red: 0.40, green: 0.46, blue: 0.42))
 
                     Spacer()
@@ -147,11 +148,11 @@ struct DonationSuccessView: View {
                     Button(action: copyToClipboard) {
                         HStack(spacing: 4) {
                             Text(confirmationCode)
-                                .font(.system(size: 13, weight: .bold, design: .monospaced))
+                                .scaledFont(size: 13, weight: .bold, design: .monospaced)
                                 .foregroundColor(Color(red: 0.11, green: 0.35, blue: 0.20))
 
                             Image(systemName: hasCopied ? "checkmark" : "doc.on.doc")
-                                .font(.system(size: 11))
+                                .scaledFont(size: 11)
                                 .foregroundColor(hasCopied ? .green : Color(red: 0.40, green: 0.46, blue: 0.42))
                         }
                     }
@@ -162,11 +163,11 @@ struct DonationSuccessView: View {
                 // Dòng thời gian ước tính duyệt
                 HStack(spacing: 6) {
                     Image(systemName: "clock.fill")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(Color(red: 0.88, green: 0.55, blue: 0.22))
 
                     Text("Chưa có cam kết thời gian duyệt; trạng thái cập nhật trong Lịch sử quyên góp.")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(Color(red: 0.40, green: 0.46, blue: 0.42))
 
                     Spacer()
@@ -191,10 +192,10 @@ struct DonationSuccessView: View {
                 Button(action: onBackToHome) {
                     HStack(spacing: 8) {
                         Text("Quay lại")
-                            .font(.system(size: 16, weight: .bold))
+                            .scaledFont(size: 16, weight: .bold)
 
                         Image(systemName: "arrow.right")
-                            .font(.system(size: 14, weight: .bold))
+                            .scaledFont(size: 14, weight: .bold)
                     }
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
@@ -208,7 +209,7 @@ struct DonationSuccessView: View {
 
                 Button(action: { showHistorySheet = true }) {
                     Text("Xem lịch sử đơn")
-                        .font(.system(size: 13, weight: .semibold))
+                        .scaledFont(size: 13, weight: .semibold)
                         .foregroundColor(Color(red: 0.11, green: 0.35, blue: 0.20))
                         .underline()
                 }
@@ -243,11 +244,11 @@ struct ReceiptRow: View {
     var body: some View {
         HStack {
             Text(title)
-                .font(.system(size: 12))
+                .scaledFont(size: 12)
                 .foregroundColor(Color(red: 0.40, green: 0.46, blue: 0.42))
             Spacer()
             Text(value)
-                .font(.system(size: 13, weight: .semibold))
+                .scaledFont(size: 13, weight: .semibold)
                 .foregroundColor(Color(red: 0.11, green: 0.15, blue: 0.13))
         }
     }

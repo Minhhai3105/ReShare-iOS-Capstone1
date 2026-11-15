@@ -61,18 +61,18 @@ struct ProfileView: View {
                                     .frame(width: 60, height: 60)
 
                                 Image(systemName: "person.crop.circle.fill")
-                                    .font(.system(size: 60))
+                                    .scaledFont(size: 60)
                                     .foregroundColor(Color(red: 0.15, green: 0.35, blue: 0.20))
 
                             }
 
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(activeUserName)
-                                    .font(.system(size: 18, weight: .bold))
+                                    .scaledFont(size: 18, weight: .bold)
                                     .foregroundColor(Color(red: 0.11, green: 0.15, blue: 0.13))
 
                                 Text(activeUserEmail)
-                                    .font(.system(size: 12))
+                                    .scaledFont(size: 12)
                                     .foregroundColor(Color(red: 0.40, green: 0.46, blue: 0.42))
 
                                 HStack(spacing: 6) {
@@ -101,7 +101,7 @@ struct ProfileView: View {
                     // MARK: 2. QUYÊN GÓP CỦA BẠN (chỉ giữ mục đang chạy thật: lịch sử đơn)
                     VStack(alignment: .leading, spacing: 10) {
                         Text("QUYÊN GÓP CỦA BẠN")
-                            .font(.system(size: 11, weight: .bold))
+                            .scaledFont(size: 11, weight: .bold)
                             .foregroundColor(.secondary)
                             .padding(.horizontal, 20)
 
@@ -119,21 +119,21 @@ struct ProfileView: View {
 
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text("Đơn đã lưu")
-                                            .font(.system(size: 14, weight: .bold))
+                                            .scaledFont(size: 14, weight: .bold)
                                             .foregroundColor(Color(red: 0.11, green: 0.15, blue: 0.13))
                                         Text("Mở lịch sử để xem dữ liệu của bạn")
-                                            .font(.system(size: 11))
+                                            .scaledFont(size: 11)
                                             .foregroundColor(Color(red: 0.40, green: 0.46, blue: 0.42))
                                     }
 
                                     Spacer()
 
                                     Text("Lịch sử")
-                                        .font(.system(size: 14, weight: .bold))
+                                        .scaledFont(size: 14, weight: .bold)
                                         .foregroundColor(Color(red: 0.15, green: 0.35, blue: 0.20))
 
                                     Image(systemName: "chevron.right")
-                                        .font(.system(size: 13, weight: .semibold))
+                                        .scaledFont(size: 13, weight: .semibold)
                                         .foregroundColor(Color(uiColor: .tertiaryLabel))
                                 }
                                 .padding(.vertical, 12)
@@ -152,7 +152,7 @@ struct ProfileView: View {
                     // MARK: 2b. AN TOÀN (App Store Guideline 1.2): bỏ chặn được cả người chưa từng nhắn tin
                     VStack(alignment: .leading, spacing: 10) {
                         Text("AN TOÀN")
-                            .font(.system(size: 11, weight: .bold))
+                            .scaledFont(size: 11, weight: .bold)
                             .foregroundColor(Color(red: 0.32, green: 0.40, blue: 0.36))
                             .padding(.horizontal, 20)
 
@@ -160,7 +160,7 @@ struct ProfileView: View {
                             HStack {
                                 MenuActionRow(icon: "hand.raised.fill", title: "Người dùng đã chặn")
                                 Image(systemName: "chevron.right")
-                                    .font(.system(size: 13, weight: .semibold))
+                                    .scaledFont(size: 13, weight: .semibold)
                                     .foregroundColor(Color(uiColor: .tertiaryLabel))
                             }
                         }
@@ -176,7 +176,7 @@ struct ProfileView: View {
                     // MARK: 3b. QUYỀN RIÊNG TƯ & HỖ TRỢ (App Store 1.5, 5.1.1(i))
                     VStack(alignment: .leading, spacing: 10) {
                         Text("QUYỀN RIÊNG TƯ & HỖ TRỢ")
-                            .font(.system(size: 11, weight: .bold))
+                            .scaledFont(size: 11, weight: .bold)
                             .foregroundColor(Color(red: 0.32, green: 0.40, blue: 0.36))
                             .padding(.horizontal, 20)
 
@@ -205,7 +205,7 @@ struct ProfileView: View {
                     // MARK: 4. NÚT ĐĂNG XUẤT (SIGN OUT)
                     Button(action: { showProfileEditor = true }) {
                         Label("Chỉnh sửa hồ sơ", systemImage: "person.crop.circle.badge.pencil")
-                            .font(.system(size: 15, weight: .semibold))
+                            .scaledFont(size: 15, weight: .semibold)
                             .frame(maxWidth: .infinity)
                             .frame(height: 48)
                     }
@@ -214,9 +214,9 @@ struct ProfileView: View {
                     Button(action: { showSignOutAlert = true }) {
                         HStack(spacing: 8) {
                             Image(systemName: "rectangle.portrait.and.arrow.right")
-                                .font(.system(size: 14, weight: .bold))
-                            Text("Sign Out")
-                                .font(.system(size: 15, weight: .bold))
+                                .scaledFont(size: 14, weight: .bold)
+                            Text("Đăng xuất")
+                                .scaledFont(size: 15, weight: .bold)
                         }
                         .foregroundColor(Color.red)
                         .frame(maxWidth: .infinity)
@@ -234,7 +234,7 @@ struct ProfileView: View {
                     // Xoá tài khoản ngay trong app (App Store Guideline 5.1.1(v))
                     Button(action: { showDeleteAccount = true }) {
                         Text("Xoá tài khoản")
-                            .font(.system(size: 14, weight: .semibold))
+                            .scaledFont(size: 14, weight: .semibold)
                             .foregroundColor(Color.red.opacity(0.85))
                             .frame(maxWidth: .infinity, minHeight: 44)
                     }
@@ -242,7 +242,7 @@ struct ProfileView: View {
 
                     // Footer
                     Text("ReShare Non-Profit Network • Made with care in Vietnam")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(.secondary)
                         .padding(.bottom, 24)
                 }
@@ -264,12 +264,13 @@ struct ProfileView: View {
                             }
                         }) {
                             Image(systemName: "chevron.left")
-                                .font(.system(size: 15, weight: .bold))
+                                .scaledFont(size: 15, weight: .bold)
                                 .foregroundColor(Color(red: 0.11, green: 0.35, blue: 0.20))
                                 .frame(width: 36, height: 36)
                                 .background(Circle().fill(Color.white))
                                 .shadow(color: Color.black.opacity(0.06), radius: 4)
                         }
+                        .accessibilityLabel("Quay lại")
                     }
                 }
             }
@@ -287,13 +288,13 @@ struct ProfileView: View {
                 })
             }
             // Alert Đăng xuất
-            .alert("Sign Out", isPresented: $showSignOutAlert) {
-                Button("Cancel", role: .cancel) {}
-                Button("Sign Out", role: .destructive) {
+            .alert("Đăng xuất", isPresented: $showSignOutAlert) {
+                Button("Huỷ", role: .cancel) {}
+                Button("Đăng xuất", role: .destructive) {
                     try? appState.logout()
                 }
             } message: {
-                Text("Are you sure you want to sign out?")
+                Text("Bạn có chắc muốn đăng xuất khỏi ReShare?")
             }
         }
     }
@@ -307,8 +308,8 @@ struct BadgeTag: View {
 
     var body: some View {
         HStack(spacing: 3) {
-            Image(systemName: icon).font(.system(size: 9))
-            Text(text).font(.system(size: 10, weight: .semibold))
+            Image(systemName: icon).scaledFont(size: 9)
+            Text(text).scaledFont(size: 10, weight: .semibold)
         }
         .foregroundColor(color)
         .padding(.horizontal, 6)
@@ -325,19 +326,19 @@ struct MenuActionRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
-                .font(.system(size: 16))
+                .scaledFont(size: 16)
                 .foregroundColor(Color(red: 0.15, green: 0.35, blue: 0.20))
                 .frame(width: 24)
 
             Text(title)
-                .font(.system(size: 14, weight: .medium))
+                .scaledFont(size: 14, weight: .medium)
                 .foregroundColor(Color(red: 0.11, green: 0.15, blue: 0.13))
 
             Spacer()
 
             if let val = valueText {
                 Text(val)
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(Color(red: 0.40, green: 0.46, blue: 0.42))
             }
 

@@ -188,7 +188,7 @@ struct DonationCameraView: View {
         VStack(spacing: 12) {
             if case .unavailable(let message) = camera.status {
                 Image(systemName: "camera.slash")
-                    .font(.system(size: 36))
+                    .scaledFont(size: 36)
                 Text(message)
                     .multilineTextAlignment(.center)
             } else {
@@ -197,7 +197,7 @@ struct DonationCameraView: View {
                 Text("Đang mở Camera…")
             }
         }
-        .font(.system(size: 15, weight: .medium))
+        .scaledFont(size: 15, weight: .medium)
         .foregroundColor(.white)
         .padding(24)
         .frame(maxWidth: 300)
@@ -210,11 +210,12 @@ struct DonationCameraView: View {
             // Nút đóng
             Button(action: { dismiss() }) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 15, weight: .bold))
+                    .scaledFont(size: 15, weight: .bold)
                     .foregroundColor(.white)
                     .frame(width: 40, height: 40)
                     .background(Circle().fill(Color.black.opacity(0.5)))
             }
+            .accessibilityLabel("Đóng camera")
 
             Spacer()
 
@@ -225,12 +226,12 @@ struct DonationCameraView: View {
                     .frame(width: 7, height: 7)
 
                 Text("\(capturedImages.count)/\(maxPhotos) Ảnh")
-                    .font(.system(size: 13, weight: .bold))
+                    .scaledFont(size: 13, weight: .bold)
                     .foregroundColor(.white)
 
                 if capturedImages.count < minPhotos {
                     Text("(Tối thiểu \(minPhotos))")
-                        .font(.system(size: 11, weight: .medium))
+                        .scaledFont(size: 11, weight: .medium)
                         .foregroundColor(.white.opacity(0.7))
                 }
             }
@@ -244,11 +245,12 @@ struct DonationCameraView: View {
             // Nút Flash
             Button(action: { isFlashOn.toggle() }) {
                 Image(systemName: isFlashOn ? "bolt.fill" : "bolt.slash.fill")
-                    .font(.system(size: 15, weight: .bold))
+                    .scaledFont(size: 15, weight: .bold)
                     .foregroundColor(isFlashOn ? .yellow : .white)
                     .frame(width: 40, height: 40)
                     .background(Circle().fill(Color.black.opacity(0.5)))
             }
+            .accessibilityLabel(isFlashOn ? "Tắt đèn flash" : "Bật đèn flash")
             .disabled(!camera.supportsFlash)
             .opacity(camera.supportsFlash ? 1 : 0.4)
         }
@@ -284,11 +286,11 @@ struct DonationCameraView: View {
     private var guideInstructionBadge: some View {
         HStack(spacing: 8) {
             Image(systemName: capturedImages.count >= minPhotos ? "checkmark.circle.fill" : "camera.viewfinder")
-                .font(.system(size: 13, weight: .semibold))
+                .scaledFont(size: 13, weight: .semibold)
                 .foregroundColor(capturedImages.count >= minPhotos ? accentGreen : Color.yellow)
 
             Text(currentGuideMessage)
-                .font(.system(size: 13, weight: .medium))
+                .scaledFont(size: 13, weight: .medium)
                 .foregroundColor(.white)
         }
         .padding(.horizontal, 16)
@@ -323,7 +325,7 @@ struct DonationCameraView: View {
                         }
 
                         Text(zoomTitle(for: factor))
-                            .font(.system(size: camera.selectedZoomFactor == factor ? 12 : 11, weight: .bold))
+                            .scaledFont(size: camera.selectedZoomFactor == factor ? 12 : 11, weight: .bold)
                             .foregroundColor(camera.selectedZoomFactor == factor ? Color(red: 1.0, green: 0.84, blue: 0.0) : .white.opacity(0.85))
                     }
                     .frame(width: 34, height: 34)
@@ -384,10 +386,11 @@ struct DonationCameraView: View {
                 }
             }) {
                 Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 18))
+                    .scaledFont(size: 18)
                     .foregroundColor(.red)
                     .background(Circle().fill(Color.white).frame(width: 14, height: 14))
             }
+            .accessibilityLabel("Xoá ảnh \(index + 1)")
             .offset(x: 5, y: -5)
         }
     }
@@ -407,10 +410,10 @@ struct DonationCameraView: View {
 
             VStack(spacing: 2) {
                 Image(systemName: "plus")
-                    .font(.system(size: 15, weight: .bold))
+                    .scaledFont(size: 15, weight: .bold)
                     .foregroundColor(Color.white.opacity(0.6))
                 Text("Thêm")
-                    .font(.system(size: 10, weight: .medium))
+                    .scaledFont(size: 10, weight: .medium)
                     .foregroundColor(Color.white.opacity(0.6))
             }
         }
@@ -429,11 +432,11 @@ struct DonationCameraView: View {
                             .fill(Color.white.opacity(0.18))
                             .frame(width: 50, height: 50)
                         Image(systemName: "photo.on.rectangle.angled")
-                            .font(.system(size: 20))
+                            .scaledFont(size: 20)
                             .foregroundColor(.white)
                     }
                     Text("Kho ảnh")
-                        .font(.system(size: 11, weight: .medium))
+                        .scaledFont(size: 11, weight: .medium)
                         .foregroundColor(.white.opacity(0.85))
                 }
             }
@@ -457,7 +460,7 @@ struct DonationCameraView: View {
 
                     // Hiển thị số ảnh đã chụp ở giữa nút
                     Text("\(capturedImages.count)")
-                        .font(.system(size: 18, weight: .black))
+                        .scaledFont(size: 18, weight: .black)
                         .foregroundColor(primaryGreen)
                 }
             }
@@ -476,11 +479,11 @@ struct DonationCameraView: View {
                             .fill(Color.white.opacity(0.18))
                             .frame(width: 50, height: 50)
                         Image(systemName: "camera.rotate")
-                            .font(.system(size: 20))
+                            .scaledFont(size: 20)
                             .foregroundColor(.white)
                     }
                     Text("Đổi chiều")
-                        .font(.system(size: 11, weight: .medium))
+                        .scaledFont(size: 11, weight: .medium)
                         .foregroundColor(.white.opacity(0.85))
                 }
             }
@@ -497,11 +500,11 @@ struct DonationCameraView: View {
                                 .frame(width: 50, height: 50)
                                 .shadow(color: accentGreen.opacity(0.6), radius: 8)
                             Image(systemName: "arrow.right")
-                                .font(.system(size: 18, weight: .bold))
+                                .scaledFont(size: 18, weight: .bold)
                                 .foregroundColor(.white)
                         }
                         Text("Tiếp tục")
-                            .font(.system(size: 11, weight: .bold))
+                            .scaledFont(size: 11, weight: .bold)
                             .foregroundColor(.white)
                     }
                 }

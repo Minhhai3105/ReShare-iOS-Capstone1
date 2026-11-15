@@ -69,12 +69,13 @@ struct CatalogItemDetailView: View {
             ToolbarItem(placement: .topBarLeading) {
                 Button(action: { dismiss() }) {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 14, weight: .bold))
+                        .scaledFont(size: 14, weight: .bold)
                         .foregroundColor(Color(red: 0.11, green: 0.35, blue: 0.20))
                         .frame(width: 36, height: 36)
                         .background(Circle().fill(Color.white))
                         .shadow(color: Color.black.opacity(0.06), radius: 4)
                 }
+                .accessibilityLabel("Quay lại")
             }
             ToolbarItem(placement: .topBarTrailing) {
                 HStack(spacing: 14) {
@@ -100,7 +101,7 @@ struct CatalogItemDetailView: View {
                         .accessibilityLabel("Báo cáo hoặc chặn")
                     }
                 }
-                .font(.system(size: 15, weight: .semibold))
+                .scaledFont(size: 15, weight: .semibold)
                 .foregroundColor(.primary)
             }
         }
@@ -178,7 +179,7 @@ struct CatalogItemDetailView: View {
                         Image(systemName: "hand.raised.fill")
                             .foregroundColor(mintGreen)
                         Text("Trao tặng cộng đồng (P2P)")
-                            .font(.system(size: 11, weight: .bold))
+                            .scaledFont(size: 11, weight: .bold)
                             .foregroundColor(.primary)
                     }
                     .padding(.horizontal, 10)
@@ -194,7 +195,7 @@ struct CatalogItemDetailView: View {
             .padding(12)
 
             Text("📷 \(selectedPhotoIndex + 1)/\(max(item.photoURLs.count, 1))")
-                .font(.system(size: 11, weight: .bold))
+                .scaledFont(size: 11, weight: .bold)
                 .foregroundColor(.white)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
@@ -212,7 +213,7 @@ struct CatalogItemDetailView: View {
                 HStack(spacing: 4) {
                     Circle().fill(item.status.color).frame(width: 6, height: 6)
                     Text(item.status.displayText)
-                        .font(.system(size: 11, weight: .bold))
+                        .scaledFont(size: 11, weight: .bold)
                         .foregroundColor(item.status.color)
                 }
                 .padding(.horizontal, 10)
@@ -221,7 +222,7 @@ struct CatalogItemDetailView: View {
                 .clipShape(Capsule())
 
                 Text("Free / 0đ")
-                    .font(.system(size: 11, weight: .bold))
+                    .scaledFont(size: 11, weight: .bold)
                     .foregroundColor(Color(red: 0.08, green: 0.35, blue: 0.18))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
@@ -229,7 +230,7 @@ struct CatalogItemDetailView: View {
                     .clipShape(Capsule())
 
                 Text("Độ mới: \(item.condition)")
-                    .font(.system(size: 11, weight: .semibold))
+                    .scaledFont(size: 11, weight: .semibold)
                     .foregroundColor(.secondary)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
@@ -241,7 +242,7 @@ struct CatalogItemDetailView: View {
                         Image(systemName: "person.fill")
                         Text("Đồ của bạn")
                     }
-                    .font(.system(size: 11, weight: .bold))
+                    .scaledFont(size: 11, weight: .bold)
                     .foregroundColor(.white)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
@@ -252,16 +253,16 @@ struct CatalogItemDetailView: View {
 
             // Tiêu đề
             Text(item.title)
-                .font(.system(size: 22, weight: .bold))
+                .scaledFont(size: 22, weight: .bold)
                 .foregroundColor(.primary)
 
             // Phân loại & Thời gian
             HStack(spacing: 12) {
                 HStack(spacing: 4) {
                     Image(systemName: "tag.fill")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                     Text(item.category)
-                        .font(.system(size: 12, weight: .medium))
+                        .scaledFont(size: 12, weight: .medium)
                 }
                 .foregroundColor(.secondary)
 
@@ -269,9 +270,9 @@ struct CatalogItemDetailView: View {
 
                 HStack(spacing: 4) {
                     Image(systemName: "clock")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                     Text("Đăng \(item.timeAgo)")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                 }
                 .foregroundColor(.secondary)
             }
@@ -286,22 +287,22 @@ struct CatalogItemDetailView: View {
                 Image(systemName: "quote.bubble.fill")
                     .foregroundColor(mintGreen)
                 Text("LỜI NHẮN TỪ NGƯỜI TRAO TẶNG")
-                    .font(.system(size: 11, weight: .bold))
+                    .scaledFont(size: 11, weight: .bold)
                     .foregroundColor(.secondary)
             }
 
             Text(item.donorNote)
-                .font(.system(size: 13))
+                .scaledFont(size: 13)
                 .foregroundColor(.primary.opacity(0.9))
                 .lineSpacing(4)
 
             HStack(spacing: 8) {
                 HStack(spacing: 4) {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(mintGreen)
                     Text("Đồ dùng sạch sẽ")
-                        .font(.system(size: 11, weight: .medium))
+                        .scaledFont(size: 11, weight: .medium)
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
@@ -310,10 +311,10 @@ struct CatalogItemDetailView: View {
 
                 HStack(spacing: 4) {
                     Image(systemName: "house.fill")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(primaryGreen)
                     Text("Nhận tại nhà người cho")
-                        .font(.system(size: 11, weight: .medium))
+                        .scaledFont(size: 11, weight: .medium)
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
@@ -334,20 +335,20 @@ struct CatalogItemDetailView: View {
             ZStack {
                 Circle().fill(Color(red: 0.15, green: 0.35, blue: 0.22)).frame(width: 44, height: 44)
                 Text((isMyItem ? "BẠN" : String(item.donorName.prefix(2))).uppercased())
-                    .font(.system(size: isMyItem ? 11 : 14, weight: .bold))
+                    .scaledFont(size: isMyItem ? 11 : 14, weight: .bold)
                     .foregroundColor(.white)
             }
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     Text(isMyItem ? "Bạn (Người đăng tặng)" : item.donorName)
-                        .font(.system(size: 14, weight: .bold))
+                        .scaledFont(size: 14, weight: .bold)
                     Image(systemName: "checkmark.seal.fill")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(mintGreen)
                 }
                 Text(isMyItem ? "Món đồ đang chia sẻ tại \(item.district), Đà Nẵng" : "Cư dân tại \(item.district), Đà Nẵng")
-                    .font(.system(size: 11))
+                    .scaledFont(size: 11)
                     .foregroundColor(.secondary)
             }
 
@@ -355,10 +356,10 @@ struct CatalogItemDetailView: View {
 
             VStack(alignment: .trailing, spacing: 2) {
                 Text(isMyItem ? "Chủ món đồ" : "Người cho uy tín")
-                    .font(.system(size: 11, weight: .bold))
+                    .scaledFont(size: 11, weight: .bold)
                     .foregroundColor(primaryGreen)
                 Text(isMyItem ? "100% 0đ" : "Đã tặng 3 lần")
-                    .font(.system(size: 10))
+                    .scaledFont(size: 10)
                     .foregroundColor(.secondary)
             }
             .padding(.horizontal, 8)
@@ -377,11 +378,11 @@ struct CatalogItemDetailView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("ĐỊA ĐIỂM HẸN NHẬN ĐỒ TRỰC TIẾP")
-                    .font(.system(size: 11, weight: .bold))
+                    .scaledFont(size: 11, weight: .bold)
                     .foregroundColor(.secondary)
                 Spacer()
                 Text("Trong TP. Đà Nẵng")
-                    .font(.system(size: 11, weight: .bold))
+                    .scaledFont(size: 11, weight: .bold)
                     .foregroundColor(primaryGreen)
             }
 
@@ -389,26 +390,26 @@ struct CatalogItemDetailView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "mappin.circle.fill")
                         .foregroundColor(primaryGreen)
-                        .font(.system(size: 16))
+                        .scaledFont(size: 16)
                     Text(privatePickupAddress ?? "\(item.district), Đà Nẵng")
-                        .font(.system(size: 13, weight: .bold))
+                        .scaledFont(size: 13, weight: .bold)
                         .foregroundColor(.primary)
                 }
 
                 if privatePickupAddress == nil {
                     Text("• Địa chỉ cụ thể chỉ hiện cho người được người tặng chốt lịch hẹn.")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(.secondary)
                         .padding(.top, 2)
                 }
 
                 Text("• Người nhận chủ động đến nhà người cho để nhận đồ trực tiếp.")
-                    .font(.system(size: 11))
+                    .scaledFont(size: 11)
                     .foregroundColor(.secondary)
                     .padding(.top, 2)
 
                 Text("• Hãy nhắn tin với người cho để thống nhất khung giờ hẹn lấy thuận tiện nhất cho cả hai.")
-                    .font(.system(size: 11))
+                    .scaledFont(size: 11)
                     .foregroundColor(.secondary)
             }
         }
@@ -424,16 +425,16 @@ struct CatalogItemDetailView: View {
             ZStack {
                 Circle().fill(primaryGreen).frame(width: 36, height: 36)
                 Image(systemName: "arrow.3.trianglepath")
-                    .font(.system(size: 15, weight: .bold))
+                    .scaledFont(size: 15, weight: .bold)
                     .foregroundColor(.white)
             }
 
             VStack(alignment: .leading, spacing: 3) {
                 Text("Cam kết 100% Free - Nhận đồ có trách nhiệm")
-                    .font(.system(size: 13, weight: .bold))
+                    .scaledFont(size: 13, weight: .bold)
                     .foregroundColor(primaryGreen)
                 Text("Món đồ này được trao tặng hoàn toàn miễn phí. Vui lòng đến nhận đúng giờ đã hẹn với người cho để giữ gìn văn hóa sẻ chia đẹp của cộng đồng Đà Nẵng nhé!")
-                    .font(.system(size: 11))
+                    .scaledFont(size: 11)
                     .foregroundColor(.secondary)
                     .lineSpacing(2)
             }
@@ -455,7 +456,7 @@ struct CatalogItemDetailView: View {
                     HStack(spacing: 8) {
                         Image(systemName: "bubble.left.and.bubble.right.fill")
                         Text("Xem tin nhắn người hỏi xin món này")
-                            .font(.system(size: 15, weight: .bold))
+                            .scaledFont(size: 15, weight: .bold)
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 50)
@@ -466,7 +467,7 @@ struct CatalogItemDetailView: View {
                 }
 
                 Text("🌟 Đây là món đồ của bạn. Bạn không thể tự xin đồ của chính mình.")
-                    .font(.system(size: 10, weight: .medium))
+                    .scaledFont(size: 10, weight: .medium)
                     .foregroundColor(.secondary)
             } else {
                 // Giao diện dành cho Người B (Người xin đồ từ cộng đồng)
@@ -476,7 +477,7 @@ struct CatalogItemDetailView: View {
                         HStack(spacing: 8) {
                             Image(systemName: item.status == .completed ? "checkmark.circle.fill" : "message.fill")
                             Text(item.status == .completed ? "Món đồ đã được trao tặng" : (item.status == .reserved ? "Nhắn tin (Đã có người hẹn)" : "Nhắn tin nhận đồ (0đ)"))
-                                .font(.system(size: 15, weight: .bold))
+                                .scaledFont(size: 15, weight: .bold)
                         }
                         .frame(maxWidth: .infinity)
                         .frame(height: 50)
@@ -488,7 +489,7 @@ struct CatalogItemDetailView: View {
                 }
 
                 Text("📍 Trao nhận trực tiếp tận tay. Hoàn toàn 0đ.")
-                    .font(.system(size: 10, weight: .medium))
+                    .scaledFont(size: 10, weight: .medium)
                     .foregroundColor(.secondary)
             }
         }

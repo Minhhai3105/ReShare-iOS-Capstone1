@@ -52,7 +52,6 @@ final class AuthViewModel: ObservableObject {
     func register(appState: AppState) {
         guard !fullName.trimmingCharacters(in: .whitespaces).isEmpty,
               !email.trimmingCharacters(in: .whitespaces).isEmpty,
-              !phoneNumber.trimmingCharacters(in: .whitespaces).isEmpty,
               !password.isEmpty else {
             errorMessage = "Vui lòng nhập đầy đủ thông tin"
             return
@@ -60,6 +59,12 @@ final class AuthViewModel: ObservableObject {
         
         guard password.count >= 8 else {
             errorMessage = "Mật khẩu phải có ít nhất 8 ký tự"
+            return
+        }
+
+        // Số điện thoại không bắt buộc; nếu nhập thì phải đúng dạng (PhoneNumberRule).
+        guard PhoneNumberRule.isValid(phoneNumber) else {
+            errorMessage = PhoneNumberRule.invalidMessage
             return
         }
 

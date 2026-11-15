@@ -35,12 +35,12 @@ struct SplashView: View {
                     
                     // Tên ứng dụng "ReShare"
                     Text("ReShare")
-                        .font(.system(size: 32, weight: .bold, design: .rounded))
+                        .scaledFont(size: 32, weight: .bold, design: .rounded)
                         .foregroundColor(AppColors.primary) // Xanh thương hiệu đậm
                     
-                    // Slogan tiếng Anh
-                    Text("Give useful items a second life")
-                        .font(.system(size: 16, weight: .regular, design: .default))
+                    // Khẩu hiệu
+                    Text("Trao đồ dùng thêm một vòng đời")
+                        .scaledFont(size: 16, weight: .regular, design: .default)
                         .foregroundColor(AppColors.textSecondary)
                 }
                 // Áp dụng Animation Scale & Fade In
@@ -51,7 +51,7 @@ struct SplashView: View {
                 
                 // 3. Footer thông điệp ở đáy màn hình
                 Text("Một vòng tuần hoàn yêu thương")
-                    .font(.system(size: 13, weight: .medium, design: .default))
+                    .scaledFont(size: 13, weight: .medium, design: .default)
                     .foregroundColor(AppColors.textTertiary)
                     .padding(.bottom, 24)
                     .opacity(isAnimating ? 0.9 : 0.0)

@@ -101,14 +101,14 @@ struct CameraScanOverlay: View {
                 .shadow(color: neonEmerald, radius: 4)
 
             Text(detectedItemTitle)
-                .font(.system(size: 13, weight: .bold))
+                .scaledFont(size: 13, weight: .bold)
                 .foregroundColor(.white)
 
             Text("•")
                 .foregroundColor(.white.opacity(0.5))
 
             Text(conditionText)
-                .font(.system(size: 12, weight: .semibold))
+                .scaledFont(size: 12, weight: .semibold)
                 .foregroundColor(neonEmerald)
         }
         .padding(.horizontal, 14)

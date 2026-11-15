@@ -20,9 +20,9 @@ struct ReportContentSheet: View {
                     Section {
                         Label("Đã gửi báo cáo", systemImage: "checkmark.seal.fill")
                             .foregroundColor(primaryGreen)
-                            .font(.system(size: 16, weight: .semibold))
+                            .scaledFont(size: 16, weight: .semibold)
                         Text("Cảm ơn bạn. ReShare sẽ xem xét trong vòng 24 giờ. Bạn cũng có thể chặn người này để không nhận tin nhắn hay thấy bài của họ nữa.")
-                            .font(.system(size: 14))
+                            .scaledFont(size: 14)
                     }
                 } else {
                     Section("Lý do") {
@@ -44,7 +44,7 @@ struct ReportContentSheet: View {
                         Text("Báo cáo được gửi kín danh tới đội ngũ ReShare, người bị báo cáo không biết ai đã báo cáo.")
                     }
                     if let errorMessage {
-                        Section { Text(errorMessage).foregroundColor(.red).font(.system(size: 14)) }
+                        Section { Text(errorMessage).foregroundColor(.red).scaledFont(size: 14) }
                     }
                 }
             }

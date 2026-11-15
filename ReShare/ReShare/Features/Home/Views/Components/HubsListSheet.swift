@@ -21,13 +21,13 @@ struct HubsListSheet: View {
                     // Header giới thiệu mạng lưới trạm
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Điểm tiếp nhận tại Đà Nẵng")
-                            .font(.system(size: 16, weight: .bold))
+                            .scaledFont(size: 16, weight: .bold)
                             .foregroundColor(primaryGreen)
 
                         Text(allDemo
                              ? "Các điểm hiện đang minh hoạ. ReShare chưa vận hành trạm tiếp nhận; đừng mang đồ tới các vị trí này."
                              : "Chỉ mang đồ tới điểm đang hoạt động sau khi đơn quyên góp được kho duyệt.")
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                             .foregroundColor(.secondary)
                             .lineSpacing(2)
                     }
@@ -38,12 +38,12 @@ struct HubsListSheet: View {
                     VStack(spacing: 14) {
                         if isLoading && hubs.isEmpty {
                             ProgressView("Đang tải điểm tiếp nhận…")
-                                .font(.system(size: 12))
+                                .scaledFont(size: 12)
                         } else if hubs.isEmpty {
                             Text(loadFailed
                                  ? "Không tải được danh sách. Kéo xuống để thử lại."
                                  : "Chưa có điểm tiếp nhận nào đang hoạt động.")
-                                .font(.system(size: 13))
+                                .scaledFont(size: 13)
                                 .foregroundColor(.secondary)
                         }
                         ForEach(hubs) { hub in
@@ -64,7 +64,7 @@ struct HubsListSheet: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Đóng") { dismiss() }
-                        .font(.system(size: 15, weight: .bold))
+                        .scaledFont(size: 15, weight: .bold)
                         .foregroundColor(primaryGreen)
                 }
             }
@@ -87,18 +87,18 @@ struct HubsListSheet: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(hub.name)
-                        .font(.system(size: 15, weight: .bold))
+                        .scaledFont(size: 15, weight: .bold)
                         .foregroundColor(Color(red: 0.11, green: 0.15, blue: 0.13))
 
                     Text(hub.address)
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(Color(red: 0.40, green: 0.46, blue: 0.42))
                 }
 
                 Spacer()
 
                 Text(hub.isDemo ? "Minh hoạ" : "Đang hoạt động")
-                    .font(.system(size: 11, weight: .bold))
+                    .scaledFont(size: 11, weight: .bold)
                     .foregroundColor(hub.isDemo ? .orange : primaryGreen)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
@@ -111,7 +111,7 @@ struct HubsListSheet: View {
             Text(hub.isDemo
                  ? "Không có địa chỉ nhận đồ, số điện thoại hoặc lịch mở cửa thực tế."
                  : "⏰ \(hub.openHours)")
-                .font(.system(size: 11))
+                .scaledFont(size: 11)
                 .foregroundColor(Color(red: 0.45, green: 0.50, blue: 0.46))
         }
         .padding(16)
