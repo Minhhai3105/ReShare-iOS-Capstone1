@@ -66,6 +66,7 @@ Vai trò: `donor` (iOS) · `warehouse_admin` (chỉ đơn thuộc kho được g
 | `reports-api` | `GET /v1/admin/reports` (timezone `Asia/Ho_Chi_Minh`) |
 | `contact-api` | `POST` + `GET /v1/contact` |
 | `campaigns-api` | `GET` + `POST /v1/admin/campaigns` · `GET …/options`, `…/:id` · `POST …/:id/update`, `…/:id/status` (chỉ System Admin) |
+| `hubs-api` | `GET /v1/admin/hubs` (System Admin + Warehouse Admin xem) · `POST /v1/admin/hubs`, `…/:id/update`, `…/:id/status` (chỉ System Admin) |
 
 `server.cjs` route theo prefix path, có allowlist origin (`ADMIN_WEB_ORIGINS`) và chặn body > 8KB (32KB cho `/v1/contact`).
 
@@ -79,7 +80,7 @@ Web Admin tách rõ bằng `import.meta.env.DEV`:
 - Component dùng chung cho cả hai (`ReportScreen.vue`, `DonationDetail.vue`, `ActualReceipt.vue`, `DistributionForm.vue`) nhận repository/prop từ route. **Khi sửa, đừng làm rò mock sang nhánh live hoặc ngược lại.**
 - `/admin` (`AdminHome.vue`) vẫn là trang tạm sau đăng nhập, chưa phải dashboard vận hành.
 
-Chiến dịch và Hub trên iOS đọc từ Firestore (`fetchOpenCampaigns`, `fetchActiveHubs`). Chiến dịch do System Admin tạo trên Web Admin qua `campaigns-api`; tiến độ chỉ cộng trong transaction nhập kho. Hub nạp bằng `backend/scripts/seed-hubs.cjs` và **vẫn là điểm minh hoạ** (`isDemo: true`) cho tới khi nhóm có điểm tiếp nhận thật — app phải tiếp tục ghi rõ điều đó.
+Chiến dịch và Hub trên iOS đọc từ Firestore (`fetchOpenCampaigns`, `fetchActiveHubs`). Chiến dịch do System Admin tạo trên Web Admin qua `campaigns-api`; tiến độ chỉ cộng trong transaction nhập kho. Hub do System Admin quản lý trên Web Admin (`/admin/hubs`, qua `hubs-api`; không có xoá, chỉ tạm ẩn — bị chặn nếu chiến dịch đang mở còn dùng; đổi tên cập nhật bản sao tên trong chiến dịch nháp/đang mở). `backend/scripts/seed-hubs.cjs` chỉ còn để khởi tạo và mặc định bỏ qua Hub đã có. 3 Hub hiện có **vẫn là điểm minh hoạ** (`isDemo: true`) cho tới khi nhóm có điểm tiếp nhận thật — app phải tiếp tục ghi rõ điều đó; chỉ bỏ cờ trên web khi điểm đã nhận đồ thật.
 
 ## AI / Core ML
 

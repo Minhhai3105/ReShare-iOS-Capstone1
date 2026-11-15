@@ -176,7 +176,7 @@ function cancel() {
 
       <fieldset class="campaign-field campaign-field--hubs">
         <legend>Điểm tiếp nhận <em>*</em></legend>
-        <p v-if="!hubs.length" class="campaign-field__error">Chưa có điểm tiếp nhận nào đang hoạt động. Chạy script nạp Hub trước (backend/scripts/seed-hubs.cjs).</p>
+        <p v-if="!hubs.length" class="campaign-field__error">Chưa có điểm tiếp nhận nào đang hoạt động. Thêm hoặc mở lại điểm tiếp nhận ở trang <RouterLink :to="{ name: ADMIN_ROUTE.hubList }">Điểm tiếp nhận</RouterLink>.</p>
         <label v-for="hub in hubs" :key="hub.id">
           <input v-model="form.hubIds" type="checkbox" :value="hub.id" :disabled="hub.inactive && !form.hubIds.includes(hub.id)" />
           {{ hub.name }}

@@ -45,6 +45,11 @@ export const ADMIN_ROUTE = Object.freeze({
   campaignDetail: 'admin-campaign-detail',
   campaignEdit: 'admin-campaign-edit',
 
+  // Điểm tiếp nhận (Hub): System Admin quản lý, Warehouse Admin chỉ xem
+  hubList: 'admin-hub-list',
+  hubNew: 'admin-hub-new',
+  hubEdit: 'admin-hub-edit',
+
   // Routes từ dev - Inventory và Distribution
   inventory: 'admin-inventory',
   inventoryDetail: 'admin-inventory-detail',
