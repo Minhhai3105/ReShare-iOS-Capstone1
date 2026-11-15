@@ -5,9 +5,9 @@ import { ADMIN_ROUTE, USER_ROLE } from '../auth/auth.constants'
 import { staffAssignment } from '../auth/auth.store'
 import InlineConfirm from '../shared/InlineConfirm.vue'
 import { hubRepository } from './hub.repository'
-import { HUB_STATUS, hubErrorMessage, mapsUrl, nextStatusAction, statusChangeCheck, statusLabel } from './hub.model'
+import { HUB_STATUS, deleteCheck, hubErrorMessage, mapsUrl, nextStatusAction, statusChangeCheck, statusLabel } from './hub.model'
 
-// Warehouse Admin xem được danh sách (chỉ đọc); chỉ System Admin thêm, sửa, tạm ẩn, mở lại.
+// Warehouse Admin xem được danh sách (chỉ đọc); chỉ System Admin thêm, sửa, tạm ẩn, mở lại, xoá.
 const isStaff = computed(() => staffAssignment.value?.active === true
   && [USER_ROLE.systemAdmin, USER_ROLE.warehouseAdmin].includes(staffAssignment.value.role))
 const canManage = computed(() => isStaff.value && staffAssignment.value.role === USER_ROLE.systemAdmin)
@@ -37,7 +37,35 @@ async function load() {
 function startStatusChange(hub) {
   if (pendingId.value) return
   cardError.value = { id: '', message: '' }
-  confirming.value = { id: hub.id, check: statusChangeCheck(hub) }
+  confirming.value = { id: hub.id, kind: 'status', check: statusChangeCheck(hub) }
+}
+
+function startDelete(hub) {
+  if (pendingId.value) return
+  const check = deleteCheck(hub)
+  if (!check) return
+  cardError.value = { id: '', message: '' }
+  confirming.value = { id: hub.id, kind: 'delete', check: { ...check, blocked: false } }
+}
+
+async function confirmDelete(hub) {
+  if (confirming.value?.id !== hub.id || confirming.value.kind !== 'delete' || pendingId.value) return
+  pendingId.value = hub.id
+  try {
+    await hubRepository.remove(hub.id, hub.version)
+    hubs.value = hubs.value.filter((item) => item.id !== hub.id)
+    confirming.value = null
+  } catch (error) {
+    confirming.value = null
+    cardError.value = { id: hub.id, message: hubErrorMessage(error) }
+  } finally {
+    pendingId.value = ''
+  }
+}
+
+function onConfirm(hub) {
+  if (confirming.value?.kind === 'delete') confirmDelete(hub)
+  else confirmStatusChange(hub)
 }
 
 function cancelStatusChange() {
@@ -116,14 +144,17 @@ watch(isStaff, (allowed) => { if (allowed) load() }, { immediate: true })
           :message="confirming.check.message"
           :confirm-label="confirming.check.confirmLabel"
           :busy="pendingId === hub.id"
-          :tone="confirming.check.blocked ? 'danger' : 'warning'"
-          @confirm="confirmStatusChange(hub)"
+          :tone="confirming.check.blocked || confirming.kind === 'delete' ? 'danger' : 'warning'"
+          @confirm="onConfirm(hub)"
           @cancel="cancelStatusChange"
         />
         <div v-else-if="canManage" class="hub-card__actions">
           <RouterLink :to="{ name: ADMIN_ROUTE.hubEdit, params: { hubId: hub.id } }" class="auth-btn auth-btn--soft">Sửa</RouterLink>
           <button type="button" class="auth-btn auth-btn--soft" :disabled="Boolean(pendingId)" @click="startStatusChange(hub)">
             {{ nextStatusAction(hub)?.label }}
+          </button>
+          <button v-if="deleteCheck(hub)" type="button" class="auth-btn auth-btn--soft hub-card__delete" :disabled="Boolean(pendingId)" @click="startDelete(hub)">
+            Xoá
           </button>
         </div>
       </li>
@@ -145,7 +176,8 @@ watch(isStaff, (allowed) => { if (allowed) load() }, { immediate: true })
 .hub-card__line { display: flex; align-items: flex-start; gap: 6px; color: #42536a; font-size: 14px; }
 .hub-card__map { color: #246632; font-size: 13px; }
 .hub-card__campaigns { color: #6b5a2e; font-size: 12px; }
-.hub-card__actions { display: flex; gap: 8px; margin-top: 4px; }
+.hub-card__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.hub-card__delete { color: #b3261e; }
 .hub-card__error { margin: 0; padding: 10px 12px; border-radius: 12px; background: #fdecea; color: #b3261e; font-size: 14px; }
 .hub-badge { padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; }
 .hub-badge--success { background: #e3f4e7; color: #1f6b33; }

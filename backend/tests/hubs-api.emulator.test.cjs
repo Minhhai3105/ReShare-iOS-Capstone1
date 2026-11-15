@@ -102,3 +102,58 @@ test('Điểm tiếp nhận: System Admin tạo, sửa có kiểm phiên bản, 
     await deleteApp(app);
   }
 });
+
+test('Điểm tiếp nhận: chỉ xoá được điểm đã tạm ẩn và chưa từng có đơn hay chiến dịch dùng; có ghi nhật ký', {
+  skip: !process.env.FIRESTORE_EMULATOR_HOST,
+}, async () => {
+  const app = initializeApp({ projectId: 'demo-reshare' }, 'hubs-api-delete-emulator-test');
+  const db = getFirestore(app);
+  const paths = [
+    'staff_assignments/hubdel-sa', 'staff_assignments/hubdel-wa',
+    'hubs/hubdel-draft', 'hubs/hubdel-active', 'hubs/hubdel-donated', 'hubs/hubdel-campaign',
+    'donations/hubdel-donation', 'campaigns/hubdel-closed',
+  ];
+  const SA_DEL = { authorization: 'Bearer hubdel-sa' };
+  const WA_DEL = { authorization: 'Bearer hubdel-wa' };
+  const hub = (name, status, version = 2) => ({
+    name, address: 'Địa chỉ thử', openHours: '8h–17h', latitude: 16, longitude: 108, isDemo: true, status, version,
+  });
+  try {
+    await db.doc('staff_assignments/hubdel-sa').set({ active: true, role: 'system_admin', warehouseIds: [] });
+    await db.doc('staff_assignments/hubdel-wa').set({ active: true, role: 'warehouse_admin', warehouseIds: ['kho-a'] });
+    await db.doc('hubs/hubdel-draft').set(hub('Điểm nháp xoá', 'inactive'));
+    await db.doc('hubs/hubdel-active').set(hub('Điểm đang mở', 'active'));
+    await db.doc('hubs/hubdel-donated').set(hub('Điểm đã có đơn', 'inactive'));
+    await db.doc('hubs/hubdel-campaign').set(hub('Điểm thuộc chiến dịch cũ', 'inactive'));
+    await db.doc('donations/hubdel-donation').set({ hubId: 'hubdel-donated', hubName: 'Điểm đã có đơn', status: 'distributed' });
+    await db.doc('campaigns/hubdel-closed').set({ title: 'Chiến dịch đã đóng', status: 'closed', hubIds: ['hubdel-campaign'] });
+    const api = createHubsApi({ db, verifyToken: async token => ({ uid: token }), serverTimestamp: () => FieldValue.serverTimestamp() });
+    const del = (id, headers = SA_DEL, version = 2) => api.handle('POST', `/v1/admin/hubs/${id}/delete`, headers, { expectedVersion: version });
+
+    await assert.rejects(del('hubdel-draft', WA_DEL), { status: 403 });
+    await assert.rejects(del('hubdel-active'), { status: 409, message: 'Hide the hub before deleting it' });
+    await assert.rejects(del('hubdel-donated'),
+      error => error.status === 409 && error.code === 'HUB_REFERENCED' && error.details.hasDonations === true);
+    await assert.rejects(del('hubdel-campaign'),
+      error => error.status === 409 && error.code === 'HUB_REFERENCED'
+        && JSON.stringify(error.details.campaigns) === JSON.stringify([{ id: 'hubdel-closed', title: 'Chiến dịch đã đóng' }]));
+    await assert.rejects(del('hubdel-draft', SA_DEL, 1), { status: 409, message: 'Hub changed; reload first' });
+    await assert.rejects(api.handle('POST', '/v1/admin/hubs/hubdel-draft/delete', SA_DEL, { expectedVersion: 2, force: true }), { status: 400 });
+
+    const deleted = await del('hubdel-draft');
+    assert.deepEqual(deleted.body, { deleted: true, id: 'hubdel-draft' });
+    assert.equal((await db.doc('hubs/hubdel-draft').get()).exists, false);
+    const audit = await db.collection('hub_audit').where('hubId', '==', 'hubdel-draft').get();
+    assert.equal(audit.size, 1);
+    paths.push(`hub_audit/${audit.docs[0].id}`);
+    assert.equal(audit.docs[0].data().action, 'delete');
+    assert.equal(audit.docs[0].data().name, 'Điểm nháp xoá');
+    assert.equal(audit.docs[0].data().actorUid, 'hubdel-sa');
+    await assert.rejects(del('hubdel-draft'), { status: 404 });
+    // Điểm còn lịch sử không bị đụng tới.
+    assert.equal((await db.doc('hubs/hubdel-donated').get()).exists, true);
+  } finally {
+    await removeFixtureDocs(db, paths);
+    await deleteApp(app);
+  }
+});
