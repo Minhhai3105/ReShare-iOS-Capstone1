@@ -18,6 +18,7 @@ const { createReportsApi } = require('./reports-api.cjs');
 const { createBeneficiariesApi } = require('./beneficiaries-api.cjs');
 const { createDashboardApi } = require('./dashboard-api.cjs');
 const { createCampaignsApi } = require('./campaigns-api.cjs');
+const { createHubsApi } = require('./hubs-api.cjs');
 const { createAccountApi } = require('./account-api.cjs');
 const { cloudinaryCatalogImageDeleter, createImageCleanupJobs } = require('./image-cleanup-jobs.cjs');
 const { createModerationApi } = require('./moderation-api.cjs');
@@ -60,6 +61,7 @@ const reportsApi = createReportsApi({ db, verifyToken, serverTimestamp: () => Fi
 const beneficiariesApi = createBeneficiariesApi({ db, auth: getAuth(), verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const dashboardApi = createDashboardApi({ db, verifyToken });
 const campaignsApi = createCampaignsApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
+const hubsApi = createHubsApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const deleteCatalogImage = cloudinaryCatalogImageDeleter(cloudinary);
 const accountApi = createAccountApi({ db, auth: getAuth(), verifyToken, deleteCatalogImage });
 const moderationApi = createModerationApi({ db, auth: getAuth(), verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
@@ -103,6 +105,7 @@ const server = http.createServer(async (request, response) => {
     /^\/v1\/admin\/moderation\/reports\/[^/]+\/resolve$/.test(pathname);
   const isCampaignPath = pathname === '/v1/admin/campaigns' ||
     /^\/v1\/admin\/campaigns\/[^/]+(\/(update|status))?$/.test(pathname);
+  const isHubPath = pathname === '/v1/admin/hubs' || /^\/v1\/admin\/hubs\/[^/]+\/(update|status)$/.test(pathname);
   const isAdminImageRead = pathname === '/v1/images/read-access';
   const isContactPath = pathname === '/v1/contact';
   const isAccountPath = pathname === '/v1/account/delete';
@@ -165,6 +168,7 @@ const server = http.createServer(async (request, response) => {
       : isBeneficiaryPath ? beneficiariesApi
       : isDashboardPath ? dashboardApi
       : isCampaignPath ? campaignsApi
+      : isHubPath ? hubsApi
       : isModerationPath ? moderationApi
       : isDonationAdminPath ? donationReviewApi
       : isAdminApi ? staffApi

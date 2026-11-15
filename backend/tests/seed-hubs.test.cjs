@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { validateHubs } = require('../scripts/seed-hubs.cjs');
+const { validateHubs, planSeed } = require('../scripts/seed-hubs.cjs');
 
 test('file Hub mẫu hợp lệ và mọi Hub đều được đánh dấu minh hoạ', () => {
   const hubs = validateHubs(JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'scripts', 'hubs.seed.json'), 'utf8')));
@@ -19,4 +19,15 @@ test('Hub sai dữ liệu bị từ chối trước khi ghi', () => {
   assert.throws(() => validateHubs([{ ...hub, name: '' }]), /name/);
   assert.throws(() => validateHubs([{ ...hub, isDemo: 'yes' }]), /isDemo/);
   assert.throws(() => validateHubs([{ ...hub, status: 'open' }]), /status/);
+});
+
+test('chạy lại script không ghi đè Hub đã sửa trên Web Admin, trừ khi có --overwrite', () => {
+  const hubs = validateHubs(JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'scripts', 'hubs.seed.json'), 'utf8')));
+  const existing = new Map([['hub-haichau', 4]]);
+  const plan = planSeed(hubs, existing, { overwrite: false });
+  assert.deepEqual(plan.skipped, ['hub-haichau']);
+  assert.deepEqual(plan.write.map(item => [item.hub.id, item.version, item.isNew]), [['hub-nguhanhson', 1, true], ['hub-lienchieu', 1, true]]);
+  const forced = planSeed(hubs, existing, { overwrite: true });
+  assert.deepEqual(forced.skipped, []);
+  assert.deepEqual(forced.write.find(item => item.hub.id === 'hub-haichau'), { hub: hubs[0], version: 5, isNew: false });
 });

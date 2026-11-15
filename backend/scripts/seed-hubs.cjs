@@ -2,10 +2,13 @@
 // App iOS đọc collection `hubs` (rules chỉ cho đọc), chiến dịch chọn Hub từ đây.
 //
 // Chạy:  FIREBASE_PROJECT_ID=<project> GOOGLE_APPLICATION_CREDENTIALS=<service-account.json> \
-//        node scripts/seed-hubs.cjs [--dry-run]
+//        node scripts/seed-hubs.cjs [--dry-run] [--overwrite]
 //
-// Chạy lại an toàn: ghi đè các field mô tả Hub, giữ nguyên createdAt. Hub có "isDemo": true sẽ
-// hiện nhãn "minh hoạ" trên app — chỉ bỏ cờ này khi điểm đó đã tiếp nhận đồ thật.
+// Từ 15/11/2026 Hub được quản lý trên Web Admin (backend/hubs-api.cjs). Script này chỉ còn dùng để
+// khởi tạo: mặc định CHỈ tạo Hub chưa có, bỏ qua Hub đã có để không xoá mất sửa đổi làm trên web.
+// `--overwrite` ghi đè các field mô tả như trước (giữ createdAt, tăng version để form web đang mở
+// nhận lỗi "đã thay đổi" thay vì ghi đè ngược lại). Hub có "isDemo": true hiện nhãn "minh hoạ" trên
+// app — chỉ bỏ cờ này khi điểm đó đã tiếp nhận đồ thật.
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -46,17 +49,36 @@ async function main() {
   const { getFirestore, FieldValue } = require('firebase-admin/firestore');
   initializeApp({ credential: applicationDefault(), projectId });
   const db = getFirestore();
-  const batch = db.batch();
+  const existing = new Map();
   for (const hub of hubs) {
-    const ref = db.collection('hubs').doc(hub.id);
-    const existing = await ref.get();
-    batch.set(ref, {
-      ...hub, updatedAt: FieldValue.serverTimestamp(),
-      ...(existing.exists ? {} : { createdAt: FieldValue.serverTimestamp() }),
+    const snapshot = await db.collection('hubs').doc(hub.id).get();
+    if (snapshot.exists) existing.set(hub.id, snapshot.data().version || 1);
+  }
+  const plan = planSeed(hubs, existing, { overwrite: process.argv.includes('--overwrite') });
+  const batch = db.batch();
+  for (const { hub, version, isNew } of plan.write) {
+    batch.set(db.collection('hubs').doc(hub.id), {
+      ...hub, version, updatedAt: FieldValue.serverTimestamp(),
+      ...(isNew ? { createdAt: FieldValue.serverTimestamp() } : {}),
     }, { merge: true });
   }
-  await batch.commit();
-  console.log(`Đã nạp ${hubs.length} Hub: ${hubs.map(hub => hub.id).join(', ')}`);
+  if (plan.write.length) await batch.commit();
+  console.log(`Đã ghi ${plan.write.length} Hub: ${plan.write.map(item => item.hub.id).join(', ') || '(không có)'}`);
+  if (plan.skipped.length) {
+    console.log(`Bỏ qua ${plan.skipped.length} Hub đã có (sửa trên Web Admin, hoặc chạy lại với --overwrite): ${plan.skipped.join(', ')}`);
+  }
+}
+
+// Hub nào được ghi: mặc định chỉ Hub chưa có; --overwrite thì ghi cả Hub đã có và tăng version.
+function planSeed(hubs, existingVersions, { overwrite }) {
+  const write = [];
+  const skipped = [];
+  for (const hub of hubs) {
+    if (!existingVersions.has(hub.id)) write.push({ hub, version: 1, isNew: true });
+    else if (overwrite) write.push({ hub, version: existingVersions.get(hub.id) + 1, isNew: false });
+    else skipped.push(hub.id);
+  }
+  return { write, skipped };
 }
 
 if (require.main === module) {
@@ -66,4 +88,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { validateHubs };
+module.exports = { validateHubs, planSeed };
