@@ -22,25 +22,25 @@ struct ForgotPasswordView: View {
             VStack(alignment: .leading, spacing: 18) {
                 if didSend {
                     Label("Đã gửi yêu cầu", systemImage: "envelope.badge.fill")
-                        .font(.system(size: 17, weight: .bold))
+                        .scaledFont(size: 17, weight: .bold)
                         .foregroundColor(AppColors.primary)
                     Text("Nếu \(sentEmail) có tài khoản ReShare, bạn sẽ nhận được thư đặt lại mật khẩu trong vài phút. Kiểm tra cả mục Spam hoặc Quảng cáo. Mở liên kết trong thư để đặt mật khẩu mới rồi quay lại đăng nhập.")
-                        .font(.system(size: 15))
+                        .scaledFont(size: 15)
                         .foregroundColor(AppColors.textPrimary)
                     Button("Gửi lại hoặc dùng email khác") {
                         email = sentEmail
                         didSend = false
                     }
-                    .font(.system(size: 15, weight: .semibold))
+                    .scaledFont(size: 15, weight: .semibold)
                     .foregroundColor(AppColors.primary)
                     .frame(minHeight: 44)
                 } else {
                     Text("Nhập email bạn dùng để đăng nhập. ReShare sẽ gửi liên kết đặt lại mật khẩu tới email này.")
-                        .font(.system(size: 15))
+                        .scaledFont(size: 15)
                         .foregroundColor(AppColors.textSecondary)
 
                     TextField("Địa chỉ email", text: $email)
-                        .font(.system(size: 15))
+                        .scaledFont(size: 15)
                         .textContentType(.emailAddress)
                         .keyboardType(.emailAddress)
                         .textInputAutocapitalization(.never)
@@ -57,7 +57,7 @@ struct ForgotPasswordView: View {
 
                     if let errorMessage {
                         Text(errorMessage)
-                            .font(.system(size: 13, weight: .medium))
+                            .scaledFont(size: 13, weight: .medium)
                             .foregroundColor(AppColors.rejected)
                     }
 
@@ -65,7 +65,7 @@ struct ForgotPasswordView: View {
                         HStack(spacing: 8) {
                             if isSending { ProgressView().tint(.white) }
                             Text(isSending ? "Đang gửi…" : "Gửi liên kết đặt lại")
-                                .font(.system(size: 16, weight: .semibold))
+                                .scaledFont(size: 16, weight: .semibold)
                         }
                         .frame(maxWidth: .infinity)
                         .frame(height: 52)

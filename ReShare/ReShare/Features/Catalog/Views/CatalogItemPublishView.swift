@@ -71,7 +71,7 @@ struct CatalogItemPublishView: View {
                 iconSelectorSection
                 if let aiCategoryMessage {
                     Text(aiCategoryMessage)
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(textMuted)
                 }
 
@@ -89,7 +89,7 @@ struct CatalogItemPublishView: View {
 
                 if let err = errorMessage {
                     Text(err)
-                        .font(.system(size: 13, weight: .medium))
+                        .scaledFont(size: 13, weight: .medium)
                         .foregroundColor(.red)
                         .padding(.horizontal)
                 }
@@ -114,9 +114,9 @@ struct CatalogItemPublishView: View {
                 Button(action: { dismiss() }) {
                     HStack(spacing: 4) {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 14, weight: .bold))
+                            .scaledFont(size: 14, weight: .bold)
                         Text("Quay lại")
-                            .font(.system(size: 14, weight: .medium))
+                            .scaledFont(size: 14, weight: .medium)
                     }
                     .foregroundColor(primaryGreen)
                 }
@@ -155,13 +155,13 @@ struct CatalogItemPublishView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("ẢNH CHỤP THỰC TẾ (\(capturedImages.count) TẤM)")
-                    .font(.system(size: 11, weight: .bold))
+                    .scaledFont(size: 11, weight: .bold)
                     .foregroundColor(sectionHeaderColor)
 
                 Spacer()
 
                 Text("Ảnh dùng để đăng đồ")
-                    .font(.system(size: 11, weight: .semibold))
+                    .scaledFont(size: 11, weight: .semibold)
                     .foregroundColor(mintGreen)
             }
 
@@ -188,7 +188,7 @@ struct CatalogItemPublishView: View {
     private var iconSelectorSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("BIỂU TƯỢNG MÓN ĐỒ")
-                .font(.system(size: 11, weight: .bold))
+                .scaledFont(size: 11, weight: .bold)
                 .foregroundColor(sectionHeaderColor)
 
             HStack(spacing: 14) {
@@ -208,12 +208,12 @@ struct CatalogItemPublishView: View {
                                     .shadow(color: Color.black.opacity(0.06), radius: 4)
 
                                 Image(systemName: cat.1)
-                                    .font(.system(size: 20))
+                                    .scaledFont(size: 20)
                                     .foregroundColor(selectedCategory == cat.0 ? .white : primaryGreen)
                             }
 
                             Text(cat.0)
-                                .font(.system(size: 11, weight: selectedCategory == cat.0 ? .bold : .medium))
+                                .scaledFont(size: 11, weight: selectedCategory == cat.0 ? .bold : .medium)
                                 .foregroundColor(selectedCategory == cat.0 ? primaryGreen : textDark)
                         }
                     }
@@ -229,13 +229,13 @@ struct CatalogItemPublishView: View {
     private var basicInfoSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("THÔNG TIN MÓN ĐỒ")
-                .font(.system(size: 11, weight: .bold))
+                .scaledFont(size: 11, weight: .bold)
                 .foregroundColor(sectionHeaderColor)
 
             VStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Tên món đồ")
-                        .font(.system(size: 13, weight: .semibold))
+                        .scaledFont(size: 13, weight: .semibold)
                         .foregroundColor(textDark)
 
                     TextField("vd: Áo khoác phao ấm, Bộ sách...", text: $itemTitle)
@@ -258,7 +258,7 @@ struct CatalogItemPublishView: View {
     private var conditionSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("TÌNH TRẠNG SỬ DỤNG")
-                .font(.system(size: 11, weight: .bold))
+                .scaledFont(size: 11, weight: .bold)
                 .foregroundColor(sectionHeaderColor)
 
             ScrollView(.horizontal, showsIndicators: false) {
@@ -266,7 +266,7 @@ struct CatalogItemPublishView: View {
                     ForEach(conditions, id: \.self) { cond in
                         Button(action: { selectedCondition = cond }) {
                             Text(cond)
-                                .font(.system(size: 13, weight: selectedCondition == cond ? .bold : .medium))
+                                .scaledFont(size: 13, weight: selectedCondition == cond ? .bold : .medium)
                                 .foregroundColor(selectedCondition == cond ? .white : textDark)
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 8)
@@ -288,13 +288,13 @@ struct CatalogItemPublishView: View {
     private var locationSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("ĐỊA ĐIỂM HẸN NHẬN ĐỒ TẠI ĐÀ NẴNG")
-                .font(.system(size: 11, weight: .bold))
+                .scaledFont(size: 11, weight: .bold)
                 .foregroundColor(sectionHeaderColor)
 
             VStack(spacing: 10) {
                 HStack {
                     Text("Quận tại Đà Nẵng")
-                        .font(.system(size: 13, weight: .semibold))
+                        .scaledFont(size: 13, weight: .semibold)
                         .foregroundColor(textDark)
                     Spacer()
                     Picker("Quận", selection: $selectedDistrict) {
@@ -316,7 +316,7 @@ struct CatalogItemPublishView: View {
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Địa chỉ hẹn cụ thể")
-                        .font(.system(size: 13, weight: .semibold))
+                        .scaledFont(size: 13, weight: .semibold)
                         .foregroundColor(textDark)
 
                     TextField("vd: Gần Chợ Mới, Đường Lê Duẩn...", text: $pickupAddress)
@@ -339,7 +339,7 @@ struct CatalogItemPublishView: View {
     private var donorNoteSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("LỜI NHẮN CỦA BẠN CHO NGƯỜI NHẬN")
-                .font(.system(size: 11, weight: .bold))
+                .scaledFont(size: 11, weight: .bold)
                 .foregroundColor(sectionHeaderColor)
 
             TextEditor(text: $donorNote)
@@ -363,12 +363,12 @@ struct CatalogItemPublishView: View {
                 if isPublishing {
                     ProgressView().tint(.white)
                     Text(publishStatus)
-                        .font(.system(size: 14, weight: .semibold))
+                        .scaledFont(size: 14, weight: .semibold)
                 } else {
                     Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 16, weight: .bold))
+                        .scaledFont(size: 16, weight: .bold)
                     Text("Đăng lên Kho đồ 0đ")
-                        .font(.system(size: 16, weight: .bold))
+                        .scaledFont(size: 16, weight: .bold)
                 }
             }
             .frame(maxWidth: .infinity)

@@ -10,16 +10,17 @@ struct HomeGreetingHeader: View {
             // Cột bên trái: Lời chào + Cây mầm 🌱 + Câu hỏi
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
-                    Text("Hi, \(userName)")
-                        .font(.system(size: 22, weight: .bold))
+                    Text("Chào \(userName)")
+                        .scaledFont(size: 22, weight: .bold)
                         .foregroundColor(Color(red: 0.11, green: 0.27, blue: 0.16))
 
                     Text("🌱")
-                        .font(.system(size: 20))
+                        .scaledFont(size: 20)
+                        .accessibilityHidden(true)
                 }
 
                 Text("Hôm nay bạn muốn sẻ chia điều gì?")
-                    .font(.system(size: 13))
+                    .scaledFont(size: 13)
                     .foregroundColor(.secondary)
             }
 
@@ -34,7 +35,7 @@ struct HomeGreetingHeader: View {
                         .frame(width: 44, height: 44)
 
                     Text(getInitials(from: userName))
-                        .font(.system(size: 14, weight: .bold))
+                        .scaledFont(size: 14, weight: .bold)
                         .foregroundColor(Color(red: 0.11, green: 0.35, blue: 0.20))
                         .frame(width: 44, height: 44)
 
@@ -47,6 +48,7 @@ struct HomeGreetingHeader: View {
                 }
             }
             .buttonStyle(PlainButtonStyle())
+            .accessibilityLabel("Mở hồ sơ của \(userName)")
         }
         .padding(.horizontal, 20)
         .padding(.top, 8)

@@ -11,12 +11,12 @@ struct RecentDonationsSection: View {
             // Tiêu đề Section + Badge đếm số lượng + Nút See All
             HStack(spacing: 8) {
                 Text("Quyên góp gần đây")
-                    .font(.system(size: 17, weight: .bold))
+                    .scaledFont(size: 17, weight: .bold)
                     .foregroundColor(Color.primary)
 
                 // Badge đếm số lượng đang xử lý
                 Text("\(items.count) đơn đang xử lý")
-                    .font(.system(size: 12, weight: .semibold))
+                    .scaledFont(size: 12, weight: .semibold)
                     .foregroundColor(.secondary)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
@@ -30,7 +30,7 @@ struct RecentDonationsSection: View {
                 // Nút "Xem tất cả" màu xanh
                 Button(action: onSeeAll) {
                     Text("Xem tất cả")
-                        .font(.system(size: 13, weight: .bold))
+                        .scaledFont(size: 13, weight: .bold)
                         .foregroundColor(Color(red: 0.11, green: 0.35, blue: 0.20))
                 }
             }
@@ -41,13 +41,13 @@ struct RecentDonationsSection: View {
                 if items.isEmpty {
                     VStack(spacing: 8) {
                         Image(systemName: "heart.text.square")
-                            .font(.system(size: 28))
+                            .scaledFont(size: 28)
                             .foregroundColor(.secondary.opacity(0.4))
                         Text("Chưa có đơn quyên góp nào")
-                            .font(.system(size: 13, weight: .semibold))
+                            .scaledFont(size: 13, weight: .semibold)
                             .foregroundColor(.secondary)
                         Text("Bấm nút Chụp ảnh phía trên để gửi món đồ quyên góp đầu tiên nhé!")
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                             .foregroundColor(.secondary.opacity(0.8))
                             .multilineTextAlignment(.center)
                     }

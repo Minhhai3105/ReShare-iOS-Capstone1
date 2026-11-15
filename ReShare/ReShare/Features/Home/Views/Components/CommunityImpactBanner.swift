@@ -15,11 +15,11 @@ struct CommunityImpactBanner: View {
             // Dòng text số liệu
             HStack(spacing: 4) {
                 Text("\(count) món đồ")
-                    .font(.system(size: 12, weight: .bold))
+                    .scaledFont(size: 12, weight: .bold)
                     .foregroundColor(Color.primary.opacity(0.85))
 
                 Text("đã trao gửi & kiểm định tại \(location) tuần này")
-                    .font(.system(size: 12, weight: .regular))
+                    .scaledFont(size: 12, weight: .regular)
                     .foregroundColor(.secondary)
             }
 
@@ -27,7 +27,7 @@ struct CommunityImpactBanner: View {
 
             // Tag chữ "Tác động" màu cam đất
             Text("Tác động")
-                .font(.system(size: 12, weight: .bold))
+                .scaledFont(size: 12, weight: .bold)
                 .foregroundColor(Color(red: 0.75, green: 0.45, blue: 0.22))
         }
         .padding(.horizontal, 14)

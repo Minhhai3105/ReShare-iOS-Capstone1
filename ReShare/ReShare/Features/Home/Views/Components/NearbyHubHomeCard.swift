@@ -30,7 +30,7 @@ struct NearbyHubHomeCard: View {
                         .frame(width: 44, height: 44)
 
                     Image(systemName: "mappin.and.ellipse")
-                        .font(.system(size: 20, weight: .bold))
+                        .scaledFont(size: 20, weight: .bold)
                         .foregroundColor(primaryGreen)
                 }
 
@@ -38,13 +38,13 @@ struct NearbyHubHomeCard: View {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
                         Text("Điểm tiếp nhận")
-                            .font(.system(size: 13, weight: .bold))
+                            .scaledFont(size: 13, weight: .bold)
                             .foregroundColor(.primary)
                             .lineLimit(1)
 
                         if isAllDemo {
                             Text("Minh hoạ")
-                                .font(.system(size: 9, weight: .bold))
+                                .scaledFont(size: 9, weight: .bold)
                                 .foregroundColor(.orange)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
@@ -54,14 +54,14 @@ struct NearbyHubHomeCard: View {
                     }
 
                     Text(subtitle)
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(.secondary)
                 }
 
                 Spacer()
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
+                    .scaledFont(size: 12, weight: .semibold)
                     .foregroundColor(Color(uiColor: .tertiaryLabel))
             }
             .padding(12)

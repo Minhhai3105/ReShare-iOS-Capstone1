@@ -61,6 +61,10 @@ struct UserProfileView: View {
             errorMessage = "Tên phải có 1–80 ký tự và số điện thoại tối đa 32 ký tự."
             return
         }
+        guard PhoneNumberRule.isValid(phone) else {
+            errorMessage = PhoneNumberRule.invalidMessage
+            return
+        }
         isSaving = true
         errorMessage = nil
         successMessage = nil

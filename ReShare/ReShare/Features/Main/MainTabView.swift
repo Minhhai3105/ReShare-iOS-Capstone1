@@ -82,25 +82,25 @@ struct MainTabView: View {
                         .fill(Color(red: 0.11, green: 0.35, blue: 0.20))
                         .frame(width: 40, height: 40)
                     Image(systemName: "bubble.left.and.bubble.right.fill")
-                        .font(.system(size: 16))
+                        .scaledFont(size: 16)
                         .foregroundColor(.white)
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(notif.senderName)
-                            .font(.system(size: 13, weight: .bold))
+                            .scaledFont(size: 13, weight: .bold)
                             .foregroundColor(.primary)
                         Text("•")
                             .foregroundColor(.secondary)
                         Text(notif.itemTitle)
-                            .font(.system(size: 11, weight: .medium))
+                            .scaledFont(size: 11, weight: .medium)
                             .foregroundColor(Color(red: 0.11, green: 0.35, blue: 0.20))
                             .lineLimit(1)
                     }
 
                     Text(notif.messageText)
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                 }
@@ -108,7 +108,7 @@ struct MainTabView: View {
                 Spacer()
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
+                    .scaledFont(size: 12, weight: .semibold)
                     .foregroundColor(.secondary)
             }
             .padding(.horizontal, 14)

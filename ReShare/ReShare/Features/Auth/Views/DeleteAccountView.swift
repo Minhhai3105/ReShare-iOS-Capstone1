@@ -37,15 +37,15 @@ struct DeleteAccountView: View {
     private func completedView(_ outcome: AccountDeletionService.Outcome) -> some View {
         VStack(spacing: 18) {
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 52))
+                .scaledFont(size: 52)
                 .foregroundColor(Color(red: 0.11, green: 0.35, blue: 0.20))
             Text("Đã xoá tài khoản")
-                .font(.system(size: 20, weight: .bold))
+                .scaledFont(size: 20, weight: .bold)
                 .foregroundColor(textDark)
             Text(outcome.imagesPending > 0
                  ? "Còn \(outcome.imagesPending) ảnh của bài đăng chưa xoá được trên máy chủ ảnh. Hệ thống sẽ tự thử lại và xoá trong thời gian tới; bạn không cần làm gì thêm."
                  : "Hồ sơ, tài khoản đăng nhập và các bài đăng đang mở kèm ảnh đã được xoá.")
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(textMuted)
                 .multilineTextAlignment(.center)
             Button {
@@ -53,7 +53,7 @@ struct DeleteAccountView: View {
                 onDeleted()
             } label: {
                 Text("Đóng")
-                    .font(.system(size: 16, weight: .bold))
+                    .scaledFont(size: 16, weight: .bold)
                     .frame(maxWidth: .infinity, minHeight: 52)
                     .background(Color(red: 0.11, green: 0.35, blue: 0.20))
                     .foregroundColor(.white)
@@ -73,7 +73,7 @@ struct DeleteAccountView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     Text("Thao tác này **không thể hoàn tác**. Sau khi xoá, bạn không đăng nhập lại được bằng tài khoản này.")
-                        .font(.system(size: 15))
+                        .scaledFont(size: 15)
                         .foregroundColor(textDark)
 
                     infoCard(title: "Sẽ bị xoá", icon: "trash.fill", color: danger, lines: [
@@ -93,7 +93,7 @@ struct DeleteAccountView: View {
                     if usesPassword {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Nhập mật khẩu để xác nhận")
-                                .font(.system(size: 14, weight: .semibold))
+                                .scaledFont(size: 14, weight: .semibold)
                                 .foregroundColor(textDark)
                             SecureField("Mật khẩu", text: $password)
                                 .textContentType(.password)
@@ -107,20 +107,20 @@ struct DeleteAccountView: View {
                         // Tài khoản Google không có mật khẩu ReShare: xác minh bằng cách chọn lại đúng tài khoản Google.
                         Label("Tài khoản này đăng nhập bằng Google. Khi bấm xoá, hãy chọn lại đúng tài khoản Google đang dùng để xác minh.",
                               systemImage: "person.badge.key.fill")
-                            .font(.system(size: 14))
+                            .scaledFont(size: 14)
                             .foregroundColor(textDark)
                     }
 
                     Toggle(isOn: $understood) {
                         Text("Tôi hiểu tài khoản sẽ bị xoá vĩnh viễn")
-                            .font(.system(size: 14))
+                            .scaledFont(size: 14)
                             .foregroundColor(textDark)
                     }
                     .tint(danger)
 
                     if let errorMessage {
                         Text(errorMessage)
-                            .font(.system(size: 13, weight: .medium))
+                            .scaledFont(size: 13, weight: .medium)
                             .foregroundColor(danger)
                     }
 
@@ -128,7 +128,7 @@ struct DeleteAccountView: View {
                         HStack(spacing: 8) {
                             if isDeleting { ProgressView().tint(.white) }
                             Text(isDeleting ? "Đang xoá tài khoản…" : "Xoá vĩnh viễn tài khoản")
-                                .font(.system(size: 16, weight: .bold))
+                                .scaledFont(size: 16, weight: .bold)
                         }
                         .frame(maxWidth: .infinity, minHeight: 52)
                         .background(canDelete ? danger : danger.opacity(0.35))
@@ -139,7 +139,7 @@ struct DeleteAccountView: View {
 
                     if isDeleting {
                         Text("Máy chủ có thể mất tới 1 phút để khởi động. Vui lòng không tắt ứng dụng.")
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                             .foregroundColor(textMuted)
                     }
 
@@ -161,12 +161,12 @@ struct DeleteAccountView: View {
     private func infoCard(title: String, icon: String, color: Color, lines: [String]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Label(title, systemImage: icon)
-                .font(.system(size: 14, weight: .bold))
+                .scaledFont(size: 14, weight: .bold)
                 .foregroundColor(color)
             ForEach(lines, id: \.self) { line in
                 HStack(alignment: .top, spacing: 8) {
                     Text("•").foregroundColor(textMuted)
-                    Text(line).font(.system(size: 14)).foregroundColor(textDark)
+                    Text(line).scaledFont(size: 14).foregroundColor(textDark)
                 }
             }
         }
