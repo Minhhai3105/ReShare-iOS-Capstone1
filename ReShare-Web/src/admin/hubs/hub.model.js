@@ -75,6 +75,31 @@ export function nextStatusAction(hub) {
   return null
 }
 
+function inUseMessage(campaigns) {
+  const titles = (campaigns || []).map((campaign) => `“${campaign.title}”`).join(', ')
+  const who = titles ? `chiến dịch đang mở ${titles}` : 'một chiến dịch đang mở'
+  return `Không tạm ẩn được: ${who} vẫn dùng điểm này. Đóng chiến dịch hoặc bỏ điểm này khỏi chiến dịch trước.`
+}
+
+const STATUS_CONFIRM = Object.freeze({
+  inactive: {
+    message: 'Tạm ẩn điểm này? App iOS và form chiến dịch sẽ không hiện điểm này nữa. Đơn đã gửi vẫn giữ tên điểm.',
+    confirmLabel: 'Xác nhận tạm ẩn',
+  },
+  active: { message: 'Mở lại điểm này? App iOS sẽ hiện lại điểm này cho donor chọn.', confirmLabel: 'Xác nhận mở lại' },
+})
+
+// Nội dung ô xác nhận khi bấm Tạm ẩn / Mở lại. Hub đang được chiến dịch mở dùng thì báo ngay là không
+// tạm ẩn được (blocked), khỏi gửi request; backend vẫn kiểm lại trong transaction (409 HUB_IN_USE).
+export function statusChangeCheck(hub) {
+  const action = nextStatusAction(hub)
+  if (!action) return null
+  if (action.status === 'inactive' && hub.openCampaigns?.length) {
+    return { ...action, blocked: true, message: inUseMessage(hub.openCampaigns), confirmLabel: '' }
+  }
+  return { ...action, blocked: false, ...STATUS_CONFIRM[action.status] }
+}
+
 // Câu báo lỗi tiếng Việt cho các thông báo backend trả về (backend giữ câu tiếng Anh ổn định).
 const ERROR_MESSAGES = Object.freeze({
   'Hub changed; reload first': 'Điểm tiếp nhận vừa được người khác cập nhật. Tải lại rồi thử lại.',
@@ -88,11 +113,7 @@ const ERROR_MESSAGES = Object.freeze({
 })
 
 export function hubErrorMessage(error) {
-  if (error?.code === 'HUB_IN_USE') {
-    const titles = (error.details?.campaigns || []).map((campaign) => `“${campaign.title}”`).join(', ')
-    const who = titles ? `chiến dịch đang mở ${titles}` : 'một chiến dịch đang mở'
-    return `Không tạm ẩn được: ${who} vẫn dùng điểm này. Đóng chiến dịch hoặc bỏ điểm này khỏi chiến dịch trước.`
-  }
+  if (error?.code === 'HUB_IN_USE') return inUseMessage(error.details?.campaigns)
   if (error?.code === 'UNCERTAIN') return 'Chưa rõ thao tác đã lưu hay chưa. Tải lại trang để kiểm tra trước khi thử lại.'
   if (error?.status === 0) return 'Không kết nối được máy chủ. Thử lại sau giây lát.'
   return ERROR_MESSAGES[error?.message] || 'Không thực hiện được thao tác. Thử lại sau.'

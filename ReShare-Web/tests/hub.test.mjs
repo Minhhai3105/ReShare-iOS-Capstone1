@@ -69,3 +69,24 @@ test('Điểm tiếp nhận: repository gọi đúng đường dẫn, gửi expe
     ['POST', 'https://api.test/v1/admin/hubs/hub-haichau/status', { status: 'inactive', expectedVersion: 3 }],
   ])
 })
+
+test('Điểm tiếp nhận: bấm Tạm ẩn khi chiến dịch đang mở còn dùng điểm thì báo ngay, không hỏi xác nhận', async () => {
+  const { statusChangeCheck } = await import('../src/admin/hubs/hub.model.js')
+  const used = statusChangeCheck({ ...hub, openCampaigns: [{ id: 'c1', title: 'Áo ấm' }] })
+  assert.equal(used.blocked, true)
+  assert.equal(used.confirmLabel, '')
+  assert.match(used.message, /chiến dịch đang mở “Áo ấm” vẫn dùng điểm này/)
+  const free = statusChangeCheck(hub)
+  assert.deepEqual([free.status, free.blocked, free.confirmLabel], ['inactive', false, 'Xác nhận tạm ẩn'])
+  const hidden = statusChangeCheck({ ...hub, status: 'inactive', openCampaigns: [{ id: 'c1', title: 'Áo ấm' }] })
+  assert.deepEqual([hidden.status, hidden.blocked, hidden.confirmLabel], ['active', false, 'Xác nhận mở lại'], 'mở lại thì không bị chặn')
+  assert.equal(statusChangeCheck({ status: 'unknown' }), null)
+})
+
+test('Trang Điểm tiếp nhận không còn dùng hộp thoại window.confirm', async () => {
+  const { readFileSync } = await import('node:fs')
+  for (const file of ['HubList.vue', 'HubForm.vue']) {
+    const source = readFileSync(new URL(`../src/admin/hubs/${file}`, import.meta.url), 'utf8')
+    assert.ok(!/window\.confirm\(/.test(source), `${file} còn gọi window.confirm`)
+  }
+})

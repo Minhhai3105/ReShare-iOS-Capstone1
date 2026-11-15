@@ -20,11 +20,15 @@ const isLoading = ref(false)
 const isSaving = ref(false)
 const loadError = ref('')
 const submitError = ref('')
+// Bỏ nhãn minh hoạ cần tick xác nhận ngay trên form (không dùng window.confirm: một số trình duyệt
+// nhúng chặn hộp thoại và trả về "Huỷ" ngay, khiến nút Lưu trông như không hoạt động).
+const confirmReal = ref(false)
 let requestId = 0
 
 const previewUrl = computed(() => mapsUrl(form.value.latitude, form.value.longitude))
 // Bỏ nhãn minh hoạ là khẳng định với donor rằng điểm này nhận đồ thật: nhắc rõ trước khi lưu.
 const markingReal = computed(() => !form.value.isDemo && (original.value ? original.value.isDemo !== false : true))
+watch(markingReal, (value) => { if (!value) confirmReal.value = false })
 
 async function load() {
   const current = ++requestId
@@ -66,7 +70,10 @@ async function onSubmit() {
     submitError.value = 'Chưa có thay đổi nào để lưu.'
     return
   }
-  if (markingReal.value && !window.confirm('Bỏ nhãn “minh hoạ”? App sẽ hiện điểm này như nơi nhận đồ thật. Chỉ bỏ khi điểm đã sẵn sàng tiếp nhận.')) return
+  if (markingReal.value && !confirmReal.value) {
+    submitError.value = 'Tick ô xác nhận điểm đã sẵn sàng nhận đồ thật trước khi bỏ nhãn minh hoạ.'
+    return
+  }
   isSaving.value = true
   try {
     if (isEdit.value) await hubRepository.update(hubId.value, payload, original.value.version)
@@ -148,9 +155,13 @@ function cancel() {
         <input v-model="form.isDemo" type="checkbox" />
         <span>Điểm <strong>minh hoạ</strong> (chưa tiếp nhận đồ thật). App ghi rõ nhãn này cho donor.</span>
       </label>
-      <p v-if="markingReal" class="hub-form__warning" role="status">
-        <AuthIcon name="alert-triangle" :size="16" />Bỏ nhãn minh hoạ nghĩa là donor có thể mang đồ tới điểm này thật. Chỉ bỏ khi điểm đã sẵn sàng.
-      </p>
+      <div v-if="markingReal" class="hub-form__warning" role="status">
+        <p><AuthIcon name="alert-triangle" :size="16" />Bỏ nhãn minh hoạ nghĩa là donor có thể mang đồ tới điểm này thật. Chỉ bỏ khi điểm đã sẵn sàng.</p>
+        <label class="hub-check">
+          <input v-model="confirmReal" type="checkbox" />
+          <span>Tôi xác nhận điểm này đã sẵn sàng tiếp nhận đồ thật.</span>
+        </label>
+      </div>
 
       <p v-if="submitError" class="hub-form__error" role="alert">{{ submitError }}</p>
 
@@ -182,7 +193,8 @@ function cancel() {
 .hub-form__hint a { color: #246632; margin-left: 4px; }
 .hub-check { display: flex; align-items: flex-start; gap: 10px; color: #264455; }
 .hub-check input { width: auto; margin-top: 3px; }
-.hub-form__warning { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border-radius: 12px; background: #fff3d6; color: #8a5a00; font-size: 14px; }
+.hub-form__warning { display: grid; gap: 8px; padding: 10px 12px; border-radius: 12px; background: #fff3d6; color: #8a5a00; font-size: 14px; }
+.hub-form__warning p { display: flex; align-items: flex-start; gap: 8px; margin: 0; }
 .hub-form__error { color: #c62828; }
 .hub-form__actions { display: flex; justify-content: flex-end; gap: 12px; }
 .hub-state { width: min(720px, 100%); min-height: 260px; margin: 24px auto; display: grid; place-items: center; align-content: center; gap: 12px; padding: 28px; text-align: center; background: #fff; border: 1px solid #e7edf5; border-radius: 20px; }
