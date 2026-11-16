@@ -30,7 +30,9 @@ test('Hub API: sai đường dẫn trả 404, thiếu phiên đăng nhập trả
   const db = { collection() { throw new Error('không được đọc Firestore'); } };
   const api = createHubsApi({ db, verifyToken: async () => ({ uid: 'x' }) });
   await assert.rejects(api.handle('GET', '/v1/admin/hubs/abc', {}, null), { status: 404 });
-  await assert.rejects(api.handle('POST', '/v1/admin/hubs/abc/delete', {}, null), { status: 404 });
+  await assert.rejects(api.handle('POST', '/v1/admin/hubs/abc/remove', {}, null), { status: 404 });
+  await assert.rejects(api.handle('GET', '/v1/admin/hubs/abc/delete', {}, null), { status: 404 }, 'xoá chỉ nhận POST');
+  await assert.rejects(api.handle('POST', '/v1/admin/hubs/abc/delete', {}, { expectedVersion: 1 }), { status: 401 });
   await assert.rejects(api.handle('GET', '/v1/admin/hubs', {}, null), { status: 401 });
   await assert.rejects(api.handle('POST', '/v1/admin/hubs', { authorization: 'Basic abc' }, valid), { status: 401 });
 });

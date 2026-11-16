@@ -3,8 +3,12 @@ const { runTransaction } = require('./firestore-transaction.cjs');
 const { assertCurrentStaffAccess } = require('./staff-access.cjs');
 
 // Điểm tiếp nhận (Hub) do System Admin quản lý trên Web Admin (15/11/2026). Client chỉ ĐỌC Hub
-// (rules: write false); mọi thao tác tạo/sửa/tạm ẩn/mở lại đi qua API này bằng Admin SDK.
-// Warehouse Admin chỉ được xem danh sách. Không có xoá: đơn cũ và chiến dịch vẫn trỏ tới Hub.
+// (rules: write false); mọi thao tác tạo/sửa/tạm ẩn/mở lại/xoá đi qua API này bằng Admin SDK.
+// Warehouse Admin chỉ được xem danh sách.
+// Xoá (16/11/2026) chỉ dành cho điểm nhập nhầm/nháp: điểm phải đang tạm ẩn và CHƯA TỪNG được đơn
+// quyên góp hay chiến dịch nào (kể cả nháp/đã đóng) trỏ tới — điểm đã có lịch sử thì chỉ tạm ẩn,
+// để đơn cũ, báo cáo và hồ sơ chiến dịch không mất tham chiếu. Mỗi lần xoá ghi vào `hub_audit`
+// (không có match block trong rules ⇒ client không đọc/ghi được).
 //
 // Ràng buộc với phần còn lại của hệ thống:
 // - App iOS chỉ hiện Hub `status == 'active'` và lưu kèm tên Hub vào đơn; rules đối chiếu tên đó
@@ -219,9 +223,45 @@ function createHubsApi({ db, verifyToken, serverTimestamp }) {
     return { status: 200, body: { hub: hubFrom(await ref.get()) } };
   }
 
+  async function remove(staff, id, body) {
+    if (!VALID_ID.test(id)) throw new ApiError(400, 'Invalid hub ID');
+    if (!body || Object.keys(body).some(key => key !== 'expectedVersion')) {
+      throw new ApiError(400, 'Invalid hub delete request', 'VALIDATION');
+    }
+    const expectedVersion = expectedVersionFrom(body);
+    const ref = db.collection('hubs').doc(id);
+    const auditRef = db.collection('hub_audit').doc();
+    await runTransaction(db, async tx => {
+      const doc = await tx.get(ref);
+      if (!doc.exists) throw new ApiError(404, 'Hub not found');
+      const current = doc.data();
+      // Một điều kiện mỗi truy vấn (không cần composite index); chỉ cần biết có hay không.
+      const [donations, campaigns] = await Promise.all([
+        tx.get(db.collection('donations').where('hubId', '==', id).limit(1)),
+        tx.get(db.collection('campaigns').where('hubIds', 'array-contains', id).limit(MAX_CAMPAIGNS)),
+      ]);
+      await assertCurrentStaffAccess(tx, db, staff.uid, { systemOnly: true });
+      if ((current.version || 1) !== expectedVersion) throw new ApiError(409, 'Hub changed; reload first');
+      if (current.status !== 'inactive') throw new ApiError(409, 'Hide the hub before deleting it');
+      if (!donations.empty || !campaigns.empty) {
+        throw new ApiError(409, 'Hub has donation or campaign history', 'HUB_REFERENCED', {
+          hasDonations: !donations.empty,
+          campaigns: campaigns.docs.map(campaign => ({ id: campaign.id, title: campaign.data().title || campaign.id })),
+        });
+      }
+      tx.delete(ref);
+      tx.create(auditRef, {
+        action: 'delete', hubId: id, name: current.name || '', address: current.address || '',
+        isDemo: current.isDemo !== false, version: current.version || 1,
+        actorUid: staff.uid, createdAt: now(),
+      });
+    });
+    return { status: 200, body: { deleted: true, id } };
+  }
+
   async function handle(method, path, headers, body) {
     const listPath = path === '/v1/admin/hubs';
-    const actionMatch = /^\/v1\/admin\/hubs\/([^/]+)\/(update|status)$/.exec(path);
+    const actionMatch = /^\/v1\/admin\/hubs\/([^/]+)\/(update|status|delete)$/.exec(path);
     if (!listPath && !actionMatch) throw new ApiError(404, 'Not found');
     if (listPath && method === 'GET') {
       await staffFrom(headers, { systemOnly: false });
@@ -230,6 +270,7 @@ function createHubsApi({ db, verifyToken, serverTimestamp }) {
     if (!(listPath || actionMatch) || method !== 'POST') throw new ApiError(404, 'Not found');
     const staff = await staffFrom(headers, { systemOnly: true });
     if (listPath) return create(staff, body);
+    if (actionMatch[2] === 'delete') return remove(staff, actionMatch[1], body);
     return actionMatch[2] === 'update' ? update(staff, actionMatch[1], body) : changeStatus(staff, actionMatch[1], body);
   }
 

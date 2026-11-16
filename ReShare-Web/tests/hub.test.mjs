@@ -90,3 +90,31 @@ test('Trang Điểm tiếp nhận không còn dùng hộp thoại window.confirm
     assert.ok(!/window\.confirm\(/.test(source), `${file} còn gọi window.confirm`)
   }
 })
+
+test('Điểm tiếp nhận: nút Xoá chỉ có ở điểm đang tạm ẩn; lỗi điểm đã có lịch sử báo rõ bằng tiếng Việt', async () => {
+  const { deleteCheck } = await import('../src/admin/hubs/hub.model.js')
+  assert.equal(deleteCheck(hub), null, 'điểm đang hoạt động phải tạm ẩn trước')
+  const check = deleteCheck({ ...hub, status: 'inactive', name: 'Điểm Cẩm Lệ' })
+  assert.equal(check.confirmLabel, 'Xoá vĩnh viễn')
+  assert.match(check.message, /Xoá vĩnh viễn “Điểm Cẩm Lệ”\? Không khôi phục được/)
+  assert.equal(hubErrorMessage({ message: 'Hide the hub before deleting it' }), 'Tạm ẩn điểm này trước rồi mới xoá.')
+  assert.match(hubErrorMessage({ code: 'HUB_REFERENCED', details: { hasDonations: true, campaigns: [] } }),
+    /^Không xoá được: điểm này đã có đơn quyên góp dùng\./)
+  assert.match(hubErrorMessage({ code: 'HUB_REFERENCED', details: { hasDonations: true, campaigns: [{ id: 'c', title: 'Áo ấm' }] } }),
+    /đã có đơn quyên góp và chiến dịch “Áo ấm” dùng/)
+})
+
+test('Điểm tiếp nhận: repository xoá gọi POST …/delete kèm expectedVersion và kiểm kết quả', async () => {
+  const calls = []
+  const repository = createHubRepository({
+    apiBase: 'https://api.test',
+    authInstance: { currentUser: { getIdToken: async () => 'token' } },
+    fetchImpl: async (url, options) => {
+      calls.push([options.method, url, JSON.parse(options.body)])
+      return { ok: true, json: async () => (calls.length === 1 ? { deleted: true, id: 'hub-x' } : {}) }
+    },
+  })
+  assert.deepEqual(await repository.remove('hub-x', 4), { deleted: true, id: 'hub-x' })
+  assert.deepEqual(calls[0], ['POST', 'https://api.test/v1/admin/hubs/hub-x/delete', { expectedVersion: 4 }])
+  await assert.rejects(repository.remove('hub-y', 1), { code: 'UNCERTAIN' }, 'máy chủ không xác nhận đã xoá')
+})

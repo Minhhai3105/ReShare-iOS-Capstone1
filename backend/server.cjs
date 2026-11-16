@@ -105,7 +105,7 @@ const server = http.createServer(async (request, response) => {
     /^\/v1\/admin\/moderation\/reports\/[^/]+\/resolve$/.test(pathname);
   const isCampaignPath = pathname === '/v1/admin/campaigns' ||
     /^\/v1\/admin\/campaigns\/[^/]+(\/(update|status))?$/.test(pathname);
-  const isHubPath = pathname === '/v1/admin/hubs' || /^\/v1\/admin\/hubs\/[^/]+\/(update|status)$/.test(pathname);
+  const isHubPath = pathname === '/v1/admin/hubs' || /^\/v1\/admin\/hubs\/[^/]+\/(update|status|delete)$/.test(pathname);
   const isAdminImageRead = pathname === '/v1/images/read-access';
   const isContactPath = pathname === '/v1/contact';
   const isAccountPath = pathname === '/v1/account/delete';

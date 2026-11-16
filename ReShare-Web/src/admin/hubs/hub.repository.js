@@ -51,6 +51,11 @@ export function createHubRepository({ apiBase = defaultBase, authInstance = null
     create: (payload) => writeHub('/v1/admin/hubs', payload),
     update: (id, payload, expectedVersion) => writeHub(`${hubPath(id)}/update`, { ...payload, expectedVersion }),
     changeStatus: (id, status, expectedVersion) => writeHub(`${hubPath(id)}/status`, { status, expectedVersion }),
+    async remove(id, expectedVersion) {
+      const data = await request(`${hubPath(id)}/delete`, { method: 'POST', body: JSON.stringify({ expectedVersion }) })
+      if (data.deleted !== true) throw Object.assign(new Error('Kết quả xoá điểm tiếp nhận chưa rõ.'), { status: 0, code: 'UNCERTAIN' })
+      return data
+    },
   }
 }
 

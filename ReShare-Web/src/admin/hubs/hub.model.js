@@ -100,13 +100,32 @@ export function statusChangeCheck(hub) {
   return { ...action, blocked: false, ...STATUS_CONFIRM[action.status] }
 }
 
+// Nút Xoá chỉ hiện với điểm đang tạm ẩn (đã khuất khỏi app). Backend còn kiểm điểm chưa từng có
+// đơn/chiến dịch dùng; điểm đã có lịch sử chỉ tạm ẩn được (xem backend/hubs-api.cjs).
+export function deleteCheck(hub) {
+  if (hub?.status !== 'inactive') return null
+  return {
+    message: `Xoá vĩnh viễn “${hub.name}”? Không khôi phục được. Chỉ xoá được điểm nhập nháp/nhầm, chưa từng có đơn quyên góp hay chiến dịch nào dùng.`,
+    confirmLabel: 'Xoá vĩnh viễn',
+  }
+}
+
+function referencedMessage(details) {
+  const campaigns = (details?.campaigns || []).map((campaign) => `“${campaign.title}”`)
+  const parts = [details?.hasDonations ? 'đơn quyên góp' : '', campaigns.length ? `chiến dịch ${campaigns.join(', ')}` : '']
+    .filter(Boolean)
+  const who = parts.length ? parts.join(' và ') : 'dữ liệu khác'
+  return `Không xoá được: điểm này đã có ${who} dùng. Điểm đã có lịch sử chỉ tạm ẩn được để giữ đúng hồ sơ cũ.`
+}
+
 // Câu báo lỗi tiếng Việt cho các thông báo backend trả về (backend giữ câu tiếng Anh ổn định).
 const ERROR_MESSAGES = Object.freeze({
   'Hub changed; reload first': 'Điểm tiếp nhận vừa được người khác cập nhật. Tải lại rồi thử lại.',
   'Hub is unchanged': 'Chưa có thay đổi nào để lưu.',
   'Hub name already exists': 'Đã có điểm tiếp nhận trùng tên. Đặt tên khác để donor không nhầm.',
   'Invalid status transition': 'Không thể chuyển sang trạng thái này. Tải lại trang.',
-  'Hub not found': 'Không tìm thấy điểm tiếp nhận.',
+  'Hub not found': 'Không tìm thấy điểm tiếp nhận. Có thể điểm đã bị xoá; tải lại trang.',
+  'Hide the hub before deleting it': 'Tạm ẩn điểm này trước rồi mới xoá.',
   'System Admin access required': 'Chỉ Quản trị hệ thống mới thêm, sửa hoặc tạm ẩn điểm tiếp nhận.',
   'Staff access required': 'Tài khoản của bạn không có quyền xem trang này.',
   'Staff access changed; reload session': 'Quyền của bạn vừa thay đổi. Đăng nhập lại.',
@@ -114,6 +133,7 @@ const ERROR_MESSAGES = Object.freeze({
 
 export function hubErrorMessage(error) {
   if (error?.code === 'HUB_IN_USE') return inUseMessage(error.details?.campaigns)
+  if (error?.code === 'HUB_REFERENCED') return referencedMessage(error.details)
   if (error?.code === 'UNCERTAIN') return 'Chưa rõ thao tác đã lưu hay chưa. Tải lại trang để kiểm tra trước khi thử lại.'
   if (error?.status === 0) return 'Không kết nối được máy chủ. Thử lại sau giây lát.'
   return ERROR_MESSAGES[error?.message] || 'Không thực hiện được thao tác. Thử lại sau.'
