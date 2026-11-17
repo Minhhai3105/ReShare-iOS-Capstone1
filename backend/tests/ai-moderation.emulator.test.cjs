@@ -4,6 +4,7 @@ const { initializeApp, deleteApp } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
 const { createAiModerationJobs, CHECKS_COLLECTION } = require('../ai-moderation-jobs.cjs');
 const { createP2pListingsApi } = require('../p2p-listings-api.cjs');
+const { createAiModerator } = require('../ai-moderation.cjs');
 
 const options = { skip: !process.env.FIRESTORE_EMULATOR_HOST };
 const base = '/v1/admin/p2p/listings';
@@ -145,4 +146,65 @@ test('AI kiểm duyệt nền: tối đa 10 bài, bỏ bài đã kiểm và đi 
   assert.equal((await db.doc('catalog_items/reserved').get()).data().aiModeration, undefined);
   assert.equal((await db.doc('catalog_items/item-211').get()).data().status, 'available');
   assert.equal((await db.doc('catalog_items/item-000').get()).data().aiModeration.status, 'error');
+}));
+
+
+test('AI kiểm duyệt nền: chỉ kiểm lại error đủ một giờ, không kiểm lại safe/flagged hoặc lỗi còn mới', options, () => fixture(async db => {
+  const now = new Date('2026-11-17T10:00:00Z');
+  const old = new Date(now.getTime() - 3600001);
+  const atHour = new Date(now.getTime() - 3600000);
+  const tooNew = new Date(now.getTime() - 3599999);
+  const seed = [
+    ['error-old', 'error', old], ['error-hour', 'error', atHour], ['error-epoch', 'error', new Date(0)], ['error-new', 'error', tooNew],
+    ['safe-old', 'safe', old], ['flagged-old', 'flagged', old], ['error-invalid', 'error', 'không phải thời gian'],
+  ];
+  await Promise.all(seed.map(([id, status, checkedAt]) => db.doc(`catalog_items/${id}`).set(listing({ title: id, aiModeration: { ...result(status), checkedAt } }))));
+  const calls = [];
+  const jobs = createAiModerationJobs({ db, clock: () => now, moderator: { enabled: true, check: async input => {
+    calls.push(input.title); return result(input.title.startsWith('error-') ? 'error' : 'safe');
+  } } });
+  assert.equal((await jobs.runOnce()).checked, 4, 'bài chưa kiểm và ba bài error đủ một giờ');
+  assert.deepEqual(calls.sort(), ['error-hour', 'error-old', 'error-epoch', 'Áo mới'].sort());
+  const retried = (await db.doc('catalog_items/error-old').get()).data();
+  assert.equal(retried.aiModeration.checkedAt.toMillis(), now.getTime());
+  assert.equal(retried.status, 'available');
+  assert.equal(retried.moderation, undefined);
+  assert.equal((await jobs.runOnce()).checked, 0, 'lỗi vừa thử lại phải chờ đủ một giờ nữa');
+  assert.equal((await jobs.checkListing('error-old', { onlyUnseen: true })).skipped, true, 'kiểm điều kiện lại trong transaction');
+  assert.equal((await db.doc('catalog_items/safe-old').get()).data().aiModeration.status, 'safe');
+  assert.equal((await db.doc('catalog_items/flagged-old').get()).data().aiModeration.status, 'flagged');
+}));
+
+test('AI kiểm duyệt API: ảnh thành base64 và JSON có fence được lưu; ảnh không tải được giữ bài mở', options, () => fixture(async db => {
+  const cloudImage = 'https://res.cloudinary.com/demo/image/upload/v123/catalog_items/test.jpg';
+  await db.doc('catalog_items/item').update({ images: [cloudImage] });
+  await db.doc('catalog_items/broken').set(listing({ images: ['http://image.test/broken.jpg'] }));
+  let modelCalls = 0;
+  const moderator = createAiModerator({ baseUrl: 'https://ai.example/v1', apiKey: 'test-only-key', model: 'test-vision',
+    fetchImpl: async (url, options) => {
+      if (url.startsWith('https://res.cloudinary.com/')) {
+        assert.ok(url.includes('/upload/w_768,c_limit,q_auto,f_jpg/v123/'));
+        assert.equal(options.headers?.Authorization, undefined);
+        return new Response(Buffer.from('anh-gia'), { headers: { 'content-type': 'image/jpeg' } });
+      }
+      assert.equal(url, 'https://ai.example/v1/chat/completions');
+      modelCalls += 1;
+      const image = JSON.parse(options.body).messages[1].content[1].image_url.url;
+      assert.equal(image, `data:image/jpeg;base64,${Buffer.from('anh-gia').toString('base64')}`);
+      return { ok: true, json: async () => ({ choices: [{ message: {
+        content: '```json\n' + JSON.stringify({ verdict: 'flagged', categories: ['scam_or_sale'], reason: 'Cần nhân sự xem xét' }) + '\n```',
+      } }] }) };
+    },
+  });
+  const api = apiFor(db, createAiModerationJobs({ db, moderator }));
+  const checked = await api.handle('POST', `${base}/item/ai-check`, headers('hc'), {});
+  assert.equal(checked.body.aiModeration.status, 'flagged');
+  assert.equal((await db.doc('catalog_items/item').get()).data().aiModeration.status, 'flagged');
+  const failed = await api.handle('POST', `${base}/broken/ai-check`, headers('hc'), {});
+  assert.equal(failed.body.aiModeration.status, 'error');
+  assert.equal(modelCalls, 1, 'ảnh hỏng không được gửi request chỉ có chữ cho model');
+  const item = (await db.doc('catalog_items/broken').get()).data();
+  assert.equal(item.aiModeration.status, 'error');
+  assert.equal(item.status, 'available');
+  assert.equal(item.moderation, undefined);
 }));

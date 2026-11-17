@@ -46,7 +46,7 @@ import { LEGAL_CONTACT_EMAIL } from './legal.js'
     <p>
       Việc lưu trữ và sử dụng dữ liệu tại nhà cung cấp phụ thuộc dịch vụ và chính sách của họ,
       bao gồm <a href="https://ai.google.dev/gemini-api/terms" target="_blank" rel="noopener noreferrer">điều khoản Gemini API</a>
-      khi dùng Gemini. Nhóm vận hành cần chọn cấu hình dịch vụ phù hợp trước khi bật tính năng.
+      khi dùng Gemini.
     </p>
 
     <h2>3. Chúng tôi dùng dữ liệu để làm gì</h2>
