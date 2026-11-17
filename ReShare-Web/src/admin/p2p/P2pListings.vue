@@ -7,7 +7,7 @@ import InlineConfirm from '../shared/InlineConfirm.vue'
 import { REPORT_REASON_LABEL, RESOLUTION_LABEL, formatDateTime } from '../moderation/moderation.model'
 import { p2pRepository } from './p2p.repository'
 import {
-  HISTORY_ACTION_LABEL, LISTING_STATUS, STATUS_TABS, countByTab, filterListings, moderationNote, p2pErrorMessage,
+  HISTORY_ACTION_LABEL, LISTING_STATUS, STATUS_TABS, aiBadge, countByTab, filterListings, moderationNote, p2pErrorMessage,
   removeCheck, restoreCheck, scopeLabel, statusLabel,
 } from './p2p.model'
 
@@ -26,6 +26,9 @@ const expandedId = ref('')
 const details = ref({})
 const detailError = ref({})
 const pendingId = ref('')
+const aiEnabled = ref(false)
+const aiPendingId = ref('')
+const aiErrors = ref({})
 // Ô xác nhận và lỗi hiện ngay trên thẻ của bài được bấm (không dùng window.confirm, xem InlineConfirm).
 const confirming = ref(null)
 const removeReason = ref('')
@@ -45,6 +48,7 @@ async function load() {
     if (current !== requestId) return
     listings.value = result.listings
     scope.value = result.scope
+    aiEnabled.value = result.aiEnabled
     truncated.value = result.truncated
     details.value = {}
   } catch (error) {
@@ -59,6 +63,7 @@ async function loadDetail(id) {
   try {
     const detail = await p2pRepository.detail(id)
     details.value = { ...details.value, [id]: detail }
+    aiEnabled.value = detail.aiEnabled
     // Thông tin tóm tắt mới nhất (trạng thái, báo cáo, khả năng khôi phục) thay vào danh sách.
     listings.value = listings.value.map((item) => (item.id === id ? { ...item, ...detail.listing } : item))
   } catch (error) {
@@ -77,7 +82,7 @@ function toggleDetail(listing) {
 
 function startRemove(listing) {
   const check = removeCheck(listing)
-  if (!check || pendingId.value) return
+  if (!check || pendingId.value || aiPendingId.value) return
   cardError.value = { id: '', message: '' }
   removeReason.value = ''
   confirming.value = { id: listing.id, kind: 'remove', check }
@@ -85,7 +90,7 @@ function startRemove(listing) {
 
 function startRestore(listing) {
   const check = restoreCheck(listing)
-  if (!check || pendingId.value) return
+  if (!check || pendingId.value || aiPendingId.value) return
   cardError.value = { id: '', message: '' }
   confirming.value = { id: listing.id, kind: 'restore', check }
 }
@@ -96,7 +101,7 @@ function cancelConfirm() {
 
 async function onConfirm(listing) {
   const action = confirming.value
-  if (action?.id !== listing.id || action.check.blocked || pendingId.value) return
+  if (action?.id !== listing.id || action.check.blocked || pendingId.value || aiPendingId.value) return
   pendingId.value = listing.id
   try {
     if (action.kind === 'remove') await p2pRepository.remove(listing.id, listing.status, removeReason.value)
@@ -108,6 +113,27 @@ async function onConfirm(listing) {
     cardError.value = { id: listing.id, message: p2pErrorMessage(error) }
   } finally {
     pendingId.value = ''
+  }
+}
+
+async function checkAi(listing) {
+  if (!isStaff.value || !aiEnabled.value || aiPendingId.value || pendingId.value || confirming.value) return
+  aiPendingId.value = listing.id
+  aiErrors.value = { ...aiErrors.value, [listing.id]: '' }
+  try {
+    const result = await p2pRepository.aiCheck(listing.id)
+    aiEnabled.value = result.aiEnabled === true
+    if (!result.enabled) {
+      aiErrors.value = { ...aiErrors.value, [listing.id]: 'AI kiểm duyệt chưa được cấu hình.' }
+      return
+    }
+    listings.value = listings.value.map((item) => item.id === listing.id ? { ...item, aiModeration: result.aiModeration } : item)
+    const detail = details.value[listing.id]
+    if (detail) details.value = { ...details.value, [listing.id]: { ...detail, listing: { ...detail.listing, aiModeration: result.aiModeration } } }
+  } catch (error) {
+    aiErrors.value = { ...aiErrors.value, [listing.id]: p2pErrorMessage(error) }
+  } finally {
+    aiPendingId.value = ''
   }
 }
 
@@ -128,7 +154,7 @@ watch(isStaff, (allowed) => { if (allowed) load() }, { immediate: true })
         <p>Bài người dùng app đăng để tặng đồ trực tiếp cho nhau. Gỡ bài vi phạm ngay tại đây, không cần chờ báo cáo; khoá tài khoản làm ở trang Báo cáo vi phạm.</p>
         <p v-if="scopeLabel(scope)" class="p2p-scope"><AuthIcon name="map-pin" :size="16" />{{ scopeLabel(scope) }}</p>
       </div>
-      <button type="button" class="auth-btn auth-btn--soft" :disabled="isLoading" @click="load">
+      <button type="button" class="auth-btn auth-btn--soft" :disabled="isLoading || Boolean(pendingId) || Boolean(aiPendingId)" @click="load">
         <AuthIcon name="refresh" :size="18" />Tải lại
       </button>
     </header>
@@ -146,6 +172,8 @@ watch(isStaff, (allowed) => { if (allowed) load() }, { immediate: true })
     </div>
 
     <template v-else>
+      <p v-if="!aiEnabled" class="p2p-muted" role="status">AI kiểm duyệt chưa được cấu hình</p>
+      <p v-else class="p2p-muted">AI chỉ gợi ý từ tiêu đề, ghi chú và tối đa 3 ảnh; nhân sự quyết định gỡ bài. Kết quả không bảo đảm phát hiện mọi vi phạm.</p>
       <div class="p2p-toolbar">
         <div class="p2p-tabs" role="tablist" aria-label="Lọc theo trạng thái">
           <button v-for="item in STATUS_TABS" :key="item.id" type="button" role="tab" :aria-selected="tab === item.id"
@@ -173,6 +201,7 @@ watch(isStaff, (allowed) => { if (allowed) load() }, { immediate: true })
             <div class="p2p-card__body">
               <div class="p2p-card__badges">
                 <span :class="['p2p-badge', `p2p-badge--${(LISTING_STATUS[listing.status] || LISTING_STATUS.unknown).tone}`]">{{ statusLabel(listing.status) }}</span>
+                <span :class="['p2p-badge', `p2p-badge--${aiBadge(listing.aiModeration).tone}`]">{{ aiBadge(listing.aiModeration).label }}</span>
                 <span v-if="listing.district" class="p2p-badge p2p-badge--muted">{{ listing.district }}</span>
                 <span v-if="listing.reports.open" class="p2p-badge p2p-badge--danger">{{ listing.reports.open }} báo cáo chờ xử lý</span>
                 <span v-else-if="listing.reports.total" class="p2p-badge p2p-badge--muted">{{ listing.reports.total }} báo cáo đã xử lý</span>
@@ -208,10 +237,10 @@ watch(isStaff, (allowed) => { if (allowed) load() }, { immediate: true })
             <button type="button" class="auth-btn auth-btn--soft" :aria-expanded="expandedId === listing.id" @click="toggleDetail(listing)">
               {{ expandedId === listing.id ? 'Ẩn chi tiết' : 'Xem chi tiết' }}
             </button>
-            <button v-if="removeCheck(listing)" type="button" class="auth-btn auth-btn--soft p2p-danger" :disabled="Boolean(pendingId)" @click="startRemove(listing)">
+            <button v-if="removeCheck(listing)" type="button" class="auth-btn auth-btn--soft p2p-danger" :disabled="Boolean(pendingId) || Boolean(aiPendingId)" @click="startRemove(listing)">
               Gỡ bài
             </button>
-            <button v-if="listing.status === 'removed'" type="button" class="auth-btn auth-btn--soft" :disabled="Boolean(pendingId)" @click="startRestore(listing)">
+            <button v-if="listing.status === 'removed'" type="button" class="auth-btn auth-btn--soft" :disabled="Boolean(pendingId) || Boolean(aiPendingId)" @click="startRestore(listing)">
               Khôi phục
             </button>
           </div>
@@ -229,6 +258,19 @@ watch(isStaff, (allowed) => { if (allowed) load() }, { immediate: true })
                 </a>
               </div>
               <p class="p2p-detail__note"><strong>Ghi chú của người đăng:</strong> {{ details[listing.id].listing.donorNote || '—' }}</p>
+
+              <div class="p2p-detail__ai" :aria-busy="aiPendingId === listing.id">
+                <p v-if="listing.aiModeration?.reason" :role="listing.aiModeration.status === 'error' ? 'alert' : undefined">
+                  <strong>Gợi ý AI:</strong> {{ listing.aiModeration.reason }}
+                </p>
+                <small v-if="listing.aiModeration?.checkedAt" class="p2p-muted">Kiểm lúc {{ formatDateTime(listing.aiModeration.checkedAt) }}</small>
+                <button v-if="aiEnabled" type="button" class="auth-btn auth-btn--soft"
+                  :disabled="Boolean(pendingId) || Boolean(aiPendingId) || Boolean(confirming)" @click="checkAi(listing)">
+                  <AuthIcon v-if="aiPendingId === listing.id" name="loader" :size="16" class="auth-spin" />
+                  {{ aiPendingId === listing.id ? 'Đang kiểm tra…' : 'Kiểm tra bằng AI' }}
+                </button>
+                <p v-if="aiErrors[listing.id]" class="p2p-card__error" role="alert">{{ aiErrors[listing.id] }}</p>
+              </div>
 
               <h3>Báo cáo về bài này</h3>
               <p v-if="!details[listing.id].reports.length" class="p2p-muted">Chưa có báo cáo nào.</p>
@@ -298,6 +340,7 @@ watch(isStaff, (allowed) => { if (allowed) load() }, { immediate: true })
 .p2p-badge--muted { background: #eef1f6; color: #536174; }
 .p2p-badge--danger { background: #fde8e6; color: #b3261e; }
 .p2p-detail { display: grid; gap: 10px; padding-top: 10px; border-top: 1px dashed #e1e7f1; }
+.p2p-detail__ai { display: grid; gap: 8px; justify-items: start; color: #42536a; font-size: 14px; overflow-wrap: anywhere; }
 .p2p-detail h3 { font-size: 14px; color: #182a31; margin: 6px 0 0; }
 .p2p-detail__images { display: flex; flex-wrap: wrap; gap: 8px; }
 .p2p-detail__images img { width: 120px; height: 120px; border-radius: 10px; object-fit: cover; background: #eef1f6; }

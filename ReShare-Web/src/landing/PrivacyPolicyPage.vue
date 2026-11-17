@@ -7,7 +7,7 @@ import { LEGAL_CONTACT_EMAIL } from './legal.js'
 </script>
 
 <template>
-  <LegalPageLayout title="Chính sách quyền riêng tư" effective-date="13/11/2026">
+  <LegalPageLayout title="Chính sách quyền riêng tư" effective-date="17/11/2026">
     <p class="legal-note">
       ReShare là sản phẩm đồ án Capstone của nhóm sinh viên C1SE.49, đang trong giai đoạn thử nghiệm.
       Trang này giải thích ReShare thu thập dữ liệu gì, dùng để làm gì, ai được xem và bạn có quyền gì với dữ liệu của mình.
@@ -34,6 +34,19 @@ import { LEGAL_CONTACT_EMAIL } from './legal.js'
     <p>
       Việc gợi ý danh mục (quần áo, sách vở, gia dụng) chạy bằng model trên chính iPhone của bạn. Ảnh không được gửi lên máy chủ để phân loại.
       Ảnh chỉ được tải lên khi bạn bấm gửi đơn quyên góp hoặc đăng món đồ.
+    </p>
+
+    <h3>Kiểm duyệt nội dung Kho đồ 0đ bằng dịch vụ AI</h3>
+    <p>
+      Khi tính năng được bật, tiêu đề, mô tả và tối đa 3 ảnh của bài Kho đồ 0đ có thể được gửi tới dịch vụ AI bên ngoài,
+      như Google (Gemini), tuỳ cấu hình vận hành, để kiểm tra an toàn nội dung. ReShare chỉ sử dụng dữ liệu này cho mục đích
+      hỗ trợ kiểm duyệt, không dùng cho mục đích khác. Chúng tôi không chủ động gửi thông tin đăng nhập hoặc tin nhắn riêng trong lượt kiểm này.
+      AI chỉ gắn cờ nghi vấn; nhân sự ReShare quyết định xử lý bài đăng.
+    </p>
+    <p>
+      Việc lưu trữ và sử dụng dữ liệu tại nhà cung cấp phụ thuộc dịch vụ và chính sách của họ,
+      bao gồm <a href="https://ai.google.dev/gemini-api/terms" target="_blank" rel="noopener noreferrer">điều khoản Gemini API</a>
+      khi dùng Gemini. Nhóm vận hành cần chọn cấu hình dịch vụ phù hợp trước khi bật tính năng.
     </p>
 
     <h2>3. Chúng tôi dùng dữ liệu để làm gì</h2>

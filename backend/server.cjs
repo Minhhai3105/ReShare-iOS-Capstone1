@@ -23,6 +23,8 @@ const { createAccountApi } = require('./account-api.cjs');
 const { cloudinaryCatalogImageDeleter, createImageCleanupJobs } = require('./image-cleanup-jobs.cjs');
 const { createModerationApi } = require('./moderation-api.cjs');
 const { createP2pListingsApi } = require('./p2p-listings-api.cjs');
+const { createAiModerator } = require('./ai-moderation.cjs');
+const { createAiModerationJobs } = require('./ai-moderation-jobs.cjs');
 const { errorBody } = require('./error-body.cjs');
 const { createReservationExpiry } = require('./p2p-reservation-expiry.cjs');
 
@@ -66,7 +68,11 @@ const hubsApi = createHubsApi({ db, verifyToken, serverTimestamp: () => FieldVal
 const deleteCatalogImage = cloudinaryCatalogImageDeleter(cloudinary);
 const accountApi = createAccountApi({ db, auth: getAuth(), verifyToken, deleteCatalogImage });
 const moderationApi = createModerationApi({ db, auth: getAuth(), verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
-const p2pListingsApi = createP2pListingsApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
+const aiModerator = createAiModerator({
+  baseUrl: process.env.AI_MODERATION_BASE_URL, apiKey: process.env.AI_MODERATION_API_KEY, model: process.env.AI_MODERATION_MODEL,
+});
+const aiModerationJobs = createAiModerationJobs({ db, moderator: aiModerator });
+const p2pListingsApi = createP2pListingsApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp(), aiChecks: aiModerationJobs });
 const adminWebOrigins = new Set((process.env.ADMIN_WEB_ORIGINS || '')
   .split(',').map(origin => origin.trim()).filter(Boolean));
 
@@ -110,7 +116,7 @@ const server = http.createServer(async (request, response) => {
   const isHubPath = pathname === '/v1/admin/hubs' || /^\/v1\/admin\/hubs\/[^/]+\/(update|status|delete)$/.test(pathname);
   // Trang Kho đồ 0đ trên Web Admin: neo chính xác như các route khác.
   const isP2pListingPath = pathname === '/v1/admin/p2p/listings' ||
-    /^\/v1\/admin\/p2p\/listings\/[^/]+(\/(remove|restore))?$/.test(pathname);
+    /^\/v1\/admin\/p2p\/listings\/[^/]+(\/(remove|restore|ai-check))?$/.test(pathname);
   const isAdminImageRead = pathname === '/v1/images/read-access';
   const isContactPath = pathname === '/v1/contact';
   const isAccountPath = pathname === '/v1/account/delete';
@@ -197,4 +203,6 @@ reservationExpiry.start();
 // Dọn tiếp ảnh Cloudinary còn sót sau khi xoá tài khoản (mỗi 15 phút khi server đang chạy).
 const imageCleanupJobs = createImageCleanupJobs({ db, deleteCatalogImage });
 imageCleanupJobs.start();
-server.on('close', () => { reservationExpiry.stop(); imageCleanupJobs.stop(); });
+// Kiểm tối đa 10 bài mỗi 10 phút khi server thức; không cam kết thời hạn khi Render ngủ.
+aiModerationJobs.start();
+server.on('close', () => { reservationExpiry.stop(); imageCleanupJobs.stop(); aiModerationJobs.stop(); });

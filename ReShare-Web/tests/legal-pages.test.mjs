@@ -69,3 +69,12 @@ test('Chính sách nêu đăng nhập Google: chỉ nhận tên và email, Googl
   assert.match(page, /đăng nhập bằng Google, ReShare chỉ nhận tên hiển thị và email/)
   assert.match(page, /Google Sign-In/)
 })
+
+
+test('Chính sách công khai việc kiểm duyệt ảnh/text bằng AI, giới hạn dữ liệu và người quyết định', () => {
+  const page = read('src/landing/PrivacyPolicyPage.vue')
+  for (const phrase of ['Google (Gemini)', 'tiêu đề, mô tả và tối đa 3 ảnh', 'AI chỉ gắn cờ nghi vấn',
+    'nhân sự ReShare quyết định', 'https://ai.google.dev/gemini-api/terms']) {
+    assert.ok(page.includes(phrase), `thiếu nội dung công khai: ${phrase}`)
+  }
+})

@@ -58,6 +58,15 @@ function httpsImages(data) {
   return urls;
 }
 
+function aiModerationBody(data) {
+  if (!data || !['safe', 'flagged', 'error'].includes(data.status)) return null;
+  return {
+    status: data.status, categories: Array.isArray(data.categories) ? data.categories : [],
+    reason: typeof data.reason === 'string' ? data.reason : '', model: data.model || null,
+    checkedAt: dateString(data.checkedAt),
+  };
+}
+
 function moderationBody(moderation) {
   if (!moderation || typeof moderation !== 'object') return null;
   return {
@@ -106,7 +115,7 @@ function validateRestoreBody(body) {
   }
 }
 
-function createP2pListingsApi({ db, verifyToken, serverTimestamp }) {
+function createP2pListingsApi({ db, verifyToken, serverTimestamp, aiChecks = null }) {
   if (!db || !verifyToken) throw new Error('P2P listings API configuration is incomplete');
   const now = serverTimestamp || (() => new Date());
 
@@ -170,6 +179,7 @@ function createP2pListingsApi({ db, verifyToken, serverTimestamp }) {
       donor: { id: data.donorId || null, name: owner?.name || '', suspended: owner?.suspended === true },
       reports: reportCounts.get(doc.id) || { open: 0, total: 0 },
       moderation: moderationBody(data.moderation),
+      aiModeration: aiModerationBody(data.aiModeration),
       restoreBlocker: restoreBlocker(data, owner, role),
     };
   }
@@ -181,7 +191,7 @@ function createP2pListingsApi({ db, verifyToken, serverTimestamp }) {
   async function list(staff) {
     const { scope } = staff;
     if (!scope.all && !scope.districts.length) {
-      return { status: 200, body: { listings: [], truncated: false, scope: scopeBody(scope) } };
+      return { status: 200, body: { listings: [], truncated: false, aiEnabled: aiChecks?.enabled === true, scope: scopeBody(scope) } };
     }
     // `in` nhận tối đa 30 giá trị; một kho chỉ phụ trách vài quận nên dư.
     const query = scope.all
@@ -203,7 +213,7 @@ function createP2pListingsApi({ db, verifyToken, serverTimestamp }) {
     const owners = await people(docs.map(doc => doc.data().donorId));
     const listings = docs.map(doc => summary(doc, owners, reportCounts, scope.role))
       .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
-    return { status: 200, body: { listings, truncated: snapshot.size > MAX_LISTINGS, scope: scopeBody(scope) } };
+    return { status: 200, body: { listings, truncated: snapshot.size > MAX_LISTINGS, aiEnabled: aiChecks?.enabled === true, scope: scopeBody(scope) } };
   }
 
   async function detail(staff, id) {
@@ -225,6 +235,7 @@ function createP2pListingsApi({ db, verifyToken, serverTimestamp }) {
     return {
       status: 200,
       body: {
+        aiEnabled: aiChecks?.enabled === true,
         listing: { ...summary(doc, owners, counts, staff.scope.role), donorNote: String(data.donorNote || ''), images: httpsImages(data) },
         reports: reports.map(report => {
           const item = report.data();
@@ -335,16 +346,35 @@ function createP2pListingsApi({ db, verifyToken, serverTimestamp }) {
     return { status: 200, body: { id, status: 'available' } };
   }
 
+  async function aiCheck(staff, id, body) {
+    if (!VALID_ID.test(id)) throw new ApiError(400, 'Invalid listing ID');
+    if (body != null && (typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length)) {
+      throw new ApiError(400, 'Invalid AI check request', 'VALIDATION');
+    }
+    // Kiểm tra quyền cả khi tính năng tắt để endpoint không trở thành đường lách phạm vi.
+    await runTransaction(db, async tx => {
+      const doc = await tx.get(db.collection('catalog_items').doc(id));
+      if (!doc.exists) throw new ApiError(404, 'Listing not found');
+      await assertScopeInTransaction(tx, staff, doc.data().district);
+    });
+    if (!aiChecks?.enabled) return { status: 200, body: { enabled: false, aiEnabled: false, aiModeration: null } };
+    const result = await aiChecks.checkListing(id, {
+      authorize: (tx, data) => assertScopeInTransaction(tx, staff, data.district),
+    });
+    return { status: 200, body: result };
+  }
+
   async function handle(method, path, headers, body) {
     const listPath = path === '/v1/admin/p2p/listings';
     const detailMatch = /^\/v1\/admin\/p2p\/listings\/([^/]+)$/.exec(path);
-    const actionMatch = /^\/v1\/admin\/p2p\/listings\/([^/]+)\/(remove|restore)$/.exec(path);
+    const actionMatch = /^\/v1\/admin\/p2p\/listings\/([^/]+)\/(remove|restore|ai-check)$/.exec(path);
     if (!listPath && !detailMatch && !actionMatch) throw new ApiError(404, 'Not found');
     if ((listPath || detailMatch) && method !== 'GET') throw new ApiError(404, 'Not found');
     if (actionMatch && method !== 'POST') throw new ApiError(404, 'Not found');
     const staff = await staffFrom(headers);
     if (listPath) return list(staff);
     if (detailMatch) return detail(staff, detailMatch[1]);
+    if (actionMatch[2] === 'ai-check') return aiCheck(staff, actionMatch[1], body);
     return actionMatch[2] === 'remove' ? remove(staff, actionMatch[1], body) : restore(staff, actionMatch[1], body);
   }
 
