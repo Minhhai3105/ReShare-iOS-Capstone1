@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
-  countByTab, filterListings, moderationNote, p2pErrorMessage, removeCheck, restoreCheck, scopeLabel, searchKey,
+  aiBadge, countByTab, filterListings, moderationNote, p2pErrorMessage, removeCheck, restoreCheck, scopeLabel, searchKey,
 } from '../src/admin/p2p/p2p.model.js'
 import { createP2pRepository } from '../src/admin/p2p/p2p.repository.js'
 
@@ -19,7 +19,7 @@ const items = [
 ]
 
 test('Kho đồ 0đ: đếm và lọc theo tab, tab "Có báo cáo chờ xử lý" chỉ lấy bài còn báo cáo mở', () => {
-  assert.deepEqual(countByTab(items), { all: 4, reported: 1, available: 1, reserved: 1, completed: 1, removed: 1 })
+  assert.deepEqual(countByTab(items), { all: 4, reported: 1, ai_flagged: 0, available: 1, reserved: 1, completed: 1, removed: 1 })
   assert.deepEqual(filterListings(items, { tab: 'reported' }).map((item) => item.id), ['cat_2'])
   assert.deepEqual(filterListings(items, { tab: 'removed' }).map((item) => item.id), ['cat_4'])
 })
@@ -86,7 +86,7 @@ test('Kho đồ 0đ: repository gửi đúng đường dẫn, kèm token và ch�
   }
   const authInstance = { currentUser: { getIdToken: async () => 'token-1' } }
   const repository = createP2pRepository({ apiBase: 'https://api.test', authInstance, fetchImpl })
-  assert.deepEqual(await repository.list(), { listings: [], scope: { all: true, districts: [] }, truncated: false })
+  assert.deepEqual(await repository.list(), { listings: [], scope: { all: true, districts: [] }, truncated: false, aiEnabled: false })
   await repository.remove('cat_1', 'available', '  rao bán  ')
   await repository.remove('cat_2', 'reserved')
   await repository.restore('cat 3')
@@ -109,4 +109,44 @@ test('Kho đồ 0đ: lỗi khôi phục giữ mã và chi tiết từ backend; m
   const offline = createP2pRepository({ apiBase: 'https://api.test', authInstance, fetchImpl: async () => { throw new TypeError('fetch failed') } })
   await assert.rejects(offline.remove('cat_1', 'available'), { code: 'UNCERTAIN', status: 0 })
   await assert.rejects(offline.list(), { code: 'NETWORK_ERROR', status: 0 })
+})
+
+
+test('Kho đồ 0đ: badge AI có đủ trạng thái và danh mục tiếng Việt', () => {
+  assert.deepEqual(aiBadge(null), { label: 'AI: Chưa kiểm', tone: 'muted' })
+  assert.deepEqual(aiBadge({ status: 'safe' }), { label: 'AI: An toàn', tone: 'success' })
+  assert.deepEqual(aiBadge({ status: 'error' }), { label: 'AI: Lỗi kiểm tra', tone: 'muted' })
+  assert.deepEqual(aiBadge({ status: 'flagged', categories: ['scam_or_sale', 'personal_info'] }), {
+    label: 'AI: Nghi vấn — Lừa đảo / rao bán, Thông tin cá nhân', tone: 'danger',
+  })
+})
+
+test('Kho đồ 0đ: lọc AI nghi vấn độc lập với trạng thái và báo cáo', () => {
+  const list = [listing({ aiModeration: { status: 'flagged' } }), listing({ id: 'safe', aiModeration: { status: 'safe' } }),
+    listing({ id: 'removed', status: 'removed', aiModeration: { status: 'flagged' } }), listing({ id: 'error', aiModeration: { status: 'error' } })]
+  assert.deepEqual(filterListings(list, { tab: 'ai_flagged' }).map(item => item.id), ['cat_1', 'removed'])
+  assert.equal(countByTab(list).ai_flagged, 2)
+  assert.equal(countByTab(list).reported, 0)
+})
+
+test('Kho đồ 0đ: API AI gửi token, nhận cấu hình và giữ lỗi 429 để dịch', async () => {
+  let call
+  const authInstance = { currentUser: { getIdToken: async () => 'test-token' } }
+  const repository = createP2pRepository({ apiBase: 'https://api.test', authInstance, fetchImpl: async (url, options) => {
+    call = { url, options }
+    return { ok: true, json: async () => ({ enabled: true, aiEnabled: true, aiModeration: { status: 'safe' } }) }
+  } })
+  assert.equal((await repository.aiCheck('cat 1')).aiModeration.status, 'safe')
+  assert.equal(call.url, 'https://api.test/v1/admin/p2p/listings/cat%201/ai-check')
+  assert.equal(call.options.method, 'POST')
+  assert.equal(call.options.headers.Authorization, 'Bearer test-token')
+  assert.deepEqual(JSON.parse(call.options.body), {})
+  const limited = createP2pRepository({ apiBase: 'https://api.test', authInstance, fetchImpl: async () => ({
+    ok: false, status: 429, json: async () => ({ message: 'AI check was requested recently', code: 'AI_CHECK_RATE_LIMIT' }),
+  }) })
+  await assert.rejects(limited.aiCheck('cat_1'), error => {
+    assert.equal(p2pErrorMessage(error), 'Vừa kiểm tra, thử lại sau 1 phút.')
+    return error.code === 'AI_CHECK_RATE_LIMIT'
+  })
+  assert.match(p2pErrorMessage({ code: 'AI_CONTENT_CHANGED' }), /Nội dung bài vừa thay đổi/)
 })

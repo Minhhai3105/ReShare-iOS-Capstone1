@@ -206,6 +206,7 @@ service cloud.firestore {
       allow create: if request.auth != null
         && request.resource.data.donorId == request.auth.uid
         && request.resource.data.status == 'available'
+        && !request.resource.data.keys().hasAny(['aiModeration', 'moderation'])
         && !isSuspended()
         // Địa chỉ và giờ hẹn chính xác không được nằm trên bài mọi người đều đọc được.
         && !request.resource.data.keys().hasAny(['pickupAddress', 'pickupTime'])

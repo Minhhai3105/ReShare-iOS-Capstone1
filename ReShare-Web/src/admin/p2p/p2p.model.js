@@ -12,6 +12,7 @@ export const LISTING_STATUS = Object.freeze({
 export const STATUS_TABS = Object.freeze([
   { id: 'all', label: 'Tất cả' },
   { id: 'reported', label: 'Có báo cáo chờ xử lý' },
+  { id: 'ai_flagged', label: 'AI nghi vấn' },
   { id: 'available', label: 'Đang mở' },
   { id: 'reserved', label: 'Đã có người hẹn' },
   { id: 'completed', label: 'Đã trao' },
@@ -25,6 +26,7 @@ export function statusLabel(status) {
 function matchesTab(listing, tab) {
   if (tab === 'all') return true
   if (tab === 'reported') return (listing.reports?.open || 0) > 0
+  if (tab === 'ai_flagged') return listing.aiModeration?.status === 'flagged'
   return listing.status === tab
 }
 
@@ -93,6 +95,22 @@ export function moderationNote(moderation) {
   return moderation.reason ? `${source}: ${moderation.reason}` : source
 }
 
+export const AI_CATEGORY_LABEL = Object.freeze({
+  sexual: 'Nội dung tình dục', violence: 'Bạo lực', weapons: 'Vũ khí', drugs: 'Ma tuý',
+  hate: 'Thù ghét', scam_or_sale: 'Lừa đảo / rao bán', personal_info: 'Thông tin cá nhân', other: 'Khác',
+})
+
+export function aiBadge(moderation) {
+  if (moderation?.status === 'safe') return { label: 'AI: An toàn', tone: 'success' }
+  if (moderation?.status === 'flagged') {
+    const categories = (Array.isArray(moderation.categories) ? moderation.categories : [])
+      .map((category) => AI_CATEGORY_LABEL[category] || 'Khác')
+    return { label: `AI: Nghi vấn — ${[...new Set(categories)].join(', ') || 'Cần xem xét'}`, tone: 'danger' }
+  }
+  if (moderation?.status === 'error') return { label: 'AI: Lỗi kiểm tra', tone: 'muted' }
+  return { label: 'AI: Chưa kiểm', tone: 'muted' }
+}
+
 export const HISTORY_ACTION_LABEL = Object.freeze({ remove: 'Gỡ bài', restore: 'Khôi phục' })
 
 const ERROR_MESSAGES = Object.freeze({
@@ -110,6 +128,8 @@ export function p2pErrorMessage(error) {
   if (error?.code === 'RESTORE_BLOCKED') {
     return RESTORE_BLOCKER_MESSAGE[error?.details?.reason] || ERROR_MESSAGES['Listing cannot be restored']
   }
+  if (error?.status === 429 || error?.code === 'AI_CHECK_RATE_LIMIT') return 'Vừa kiểm tra, thử lại sau 1 phút.'
+  if (error?.code === 'AI_CONTENT_CHANGED') return 'Nội dung bài vừa thay đổi. Tải lại rồi kiểm tra bằng AI lần nữa.'
   if (error?.code === 'UNCERTAIN') return 'Chưa rõ thao tác đã lưu hay chưa. Tải lại danh sách để kiểm tra.'
   if (error?.status === 0) return 'Không kết nối được máy chủ. Thử lại sau giây lát.'
   return ERROR_MESSAGES[error?.message] || 'Không thực hiện được thao tác. Thử lại sau.'

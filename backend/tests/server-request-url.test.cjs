@@ -23,6 +23,8 @@ function loadHandler(extraEnv = {}) {
       if (name === 'cloudinary') return { v2: { config() {} } };
       if (name === './error-body.cjs') return { errorBody };
       if (name === './p2p-reservation-expiry.cjs') return { createReservationExpiry: () => ({ start() {}, stop() {} }) };
+      if (name === './ai-moderation-jobs.cjs') return { createAiModerationJobs: () => ({ start() {}, stop() {} }) };
+      if (name === './p2p-listings-api.cjs') return { createP2pListingsApi: () => ({ handle: async (_method, path) => ({ status: 200, body: { path, api: 'p2p' } }) }) };
       if (name === './image-cleanup-jobs.cjs') {
         return { cloudinaryCatalogImageDeleter: () => async () => {}, createImageCleanupJobs: () => ({ start() {}, stop() {} }) };
       }
@@ -81,4 +83,12 @@ test('Contact inbox: admin origins and the landing origin pass CORS; other origi
   assert.equal(refused.headers['Access-Control-Allow-Origin'], undefined);
   const refusedRead = await send(handler, '/v1/contact', 'GET', 'https://evil.example');
   assert.equal(refusedRead.status, 403);
+});
+
+// Route thật phải tới P2P handler, không rơi sang image-api mặc định.
+test('Kho đồ 0đ: route kiểm AI đi tới đúng handler và giữ CORS admin', async () => {
+  const response = await send(loadHandler(), '/v1/admin/p2p/listings/item/ai-check', 'POST');
+  assert.equal(response.status, 200);
+  assert.equal(response.body.api, 'p2p');
+  assert.equal(response.headers['Access-Control-Allow-Origin'], 'http://localhost:5173');
 });
