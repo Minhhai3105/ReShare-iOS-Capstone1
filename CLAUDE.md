@@ -48,7 +48,7 @@ Trong `firestore.rules`:
 - `donations`: client chỉ `create` được đơn `status == 'pending'`, **bị cấm** kèm `warehouseId`/`warehouseName`; `allow update: if false`.
 - `donation_reviews`: `read, write: if false` tuyệt đối (chứa internal note, tách khỏi dữ liệu donor thấy được).
 - `receipts`: read-only theo phân công kho; mọi ghi qua API.
-- **Không có match block** (⇒ client deny mặc định, chỉ Admin SDK chạm được): `inventory`, `inventory_movements`, `distribution_vouchers`, `beneficiaries`, `categories`, `staff_bootstrap`, `image_upload_batches`, `image_upload_quotas`.
+- **Không có match block** (⇒ client deny mặc định, chỉ Admin SDK chạm được): `inventory`, `inventory_movements`, `distribution_vouchers`, `beneficiaries`, `categories`, `staff_bootstrap`, `image_upload_batches`, `image_upload_quotas`, `p2p_listing_audit`.
 
 Hệ quả: đừng bao giờ "sửa cho nhanh" bằng cách cho web client ghi trực tiếp Firestore. Nếu một rules test cũ mong client ghi được, sửa kỳ vọng của test thành *client bị từ chối* + mô phỏng ghi tin cậy qua Admin SDK.
 
@@ -67,6 +67,7 @@ Vai trò: `donor` (iOS) · `warehouse_admin` (chỉ đơn thuộc kho được g
 | `contact-api` | `POST` + `GET /v1/contact` |
 | `campaigns-api` | `GET` + `POST /v1/admin/campaigns` · `GET …/options`, `…/:id` · `POST …/:id/update`, `…/:id/status` (chỉ System Admin) |
 | `hubs-api` | `GET /v1/admin/hubs` (System Admin + Warehouse Admin xem) · `POST /v1/admin/hubs`, `…/:id/update`, `…/:id/status`, `…/:id/delete` (chỉ System Admin) |
+| `p2p-listings-api` | `GET /v1/admin/p2p/listings`, `…/:id` · `POST …/:id/remove`, `…/:id/restore` (System Admin mọi quận; Warehouse Admin chỉ quận trong `warehouses/{id}.districts`) |
 
 `server.cjs` route theo prefix path, có allowlist origin (`ADMIN_WEB_ORIGINS`) và chặn body > 8KB (32KB cho `/v1/contact`).
 
@@ -81,6 +82,8 @@ Web Admin tách rõ bằng `import.meta.env.DEV`:
 - `/admin` (`AdminHome.vue`) vẫn là trang tạm sau đăng nhập, chưa phải dashboard vận hành.
 
 Chiến dịch và Hub trên iOS đọc từ Firestore (`fetchOpenCampaigns`, `fetchActiveHubs`). Chiến dịch do System Admin tạo trên Web Admin qua `campaigns-api`; tiến độ chỉ cộng trong transaction nhập kho. Hub do System Admin quản lý trên Web Admin (`/admin/hubs`, qua `hubs-api`; tạm ẩn bị chặn nếu chiến dịch đang mở còn dùng; xoá chỉ cho điểm đã tạm ẩn và chưa từng có đơn/chiến dịch nào trỏ tới, có ghi `hub_audit`; đổi tên cập nhật bản sao tên trong chiến dịch nháp/đang mở). `backend/scripts/seed-hubs.cjs` chỉ còn để khởi tạo và mặc định bỏ qua Hub đã có. 3 Hub hiện có **vẫn là điểm minh hoạ** (`isDemo: true`) cho tới khi nhóm có điểm tiếp nhận thật — app phải tiếp tục ghi rõ điều đó; chỉ bỏ cờ trên web khi điểm đã nhận đồ thật.
+
+Kho đồ 0đ (P2P, `catalog_items`) có trang `/admin/p2p` trên Web Admin qua `p2p-listings-api`: xem bài, chủ động gỡ (`status: 'removed'`, kèm `moderation.previousStatus`) và khôi phục bài gỡ nhầm (chỉ bài đang mở trước khi gỡ, người đăng chưa bị khoá). Gỡ bài tự đóng báo cáo đang mở về bài đó; mỗi lần gỡ/khôi phục ghi `p2p_listing_audit`. Phạm vi Warehouse Admin theo quận (`district` của bài) mà kho phụ trách — `warehouses/{id}.districts` do `backend/scripts/set-warehouse-districts.cjs` ghi (mặc định chỉ in kế hoạch, `--yes` mới ghi); quận chưa kho nào phụ trách thì chỉ System Admin thấy. Khoá tài khoản vẫn chỉ ở trang Báo cáo vi phạm (System Admin).
 
 ## AI / Core ML
 

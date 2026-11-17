@@ -50,6 +50,9 @@ export const ADMIN_ROUTE = Object.freeze({
   hubNew: 'admin-hub-new',
   hubEdit: 'admin-hub-edit',
 
+  // Kho đồ 0đ (P2P): System Admin mọi quận, Warehouse Admin theo quận kho phụ trách
+  p2pListings: 'admin-p2p-listings',
+
   // Routes từ dev - Inventory và Distribution
   inventory: 'admin-inventory',
   inventoryDetail: 'admin-inventory-detail',

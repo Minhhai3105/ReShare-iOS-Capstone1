@@ -25,6 +25,7 @@ const adminPageRoutes = [
   { path: 'hubs', name: ADMIN_ROUTE.hubList, component: () => import('./hubs/HubList.vue'), meta: ADMIN_PAGE_META },
   { path: 'hubs/new', name: ADMIN_ROUTE.hubNew, component: () => import('./hubs/HubForm.vue'), meta: SYSTEM_ADMIN_META },
   { path: 'hubs/:hubId/edit', name: ADMIN_ROUTE.hubEdit, component: () => import('./hubs/HubForm.vue'), meta: SYSTEM_ADMIN_META },
+  { path: 'p2p', name: ADMIN_ROUTE.p2pListings, component: () => import('./p2p/P2pListings.vue'), meta: ADMIN_PAGE_META },
   { path: 'donations', name: ADMIN_ROUTE.donationQueue, component: () => import('./donations/views/DonationQueue.vue'), meta: ADMIN_PAGE_META },
   { path: 'donations/:donationId', name: 'admin-donation-detail', component: () => import('./donations/DonationDetailRoute.vue'), meta: ADMIN_PAGE_META },
   { path: 'donations/:donationId/receipt', name: 'admin-donation-receipt', component: () => import('./receipt/views/ActualReceipt.vue'), meta: ADMIN_PAGE_META },
