@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import AuthIcon from '../auth/components/AuthIcon.vue'
+import InlineConfirm from '../shared/InlineConfirm.vue'
 import { ADMIN_ROUTE, USER_ROLE } from '../auth/auth.constants'
 import { staffAssignment } from '../auth/auth.store'
 import { moderationRepository } from './moderation.repository'
@@ -15,6 +16,7 @@ const truncated = ref(false)
 const isLoading = ref(true)
 const loadError = ref('')
 const pending = ref('')
+const confirming = ref(null)
 const actionError = ref({})
 const notes = ref({})
 let requestId = 0
@@ -35,10 +37,25 @@ async function load() {
   }
 }
 
-watch([status, canManage], ([, allowed]) => { if (allowed) load() }, { immediate: true })
+watch([status, canManage], ([, allowed]) => {
+  confirming.value = null
+  if (allowed) load()
+}, { immediate: true })
 
-async function resolve(report, option) {
-  if (pending.value || !window.confirm(option.confirm)) return
+function startResolve(report, option) {
+  if (!canManage.value || pending.value) return
+  actionError.value = { ...actionError.value, [report.id]: '' }
+  confirming.value = { id: report.id, action: option }
+}
+
+function cancelResolve() {
+  if (!pending.value) confirming.value = null
+}
+
+async function resolve(report) {
+  const option = confirming.value?.id === report.id ? confirming.value.action : null
+  if (!canManage.value || !option || pending.value
+    || !actionsFor(report).some((item) => item.action === option.action)) return
   pending.value = `${report.id}:${option.action}`
   actionError.value = { ...actionError.value, [report.id]: '' }
   try {
@@ -52,6 +69,7 @@ async function resolve(report, option) {
     actionError.value = { ...actionError.value, [report.id]: moderationErrorMessage(error) }
   } finally {
     pending.value = ''
+    confirming.value = null
   }
 }
 </script>
@@ -69,14 +87,14 @@ async function resolve(report, option) {
         <h1 id="mod-title">Báo cáo vi phạm</h1>
         <p>Báo cáo từ người dùng app về bài Kho đồ 0đ, tin nhắn hoặc tài khoản. Điều khoản cam kết xử lý trong vòng 24 giờ.</p>
       </div>
-      <button type="button" class="auth-btn auth-btn--soft" :disabled="isLoading" @click="load">
+      <button type="button" class="auth-btn auth-btn--soft" :disabled="isLoading || Boolean(pending)" @click="load">
         <AuthIcon name="refresh" :size="18" />Tải lại
       </button>
     </header>
 
     <div class="mod-tabs" role="tablist" aria-label="Trạng thái báo cáo">
       <button v-for="tab in [{ id: 'open', label: 'Chờ xử lý' }, { id: 'resolved', label: 'Đã xử lý' }]" :key="tab.id"
-        type="button" role="tab" :aria-selected="status === tab.id" :class="{ 'is-active': status === tab.id }" @click="status = tab.id">
+        type="button" role="tab" :aria-selected="status === tab.id" :disabled="Boolean(pending)" :class="{ 'is-active': status === tab.id }" @click="status = tab.id">
         {{ tab.label }}
       </button>
     </div>
@@ -117,12 +135,21 @@ async function resolve(report, option) {
         <template v-if="actionsFor(report).length">
           <label class="mod-card__field">
             <span>Ghi chú xử lý (tuỳ chọn)</span>
-            <input v-model="notes[report.id]" type="text" maxlength="500" placeholder="Ví dụ: bài rao bán, vi phạm mục 4" />
+            <input v-model="notes[report.id]" :disabled="Boolean(pending)" type="text" maxlength="500" placeholder="Ví dụ: bài rao bán, vi phạm mục 4" />
           </label>
-          <div class="mod-card__actions">
+          <InlineConfirm
+            v-if="confirming?.id === report.id"
+            :message="confirming.action.confirm"
+            :confirm-label="confirming.action.label"
+            :busy="Boolean(pending)"
+            :tone="confirming.action.danger ? 'danger' : 'warning'"
+            @confirm="resolve(report)"
+            @cancel="cancelResolve"
+          />
+          <div v-else class="mod-card__actions">
             <button v-for="option in actionsFor(report)" :key="option.action" type="button"
               :class="['auth-btn', option.danger ? 'auth-btn--primary mod-danger' : 'auth-btn--soft']"
-              :disabled="Boolean(pending)" @click="resolve(report, option)">
+              :disabled="Boolean(pending)" @click="startResolve(report, option)">
               <AuthIcon v-if="pending === `${report.id}:${option.action}`" name="loader" :size="16" class="auth-spin" />
               {{ option.label }}
             </button>
