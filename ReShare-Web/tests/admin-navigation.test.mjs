@@ -10,11 +10,12 @@ import {
   visibleSections,
 } from '../src/admin/layout/admin.navigation.js'
 
-test('System Admin thấy đủ 11 mục, Warehouse Admin không thấy Chiến dịch, Nhân sự, Liên hệ và Báo cáo vi phạm', () => {
-  assert.equal(visibleSections('system_admin').length, 11)
+test('System Admin thấy đủ 12 mục, Warehouse Admin không thấy Chiến dịch, Nhân sự, Liên hệ và Báo cáo vi phạm', () => {
+  assert.equal(visibleSections('system_admin').length, 12)
   const warehouseKeys = visibleSections('warehouse_admin').map((section) => section.key)
   // Warehouse Admin xem được Điểm tiếp nhận (chỉ đọc, 15/11/2026).
-  assert.deepEqual(warehouseKeys, ['home', 'donations', 'hubs', 'inventory', 'beneficiaries', 'distribution', 'reports'])
+  // Kho đồ 0đ: Warehouse Admin thấy bài ở các quận kho mình phụ trách (17/11/2026).
+  assert.deepEqual(warehouseKeys, ['home', 'donations', 'hubs', 'inventory', 'beneficiaries', 'distribution', 'reports', 'p2p'])
   assert.equal(visibleSections('').some((section) => section.key === 'staff'), false)
 })
 
@@ -34,7 +35,7 @@ test('Mọi route con trong khung quản trị đều có tiêu đề, mục và
     if (literal) return literal
     return constants.match(new RegExp(`\\b${key}: '([^']+)'`))[1]
   })
-  assert.equal(names.length, 25)
+  assert.equal(names.length, 26)
   for (const name of names) {
     const page = pageFor(name)
     assert.ok(page?.title && page.section, `thiếu khai báo cho ${name}`)

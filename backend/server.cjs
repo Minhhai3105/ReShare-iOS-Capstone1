@@ -22,6 +22,7 @@ const { createHubsApi } = require('./hubs-api.cjs');
 const { createAccountApi } = require('./account-api.cjs');
 const { cloudinaryCatalogImageDeleter, createImageCleanupJobs } = require('./image-cleanup-jobs.cjs');
 const { createModerationApi } = require('./moderation-api.cjs');
+const { createP2pListingsApi } = require('./p2p-listings-api.cjs');
 const { errorBody } = require('./error-body.cjs');
 const { createReservationExpiry } = require('./p2p-reservation-expiry.cjs');
 
@@ -65,6 +66,7 @@ const hubsApi = createHubsApi({ db, verifyToken, serverTimestamp: () => FieldVal
 const deleteCatalogImage = cloudinaryCatalogImageDeleter(cloudinary);
 const accountApi = createAccountApi({ db, auth: getAuth(), verifyToken, deleteCatalogImage });
 const moderationApi = createModerationApi({ db, auth: getAuth(), verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
+const p2pListingsApi = createP2pListingsApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const adminWebOrigins = new Set((process.env.ADMIN_WEB_ORIGINS || '')
   .split(',').map(origin => origin.trim()).filter(Boolean));
 
@@ -106,6 +108,9 @@ const server = http.createServer(async (request, response) => {
   const isCampaignPath = pathname === '/v1/admin/campaigns' ||
     /^\/v1\/admin\/campaigns\/[^/]+(\/(update|status))?$/.test(pathname);
   const isHubPath = pathname === '/v1/admin/hubs' || /^\/v1\/admin\/hubs\/[^/]+\/(update|status|delete)$/.test(pathname);
+  // Trang Kho đồ 0đ trên Web Admin: neo chính xác như các route khác.
+  const isP2pListingPath = pathname === '/v1/admin/p2p/listings' ||
+    /^\/v1\/admin\/p2p\/listings\/[^/]+(\/(remove|restore))?$/.test(pathname);
   const isAdminImageRead = pathname === '/v1/images/read-access';
   const isContactPath = pathname === '/v1/contact';
   const isAccountPath = pathname === '/v1/account/delete';
@@ -170,6 +175,7 @@ const server = http.createServer(async (request, response) => {
       : isCampaignPath ? campaignsApi
       : isHubPath ? hubsApi
       : isModerationPath ? moderationApi
+      : isP2pListingPath ? p2pListingsApi
       : isDonationAdminPath ? donationReviewApi
       : isAdminApi ? staffApi
       : api;
