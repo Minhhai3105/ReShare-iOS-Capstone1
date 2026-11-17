@@ -6,8 +6,17 @@ const { ERROR_REASON, moderationInput } = require('./ai-moderation.cjs');
 // Khoá lượt kiểm tra dùng chung giữa nút bấm, job và các process. Collection không có match block
 // trong rules nên client không đọc/ghi được; chỉ chứa mã lượt và thời gian, không lưu nội dung bài.
 const CHECKS_COLLECTION = 'p2p_ai_checks';
+const ERROR_RETRY_MS = 60 * 60 * 1000;
 const fingerprint = data => createHash('sha256').update(JSON.stringify(moderationInput(data))).digest('hex');
 const millis = value => value?.toMillis?.() ?? new Date(value || 0).getTime();
+
+function needsBackgroundCheck(data, time) {
+  if (!Object.hasOwn(data, 'aiModeration')) return true;
+  if (data.aiModeration?.checkedAt == null || data.aiModeration.checkedAt === '') return false;
+  const checkedAt = millis(data.aiModeration?.checkedAt);
+  return data.aiModeration?.status === 'error' && Number.isFinite(checkedAt)
+    && time.getTime() - checkedAt >= ERROR_RETRY_MS;
+}
 
 function createAiModerationJobs({ db, moderator, clock = () => new Date(), intervalMs = 10 * 60 * 1000,
   onError = () => console.error('Không thể hoàn tất lượt kiểm duyệt AI.') }) {
@@ -27,8 +36,8 @@ function createAiModerationJobs({ db, moderator, clock = () => new Date(), inter
       if (!doc.exists) throw new ApiError(404, 'Listing not found');
       const data = doc.data();
       await authorize(tx, data);
-      if (onlyUnseen && (data.status !== 'available' || Object.hasOwn(data, 'aiModeration'))) return null;
       const time = clock();
+      if (onlyUnseen && (data.status !== 'available' || !needsBackgroundCheck(data, time))) return null;
       if ((data.aiModeration?.checkedAt && time.getTime() - millis(data.aiModeration.checkedAt) < 60000)
         || (lease.exists && (time.getTime() - millis(lease.data().lastAttemptAt) < 60000
           || millis(lease.data().expiresAt) > time.getTime()))) {
@@ -75,7 +84,8 @@ function createAiModerationJobs({ db, moderator, clock = () => new Date(), inter
       let query = db.collection('catalog_items').where('status', '==', 'available').limit(200);
       if (cursor) query = query.startAfter(cursor);
       const snapshot = await query.get();
-      const candidates = snapshot.docs.filter(doc => !Object.hasOwn(doc.data(), 'aiModeration'));
+      const time = clock();
+      const candidates = snapshot.docs.filter(doc => needsBackgroundCheck(doc.data(), time));
       const batch = candidates.slice(0, 10);
       // Chỉ đi qua phần đã xử lý. Lượt sau tiếp tục trang kế, rồi vòng lại để thấy bài mới ở đầu.
       cursor = candidates.length > 10 ? batch.at(-1) : snapshot.size === 200 ? snapshot.docs.at(-1) : null;
