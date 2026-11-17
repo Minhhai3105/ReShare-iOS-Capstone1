@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import AuthIcon from '../auth/components/AuthIcon.vue'
+import InlineConfirm from '../shared/InlineConfirm.vue'
 import { ADMIN_ROUTE, USER_ROLE } from '../auth/auth.constants'
 import { staffAssignment } from '../auth/auth.store'
 import { DONATION_STATUS_LABEL } from '../donations/donation.constants.js'
@@ -23,6 +24,7 @@ const isLoading = ref(true)
 const loadError = ref('')
 const actionError = ref('')
 const pendingAction = ref('')
+const confirming = ref(null)
 let requestId = 0
 
 const progress = computed(() => campaignProgress(campaign.value))
@@ -45,23 +47,41 @@ async function load() {
   }
 }
 
-watch([campaignId, canManage], ([, allowed]) => { if (allowed) load() }, { immediate: true })
+watch([campaignId, canManage], ([, allowed]) => {
+  confirming.value = null
+  actionError.value = ''
+  if (allowed) load()
+}, { immediate: true })
 
 const CONFIRM = Object.freeze({
   active: 'Mở tiếp nhận? Chiến dịch sẽ hiện trên app iOS và donor gửi đồ được ngay.',
   closed: 'Đóng chiến dịch? App sẽ không nhận đơn mới cho chiến dịch này. Hàng đã gửi vẫn được nhập kho và cộng tiến độ.',
 })
 
-async function changeStatus(status) {
-  if (pendingAction.value || !window.confirm(CONFIRM[status])) return
+function startStatusChange(action) {
+  if (!canManage.value || pendingAction.value) return
   actionError.value = ''
-  pendingAction.value = status
+  confirming.value = { id: campaign.value.id, action }
+}
+
+function cancelStatusChange() {
+  if (!pendingAction.value) confirming.value = null
+}
+
+async function changeStatus() {
+  const check = confirming.value
+  if (!canManage.value || !check || check.id !== campaignId.value || pendingAction.value
+    || !actions.value.some((action) => action.status === check.action.status)) return
+  actionError.value = ''
+  pendingAction.value = check.action.status
   try {
-    campaign.value = await campaignRepository.changeStatus(campaign.value.id, status, campaign.value.version)
+    const saved = await campaignRepository.changeStatus(check.id, check.action.status, campaign.value.version)
+    if (campaignId.value === check.id) campaign.value = saved
   } catch (error) {
-    actionError.value = campaignErrorMessage(error)
+    if (campaignId.value === check.id) actionError.value = campaignErrorMessage(error)
   } finally {
     pendingAction.value = ''
+    confirming.value = null
   }
 }
 </script>
@@ -91,19 +111,28 @@ async function changeStatus(status) {
         <h1 id="campaign-detail-title">{{ campaign.title }}</h1>
         <p>{{ campaign.organizer }}</p>
       </div>
-      <div class="campaign-detail__actions">
+      <div v-if="!confirming" class="campaign-detail__actions">
         <RouterLink v-if="campaign.status !== 'closed'" :to="{ name: ADMIN_ROUTE.campaignEdit, params: { campaignId: campaign.id } }" class="auth-btn auth-btn--soft">
           <AuthIcon name="file-text" :size="18" />Sửa
         </RouterLink>
         <button v-for="action in actions" :key="action.status" type="button"
           :class="['auth-btn', action.status === 'closed' ? 'auth-btn--soft' : 'auth-btn--primary']"
-          :disabled="Boolean(pendingAction)" @click="changeStatus(action.status)">
+          :disabled="Boolean(pendingAction)" @click="startStatusChange(action)">
           <AuthIcon :name="pendingAction === action.status ? 'loader' : (action.status === 'closed' ? 'archive' : 'check-circle')" :size="18" :class="{ 'auth-spin': pendingAction === action.status }" />
           {{ action.label }}
         </button>
       </div>
     </header>
 
+    <InlineConfirm
+      v-if="confirming?.id === campaign.id"
+      :message="CONFIRM[confirming.action.status]"
+      :confirm-label="confirming.action.label"
+      :busy="Boolean(pendingAction)"
+      :tone="confirming.action.status === 'closed' ? 'danger' : 'warning'"
+      @confirm="changeStatus"
+      @cancel="cancelStatusChange"
+    />
     <p v-if="actionError" class="campaign-detail__error" role="alert">{{ actionError }}</p>
     <p v-if="campaign.status === 'draft'" class="campaign-detail__note"><AuthIcon name="info" :size="16" /> Bản nháp chưa hiện trên app. Kiểm tra nội dung rồi bấm “Mở tiếp nhận”.</p>
 
