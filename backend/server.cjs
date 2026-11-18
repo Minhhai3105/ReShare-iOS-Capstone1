@@ -24,7 +24,7 @@ const { cloudinaryCatalogImageDeleter, createImageCleanupJobs } = require('./ima
 const { createModerationApi } = require('./moderation-api.cjs');
 const { createP2pListingsApi } = require('./p2p-listings-api.cjs');
 const { createAiModerator } = require('./ai-moderation.cjs');
-const { createAiModerationJobs } = require('./ai-moderation-jobs.cjs');
+const { createAiModerationJobs, readAiModerationConfig } = require('./ai-moderation-jobs.cjs');
 const { errorBody } = require('./error-body.cjs');
 const { createReservationExpiry } = require('./p2p-reservation-expiry.cjs');
 
@@ -68,10 +68,12 @@ const hubsApi = createHubsApi({ db, verifyToken, serverTimestamp: () => FieldVal
 const deleteCatalogImage = cloudinaryCatalogImageDeleter(cloudinary);
 const accountApi = createAccountApi({ db, auth: getAuth(), verifyToken, deleteCatalogImage });
 const moderationApi = createModerationApi({ db, auth: getAuth(), verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
+const aiModerationConfig = readAiModerationConfig(process.env);
 const aiModerator = createAiModerator({
   baseUrl: process.env.AI_MODERATION_BASE_URL, apiKey: process.env.AI_MODERATION_API_KEY, model: process.env.AI_MODERATION_MODEL,
+  timeoutMs: aiModerationConfig.timeoutMs,
 });
-const aiModerationJobs = createAiModerationJobs({ db, moderator: aiModerator });
+const aiModerationJobs = createAiModerationJobs({ db, moderator: aiModerator, ...aiModerationConfig });
 const p2pListingsApi = createP2pListingsApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp(), aiChecks: aiModerationJobs });
 const adminWebOrigins = new Set((process.env.ADMIN_WEB_ORIGINS || '')
   .split(',').map(origin => origin.trim()).filter(Boolean));
