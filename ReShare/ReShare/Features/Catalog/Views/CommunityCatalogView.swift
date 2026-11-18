@@ -33,8 +33,8 @@ struct CommunityCatalogView: View {
 
     // Cột lưới 2 cột
     private let gridColumns = [
-        GridItem(.flexible(), spacing: 14),
-        GridItem(.flexible(), spacing: 14)
+        GridItem(.flexible(), spacing: 14, alignment: .top),
+        GridItem(.flexible(), spacing: 14, alignment: .top)
     ]
 
     // MARK: - Bộ lọc dữ liệu thông minh thời gian thực (Computed Property)
@@ -362,15 +362,14 @@ struct CommunityCatalogView: View {
                 RoundedRectangle(cornerRadius: 14)
                     .fill(Color(red: 0.92, green: 0.94, blue: 0.90))
                     .frame(height: 140)
-
-                CatalogItemPhotoView(
-                    urlString: item.photoURLs.first,
-                    legacyBase64: item.imageBase64,
-                    placeholderName: item.imageName
-                )
-                .frame(maxWidth: .infinity, maxHeight: 140)
-                .clipped()
-                .cornerRadius(14)
+                    .overlay {
+                        CatalogItemPhotoView(
+                            urlString: item.photoURLs.first,
+                            legacyBase64: item.imageBase64,
+                            placeholderName: item.imageName
+                        )
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
 
                 // Huy hiệu Free / 0đ hoặc Đã có người hẹn
                 HStack(spacing: 3) {
@@ -406,7 +405,7 @@ struct CommunityCatalogView: View {
                 Text(item.title)
                     .scaledFont(size: 13, weight: .bold)
                     .foregroundColor(.primary)
-                    .lineLimit(2)
+                    .lineLimit(2, reservesSpace: true)
                     .multilineTextAlignment(.leading)
 
                 HStack(spacing: 4) {
@@ -416,11 +415,13 @@ struct CommunityCatalogView: View {
                     Text("\(item.district), Đà Nẵng")
                         .scaledFont(size: 11)
                         .foregroundColor(.secondary)
+                        .lineLimit(1)
                 }
 
                 Text(item.timeAgo)
                     .scaledFont(size: 10)
                     .foregroundColor(.secondary.opacity(0.8))
+                    .lineLimit(1)
             }
             .padding(.horizontal, 4)
             .padding(.bottom, 6)
