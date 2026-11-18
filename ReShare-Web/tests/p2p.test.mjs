@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
-  aiBadge, countByTab, filterListings, moderationNote, p2pErrorMessage, removeCheck, restoreCheck, scopeLabel, searchKey,
+  aiAutoRemoveNote, aiBadge, countByTab, filterListings, historyActor, moderationNote, p2pErrorMessage, removeCheck, restoreCheck, scopeLabel, searchKey,
 } from '../src/admin/p2p/p2p.model.js'
 import { createP2pRepository } from '../src/admin/p2p/p2p.repository.js'
 
@@ -86,7 +86,8 @@ test('Kho đồ 0đ: repository gửi đúng đường dẫn, kèm token và ch�
   }
   const authInstance = { currentUser: { getIdToken: async () => 'token-1' } }
   const repository = createP2pRepository({ apiBase: 'https://api.test', authInstance, fetchImpl })
-  assert.deepEqual(await repository.list(), { listings: [], scope: { all: true, districts: [] }, truncated: false, aiEnabled: false })
+  assert.deepEqual(await repository.list(), { listings: [], scope: { all: true, districts: [] }, truncated: false,
+    aiEnabled: false, aiAutoRemove: { enabled: false, threshold: 0.9 } })
   await repository.remove('cat_1', 'available', '  rao bán  ')
   await repository.remove('cat_2', 'reserved')
   await repository.restore('cat 3')
@@ -119,6 +120,15 @@ test('Kho đồ 0đ: badge AI có đủ trạng thái và danh mục tiếng Vi�
   assert.deepEqual(aiBadge({ status: 'flagged', categories: ['scam_or_sale', 'personal_info'] }), {
     label: 'AI: Nghi vấn — Lừa đảo / rao bán, Thông tin cá nhân', tone: 'danger',
   })
+})
+
+test('Kho đồ 0đ: mức chắc chắn, ngưỡng tự gỡ và lịch sử AI', () => {
+  assert.equal(aiBadge({ status: 'flagged', categories: ['weapons'], confidence: 0.96 }).label, 'AI: Nghi vấn — Vũ khí (96%)')
+  assert.match(aiAutoRemoveNote({ enabled: true, threshold: 0.91 }), /đang mở.*≥ 91%.*chưa hiệu chuẩn/)
+  assert.equal(aiAutoRemoveNote({ enabled: false, threshold: 0.9 }), 'Tự gỡ bằng AI đang tắt')
+  assert.equal(moderationNote({ source: 'ai', reason: 'Cần xem xét' }), 'Gỡ tự động bởi AI: Cần xem xét')
+  assert.equal(historyActor({ actorRole: 'ai', actorEmail: null }), 'AI tự động')
+  assert.match(restoreCheck({ ...items[3], moderation: { source: 'ai' } }).message, /AI sẽ không tự gỡ lại/)
 })
 
 test('Kho đồ 0đ: lọc AI nghi vấn độc lập với trạng thái và báo cáo', () => {

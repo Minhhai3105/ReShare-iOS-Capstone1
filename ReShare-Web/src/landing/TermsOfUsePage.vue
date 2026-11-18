@@ -51,6 +51,7 @@ import { LEGAL_CONTACT_EMAIL, PRIVACY_POLICY_PATH } from './legal.js'
     <ul>
       <li>Bạn có thể <strong>báo cáo</strong> bài đăng, tin nhắn hoặc người dùng vi phạm, và <strong>chặn</strong> người dùng để không nhận tin nhắn hay thấy bài của họ nữa.</li>
       <li>ReShare xem xét báo cáo trong vòng <strong>24 giờ</strong>. Nội dung vi phạm sẽ bị gỡ, và tài khoản vi phạm có thể bị khoá.</li>
+      <li>Khi bật tính năng tự gỡ, AI có thể gỡ bài đang mở có dấu hiệu vi phạm nghiêm trọng. Nhân sự ReShare có thể xem lại và khôi phục bài bị gỡ nhầm.</li>
       <li>Ứng dụng tự chặn một số từ ngữ thô tục khi đăng bài và gửi tin nhắn. Bộ lọc này không thay thế việc báo cáo.</li>
     </ul>
 

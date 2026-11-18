@@ -1,5 +1,7 @@
 const { ApiError } = require('./image-api.cjs');
 const { runTransaction } = require('./firestore-transaction.cjs');
+const { AUTO_REMOVE_DEFAULT_THRESHOLD, normalizeConfidence } = require('./ai-moderation.cjs');
+const { AUDIT_COLLECTION, readRemovalReports, applyListingRemoval } = require('./p2p-listing-removal.cjs');
 
 // Trang "Kho đồ 0đ" trên Web Admin (17/11/2026): nhân sự xem bài đăng P2P, chủ động gỡ bài vi phạm
 // (không cần chờ báo cáo) và khôi phục bài gỡ nhầm. App ghi bài vào `catalog_items` theo rules;
@@ -28,7 +30,6 @@ const MAX_REPORTS = 1000;
 const MAX_DETAIL_ROWS = 100;
 const MAX_WAREHOUSES = 20;
 const REASON_MAX = 300;
-const AUDIT_COLLECTION = 'p2p_listing_audit';
 
 function dateString(value) {
   return value?.toDate?.().toISOString() || (value instanceof Date ? value.toISOString() : value || null);
@@ -63,8 +64,13 @@ function aiModerationBody(data) {
   return {
     status: data.status, categories: Array.isArray(data.categories) ? data.categories : [],
     reason: typeof data.reason === 'string' ? data.reason : '', model: data.model || null,
+    confidence: normalizeConfidence(data.confidence),
     checkedAt: dateString(data.checkedAt),
   };
+}
+
+function moderationSource(moderation) {
+  return moderation?.source || (moderation?.reportId ? 'report' : 'unknown');
 }
 
 function moderationBody(moderation) {
@@ -72,7 +78,7 @@ function moderationBody(moderation) {
   return {
     action: moderation.action || 'remove',
     // Bài gỡ từ trang Báo cáo vi phạm (hoặc khi khoá tài khoản) chỉ có reportId.
-    source: moderation.source || (moderation.reportId ? 'report' : 'unknown'),
+    source: moderationSource(moderation),
     reason: moderation.reason || '',
     previousStatus: moderation.previousStatus || null,
     reportId: moderation.reportId || null,
@@ -86,7 +92,11 @@ function moderationBody(moderation) {
 // phạm (hoặc khi khoá tài khoản) là quyết định của System Admin: Warehouse Admin không đảo lại được.
 function restoreBlocker(data, owner, role) {
   if (normalizeStatus(data.status) !== 'removed') return 'NOT_REMOVED';
-  if (role !== 'system_admin' && data.moderation?.source !== 'admin_p2p') return 'SYSTEM_ADMIN_ONLY';
+  const source = moderationSource(data.moderation);
+  if (role !== 'system_admin') {
+    if (source === 'report') return 'SYSTEM_ADMIN_ONLY';
+    if (!['admin_p2p', 'ai'].includes(source)) return 'UNKNOWN_REMOVAL_SOURCE';
+  }
   if (!owner?.exists) return 'OWNER_MISSING';
   if (owner.suspended) return 'OWNER_SUSPENDED';
   const previous = data.moderation?.previousStatus;
@@ -118,6 +128,7 @@ function validateRestoreBody(body) {
 function createP2pListingsApi({ db, verifyToken, serverTimestamp, aiChecks = null }) {
   if (!db || !verifyToken) throw new Error('P2P listings API configuration is incomplete');
   const now = serverTimestamp || (() => new Date());
+  const aiAutoRemove = aiChecks?.autoRemove ?? { enabled: false, threshold: AUTO_REMOVE_DEFAULT_THRESHOLD };
 
   // Đọc vai trò và các quận được phụ trách. `read` là ref => ref.get() hoặc ref => tx.get(ref).
   async function scopeFor(read, uid) {
@@ -191,7 +202,7 @@ function createP2pListingsApi({ db, verifyToken, serverTimestamp, aiChecks = nul
   async function list(staff) {
     const { scope } = staff;
     if (!scope.all && !scope.districts.length) {
-      return { status: 200, body: { listings: [], truncated: false, aiEnabled: aiChecks?.enabled === true, scope: scopeBody(scope) } };
+      return { status: 200, body: { listings: [], truncated: false, aiEnabled: aiChecks?.enabled === true, aiAutoRemove, scope: scopeBody(scope) } };
     }
     // `in` nhận tối đa 30 giá trị; một kho chỉ phụ trách vài quận nên dư.
     const query = scope.all
@@ -213,7 +224,7 @@ function createP2pListingsApi({ db, verifyToken, serverTimestamp, aiChecks = nul
     const owners = await people(docs.map(doc => doc.data().donorId));
     const listings = docs.map(doc => summary(doc, owners, reportCounts, scope.role))
       .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
-    return { status: 200, body: { listings, truncated: snapshot.size > MAX_LISTINGS, aiEnabled: aiChecks?.enabled === true, scope: scopeBody(scope) } };
+    return { status: 200, body: { listings, truncated: snapshot.size > MAX_LISTINGS, aiEnabled: aiChecks?.enabled === true, aiAutoRemove, scope: scopeBody(scope) } };
   }
 
   async function detail(staff, id) {
@@ -236,6 +247,7 @@ function createP2pListingsApi({ db, verifyToken, serverTimestamp, aiChecks = nul
       status: 200,
       body: {
         aiEnabled: aiChecks?.enabled === true,
+        aiAutoRemove,
         listing: { ...summary(doc, owners, counts, staff.scope.role), donorNote: String(data.donorNote || ''), images: httpsImages(data) },
         reports: reports.map(report => {
           const item = report.data();
@@ -280,38 +292,15 @@ function createP2pListingsApi({ db, verifyToken, serverTimestamp, aiChecks = nul
       const doc = await tx.get(ref);
       if (!doc.exists) throw new ApiError(404, 'Listing not found');
       const data = doc.data();
-      const reports = await tx.get(db.collection('reports').where('targetId', '==', id).limit(MAX_DETAIL_ROWS));
+      const reports = await readRemovalReports(tx, db, id);
       const scope = await assertScopeInTransaction(tx, staff, data.district);
       const current = normalizeStatus(data.status);
       if (current === 'removed') throw new ApiError(409, 'Listing already removed');
       if (current !== expectedStatus) throw new ApiError(409, 'Listing changed; reload first');
-      const timestamp = now();
-      // Báo cáo đang khoá tài khoản dở giữ nguyên để admin hoàn tất ở trang Báo cáo vi phạm.
-      const open = reports.docs.filter(report => {
-        const item = report.data();
-        return item.targetType === 'listing' && item.status === 'open' && !item.pendingAction;
+      resolvedReports = applyListingRemoval(tx, {
+        ref, data, reports, auditRef, reason, timestamp: now(), previousStatus: current,
+        actor: { source: 'admin_p2p', uid: staff.uid, email: staff.email, role: scope.role },
       });
-      tx.update(ref, {
-        status: 'removed',
-        moderation: {
-          source: 'admin_p2p', action: 'remove', reason, previousStatus: current,
-          moderatedBy: staff.uid, moderatedAt: timestamp,
-        },
-      });
-      const note = (reason ? `Gỡ từ trang Kho đồ 0đ: ${reason}` : 'Gỡ từ trang Kho đồ 0đ').slice(0, 500);
-      for (const report of open) {
-        tx.update(report.ref, {
-          status: 'resolved', resolution: 'remove_listing', resolutionNote: note,
-          resolvedBy: staff.uid, resolvedAt: timestamp,
-        });
-      }
-      tx.create(auditRef, {
-        action: 'remove', listingId: id, title: data.title || '', district: data.district || '',
-        donorId: data.donorId || null, previousStatus: current, reason,
-        resolvedReportIds: open.map(report => report.id),
-        actorUid: staff.uid, actorEmail: staff.email, actorRole: scope.role, createdAt: timestamp,
-      });
-      resolvedReports = open.length;
     });
     return { status: 200, body: { id, status: 'removed', resolvedReports } };
   }
@@ -336,6 +325,8 @@ function createP2pListingsApi({ db, verifyToken, serverTimestamp, aiChecks = nul
       tx.update(ref, {
         status: 'available',
         moderation: { source: 'admin_p2p', action: 'restore', moderatedBy: staff.uid, moderatedAt: timestamp },
+        ...(data.moderation?.source === 'ai'
+          ? { 'aiModeration.staffOverride': { by: staff.uid, at: timestamp } } : {}),
       });
       tx.create(auditRef, {
         action: 'restore', listingId: id, title: data.title || '', district: data.district || '',

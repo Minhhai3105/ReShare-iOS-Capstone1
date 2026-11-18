@@ -1,9 +1,31 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createAiModerator, moderationInput } = require('../ai-moderation.cjs');
+const { createAiModerator, moderationInput, readAiAutoRemoveConfig } = require('../ai-moderation.cjs');
 const config = { baseUrl: 'https://ai.example/v1/', apiKey: 'test-only-key', model: 'test-vision' };
 const response = content => ({ ok: true, json: async () => ({ choices: [{ message: { content } }] }) });
 const verdict = (value = 'safe') => JSON.stringify({ verdict: value, categories: value === 'safe' ? [] : ['scam_or_sale'], reason: 'Kiểm tra nội dung' });
+
+test('Mức chắc chắn chỉ nhận số hữu hạn từ 0 đến 1', async () => {
+  for (const [confidence, expected] of [[undefined, 0], [null, 0], ['0.95', 0], [-0.1, 0], [1.01, 0], [0.95, 0.95], [1, 1]]) {
+    const content = { ...JSON.parse(verdict('flagged')), confidence };
+    const moderator = createAiModerator({ ...config, fetchImpl: async () => response(JSON.stringify(content)) });
+    const result = await moderator.check({});
+    assert.equal(result.status, 'flagged');
+    assert.equal(result.confidence, expected);
+  }
+});
+
+test('Tự gỡ AI mặc định tắt và kẹp ngưỡng trong khoảng 0.5–1', () => {
+  const read = (enabled, threshold) => readAiAutoRemoveConfig({
+    AI_MODERATION_AUTO_REMOVE: enabled, AI_MODERATION_AUTO_REMOVE_THRESHOLD: threshold,
+  });
+  assert.deepEqual(readAiAutoRemoveConfig({}), { enabled: false, threshold: 0.9 });
+  assert.deepEqual(read('off', '0.7'), { enabled: false, threshold: 0.7 });
+  assert.deepEqual(read('true', 'rác'), { enabled: false, threshold: 0.9 });
+  assert.deepEqual(read('on', '0.45'), { enabled: true, threshold: 0.5 });
+  assert.deepEqual(read('on', '1.2'), { enabled: true, threshold: 1 });
+  assert.deepEqual(read('on', ' '), { enabled: true, threshold: 0.9 });
+});
 
 test('AI kiểm duyệt: thiếu bất kỳ env nào hoặc URL sai thì tắt và không gọi fetch', async () => {
   for (const missing of ['baseUrl', 'apiKey', 'model']) {

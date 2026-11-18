@@ -7,7 +7,7 @@ import InlineConfirm from '../shared/InlineConfirm.vue'
 import { REPORT_REASON_LABEL, RESOLUTION_LABEL, formatDateTime } from '../moderation/moderation.model'
 import { p2pRepository } from './p2p.repository'
 import {
-  HISTORY_ACTION_LABEL, LISTING_STATUS, STATUS_TABS, aiBadge, countByTab, filterListings, moderationNote, p2pErrorMessage,
+  HISTORY_ACTION_LABEL, LISTING_STATUS, STATUS_TABS, aiAutoRemoveNote, aiBadge, countByTab, filterListings, historyActor, moderationNote, p2pErrorMessage,
   removeCheck, restoreCheck, scopeLabel, statusLabel,
 } from './p2p.model'
 
@@ -27,6 +27,7 @@ const details = ref({})
 const detailError = ref({})
 const pendingId = ref('')
 const aiEnabled = ref(false)
+const aiAutoRemove = ref(null)
 const aiPendingId = ref('')
 const aiErrors = ref({})
 // Ô xác nhận và lỗi hiện ngay trên thẻ của bài được bấm (không dùng window.confirm, xem InlineConfirm).
@@ -49,6 +50,7 @@ async function load() {
     listings.value = result.listings
     scope.value = result.scope
     aiEnabled.value = result.aiEnabled
+    aiAutoRemove.value = result.aiAutoRemove
     truncated.value = result.truncated
     details.value = {}
   } catch (error) {
@@ -64,6 +66,7 @@ async function loadDetail(id) {
     const detail = await p2pRepository.detail(id)
     details.value = { ...details.value, [id]: detail }
     aiEnabled.value = detail.aiEnabled
+    aiAutoRemove.value = detail.aiAutoRemove
     // Thông tin tóm tắt mới nhất (trạng thái, báo cáo, khả năng khôi phục) thay vào danh sách.
     listings.value = listings.value.map((item) => (item.id === id ? { ...item, ...detail.listing } : item))
   } catch (error) {
@@ -127,6 +130,10 @@ async function checkAi(listing) {
       aiErrors.value = { ...aiErrors.value, [listing.id]: 'AI kiểm duyệt chưa được cấu hình.' }
       return
     }
+    if (result.removed) {
+      await loadDetail(listing.id)
+      return
+    }
     listings.value = listings.value.map((item) => item.id === listing.id ? { ...item, aiModeration: result.aiModeration } : item)
     const detail = details.value[listing.id]
     if (detail) details.value = { ...details.value, [listing.id]: { ...detail, listing: { ...detail.listing, aiModeration: result.aiModeration } } }
@@ -173,7 +180,7 @@ watch(isStaff, (allowed) => { if (allowed) load() }, { immediate: true })
 
     <template v-else>
       <p v-if="!aiEnabled" class="p2p-muted" role="status">AI kiểm duyệt chưa được cấu hình</p>
-      <p v-else class="p2p-muted">AI chỉ gợi ý từ tiêu đề, ghi chú và tối đa 3 ảnh; nhân sự quyết định gỡ bài. Kết quả không bảo đảm phát hiện mọi vi phạm.</p>
+      <p class="p2p-muted">{{ aiAutoRemoveNote(aiEnabled ? aiAutoRemove : null) }}</p>
       <div class="p2p-toolbar">
         <div class="p2p-tabs" role="tablist" aria-label="Lọc theo trạng thái">
           <button v-for="item in STATUS_TABS" :key="item.id" type="button" role="tab" :aria-selected="tab === item.id"
@@ -289,7 +296,7 @@ watch(isStaff, (allowed) => { if (allowed) load() }, { immediate: true })
               <ul v-else class="p2p-detail__rows">
                 <li v-for="entry in details[listing.id].history" :key="entry.id">
                   <strong>{{ HISTORY_ACTION_LABEL[entry.action] || entry.action }}</strong>
-                  <span>· {{ entry.actorEmail || 'Nhân sự' }} · {{ formatDateTime(entry.createdAt) }}</span>
+                  <span>· {{ historyActor(entry) }} · {{ formatDateTime(entry.createdAt) }}</span>
                   <small v-if="entry.reason">Lý do: {{ entry.reason }}</small>
                   <small v-if="entry.resolvedReports">Tự đóng {{ entry.resolvedReports }} báo cáo đang chờ.</small>
                 </li>

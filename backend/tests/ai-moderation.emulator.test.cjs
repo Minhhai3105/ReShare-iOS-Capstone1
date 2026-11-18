@@ -10,6 +10,8 @@ const options = { skip: !process.env.FIRESTORE_EMULATOR_HOST };
 const base = '/v1/admin/p2p/listings';
 const headers = uid => ({ authorization: `Bearer ${uid}` });
 const result = (status = 'flagged') => ({ status, categories: status === 'flagged' ? ['scam_or_sale'] : [], reason: 'Gợi ý kiểm tra', model: 'test-vision' });
+const severe = { ...result(), categories: ['weapons'], confidence: 0.95 };
+const autoRemoveConfig = { enabled: true, threshold: 0.9 };
 const listing = (extra = {}) => ({ donorId: 'donor', title: 'Áo mới', donorNote: 'Tặng miễn phí', status: 'available', district: 'Hải Châu', images: ['https://image.test/a.jpg'], ...extra });
 let appNumber = 0;
 async function fixture(run) {
@@ -22,25 +24,27 @@ async function fixture(run) {
       db.doc('staff_assignments/lc').set({ active: true, role: 'warehouse_admin', warehouseIds: ['lc'] }),
       db.doc('warehouses/hc').set({ status: 'active', districts: ['Hải Châu'] }),
       db.doc('warehouses/lc').set({ status: 'active', districts: ['Liên Chiểu'] }),
+      db.doc('users/donor').set({ suspended: false }),
       db.doc('catalog_items/item').set(listing()),
     ]);
     await run(db);
   } finally {
-    await Promise.all(['staff_assignments', 'warehouses', 'catalog_items', CHECKS_COLLECTION].map(name => db.recursiveDelete(db.collection(name))));
+    const collections = ['staff_assignments', 'warehouses', 'users', 'catalog_items', 'reports', 'p2p_listing_audit', CHECKS_COLLECTION];
+    await Promise.all(collections.map(name => db.recursiveDelete(db.collection(name))));
     await deleteApp(app);
   }
 }
 function apiFor(db, jobs) {
   return createP2pListingsApi({ db, verifyToken: async token => ({ uid: token }), aiChecks: jobs });
 }
-function gateModerator() {
+function gateModerator(verdict = result()) {
   let release, started;
   const waiting = new Promise(resolve => { release = resolve; });
   const entered = new Promise(resolve => { started = resolve; });
   let calls = 0;
   return { enabled: true, entered, release,
     get calls() { return calls; },
-    async check() { calls += 1; started(); await waiting; return result(); },
+    async check() { calls += 1; started(); await waiting; return verdict; },
   };
 }
 
@@ -157,10 +161,10 @@ test('AI kiểm duyệt nền: xét cả các bài sau mốc 200 và bỏ bài �
   await batch.commit();
   let calls = 0;
   const jobs = createAiModerationJobs({ db, moderator: { enabled: true, check: async () => { calls += 1; return result('safe'); } } });
-  assert.equal((await jobs.runOnce()).checked, 12, 'tìm đủ bài chưa kiểm trong một lần quét');
+  assert.equal((await jobs.runOnce()).checked, 13, 'tìm đủ bài chưa kiểm, kể cả bài đã có người hẹn');
   assert.equal((await jobs.runOnce()).checked, 0);
-  assert.equal(calls, 12);
-  assert.equal((await db.doc('catalog_items/reserved').get()).data().aiModeration, undefined);
+  assert.equal(calls, 13);
+  assert.equal((await db.doc('catalog_items/reserved').get()).data().aiModeration.status, 'safe');
   assert.equal((await db.doc('catalog_items/item-211').get()).data().status, 'available');
   assert.equal((await db.doc('catalog_items/item-000').get()).data().aiModeration.status, 'error');
 }));
@@ -267,4 +271,135 @@ test('AI kiểm duyệt API: ảnh thành base64 và JSON có fence được lư
   assert.equal(item.aiModeration.status, 'error');
   assert.equal(item.status, 'available');
   assert.equal(item.moderation, undefined);
+}));
+
+test('AI tự gỡ bài mở, ghi audit và cho Warehouse Admin đúng quận khôi phục', options, () => fixture(async db => {
+  let now = new Date('2026-11-18T08:00:00Z');
+  await Promise.all([
+    db.doc('reports/open').set({ targetId: 'item', targetType: 'listing', status: 'open' }),
+    db.doc('reports/pending').set({ targetId: 'item', targetType: 'listing', status: 'open', pendingAction: 'suspend_user' }),
+    db.doc('catalog_items/legacy').set(listing({ status: 'Sẵn sàng nhận đồ' })),
+  ]);
+  let calls = 0;
+  const jobs = createAiModerationJobs({ db, autoRemoveConfig, clock: () => now,
+    moderator: { enabled: true, check: async () => { calls += 1; return severe; } },
+  });
+  const api = apiFor(db, jobs);
+  const ref = db.doc('catalog_items/item');
+  const audit = db.collection('p2p_listing_audit').where('listingId', '==', 'item');
+
+  const checked = await api.handle('POST', `${base}/item/ai-check`, headers('hc'), {});
+  assert.equal(checked.body.removed, true);
+  const removed = (await ref.get()).data();
+  assert.equal(removed.status, 'removed');
+  assert.equal(removed.aiModeration.confidence, 0.95);
+  assert.deepEqual(removed.moderation, {
+    source: 'ai', action: 'remove', previousStatus: 'available', moderatedBy: 'ai-moderation',
+    reason: severe.reason, categories: severe.categories, model: severe.model, confidence: severe.confidence,
+    moderatedAt: removed.moderation.moderatedAt,
+  });
+  assert.equal(removed.moderation.moderatedAt.toMillis(), now.getTime());
+  const open = (await db.doc('reports/open').get()).data();
+  assert.equal(open.status, 'resolved');
+  assert.equal(open.resolution, 'remove_listing');
+  assert.equal(open.resolutionNote, `Gỡ tự động bởi AI: ${severe.reason}`);
+  const pending = (await db.doc('reports/pending').get()).data();
+  assert.equal(pending.status, 'open');
+  assert.equal(pending.pendingAction, 'suspend_user');
+  const [removal] = (await audit.get()).docs.map(doc => doc.data());
+  assert.equal(removal.action, 'remove');
+  assert.equal(removal.actorUid, 'ai-moderation');
+  assert.equal(removal.actorRole, 'ai');
+  assert.equal(removal.actorEmail, null);
+  assert.deepEqual(removal.resolvedReportIds, ['open']);
+
+  const list = await api.handle('GET', base, headers('hc'), null);
+  const detail = await api.handle('GET', `${base}/item`, headers('hc'), null);
+  assert.deepEqual(list.body.aiAutoRemove, autoRemoveConfig);
+  assert.deepEqual(detail.body.aiAutoRemove, autoRemoveConfig);
+  assert.equal(detail.body.listing.aiModeration.confidence, 0.95);
+  assert.equal(detail.body.listing.restoreBlocker, null);
+  const restoreBody = { expectedStatus: 'removed' };
+  await assert.rejects(api.handle('POST', `${base}/item/restore`, headers('lc'), restoreBody), { status: 403 });
+  assert.equal((await api.handle('POST', `${base}/item/restore`, headers('hc'), restoreBody)).body.status, 'available');
+  const reopened = (await ref.get()).data();
+  assert.equal(reopened.status, 'available');
+  const override = reopened.aiModeration.staffOverride;
+  assert.equal(override.by, 'hc');
+  assert.ok(override.at.toMillis() > 0);
+
+  now = new Date(now.getTime() + 60001);
+  assert.equal((await jobs.runOnce()).checked, 1, 'chỉ kiểm bài mở lưu giá trị tiếng Việt');
+  const legacy = (await db.doc('catalog_items/legacy').get()).data();
+  assert.equal(legacy.status, 'removed');
+  assert.equal(legacy.moderation.previousStatus, 'available');
+  const rechecked = await api.handle('POST', `${base}/item/ai-check`, headers('hc'), {});
+  assert.equal(rechecked.body.removed, false);
+  const final = (await ref.get()).data();
+  assert.equal(final.status, 'available');
+  assert.equal(final.moderation.action, 'restore');
+  assert.deepEqual(final.aiModeration.staffOverride, override);
+  assert.equal(calls, 3);
+  assert.deepEqual((await audit.get()).docs.map(doc => doc.data().action).sort(), ['remove', 'restore']);
+}));
+
+test('AI tự gỡ đang bật: chỉ ghi nhãn bài đang hẹn, đã trao hoặc kết quả không đủ điều kiện', options, () => fixture(async db => {
+  await db.doc('catalog_items/item').delete();
+  const cases = [
+    ['reserved', 'reserved', severe, { reservedChatId: 'chat-1' }],
+    ['reserved-old', 'Đã có người hẹn', severe, { reservedChatId: 'chat-2' }],
+    ['completed', 'completed', severe, { donorHandoverConfirmed: true }],
+    ['completed-old', 'Đã trao tặng', severe, { donorHandoverConfirmed: true }],
+    ['low', 'available', { ...severe, confidence: 0.85 }],
+    ['mild', 'available', { ...result(), confidence: 0.99 }],
+    ['safe', 'available', result('safe')],
+    ['error', 'available', result('error')],
+    ['missing-confidence', 'available', { ...severe, confidence: undefined }],
+  ];
+  const verdicts = new Map(cases.map(([id, , verdict]) => [id, verdict]));
+  await Promise.all(cases.map(([id, status, , fields]) =>
+    db.doc(`catalog_items/${id}`).set(listing({ title: id, status, ...fields }))));
+  const jobs = createAiModerationJobs({ db, autoRemoveConfig,
+    moderator: { enabled: true, check: async ({ title }) => verdicts.get(title) },
+  });
+  assert.equal((await jobs.runOnce()).checked, cases.length);
+  for (const [id, status, verdict, fields] of cases) {
+    const item = (await db.doc(`catalog_items/${id}`).get()).data();
+    assert.equal(item.aiModeration.status, verdict.status, id);
+    assert.equal(item.aiModeration.confidence, verdict.confidence ?? 0, id);
+    assert.equal(item.status, status, id);
+    assert.equal(item.moderation, undefined, id);
+    for (const [key, value] of Object.entries(fields || {})) assert.equal(item[key], value, id);
+  }
+  assert.equal((await db.collection('p2p_listing_audit').get()).size, 0);
+}));
+
+test('AI tự gỡ mặc định tắt, dù bài mở có cờ nặng và đủ ngưỡng', options, () => fixture(async db => {
+  const jobs = createAiModerationJobs({ db, moderator: { enabled: true, check: async () => severe } });
+  const api = apiFor(db, jobs);
+  assert.equal((await jobs.runOnce()).checked, 1);
+  const item = (await db.doc('catalog_items/item').get()).data();
+  assert.equal(item.aiModeration.status, 'flagged');
+  assert.equal(item.status, 'available');
+  assert.equal(item.moderation, undefined);
+  assert.deepEqual((await api.handle('GET', base, headers('hc'), null)).body.aiAutoRemove, { enabled: false, threshold: 0.9 });
+}));
+
+test('AI đọc lại trạng thái: bài được hẹn trong lúc chờ model chỉ được gắn cờ', options, () => fixture(async db => {
+  const moderator = gateModerator(severe);
+  const api = apiFor(db, createAiModerationJobs({ db, moderator, autoRemoveConfig }));
+  const ref = db.doc('catalog_items/item');
+  const pending = api.handle('POST', `${base}/item/ai-check`, headers('hc'), {});
+  await moderator.entered;
+  try {
+    await ref.update({ status: 'reserved', reservedChatId: 'chat-3' });
+  } finally {
+    moderator.release();
+  }
+  assert.equal((await pending).body.removed, false);
+  const item = (await ref.get()).data();
+  assert.equal(item.status, 'reserved');
+  assert.equal(item.reservedChatId, 'chat-3');
+  assert.equal(item.aiModeration.status, 'flagged');
+  assert.equal((await db.collection('p2p_listing_audit').get()).size, 0);
 }));

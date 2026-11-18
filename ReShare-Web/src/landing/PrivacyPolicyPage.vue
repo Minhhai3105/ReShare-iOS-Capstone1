@@ -41,7 +41,7 @@ import { LEGAL_CONTACT_EMAIL } from './legal.js'
       Khi tính năng được bật, tiêu đề, mô tả và tối đa 3 ảnh của bài Kho đồ 0đ có thể được gửi tới dịch vụ AI bên ngoài,
       như Google (Gemini), tuỳ cấu hình vận hành, để kiểm tra an toàn nội dung. ReShare chỉ sử dụng dữ liệu này cho mục đích
       hỗ trợ kiểm duyệt, không dùng cho mục đích khác. Chúng tôi không chủ động gửi thông tin đăng nhập hoặc tin nhắn riêng trong lượt kiểm này.
-      AI chỉ gắn cờ nghi vấn; nhân sự ReShare quyết định xử lý bài đăng.
+      Khi bật tính năng tự gỡ, AI có thể gỡ bài đang mở có dấu hiệu vi phạm nghiêm trọng. Nhân sự ReShare có thể xem lại và khôi phục bài bị gỡ nhầm.
     </p>
     <p>
       Việc lưu trữ và sử dụng dữ liệu tại nhà cung cấp phụ thuộc dịch vụ và chính sách của họ,
