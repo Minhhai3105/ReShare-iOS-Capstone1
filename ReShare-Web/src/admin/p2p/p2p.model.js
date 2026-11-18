@@ -76,6 +76,7 @@ export const RESTORE_BLOCKER_MESSAGE = Object.freeze({
   NOT_OPEN_BEFORE: 'Không khôi phục được: trước khi gỡ, bài đã có người hẹn hoặc đã trao.',
   HAS_RESERVATION: 'Không khôi phục được: bài còn dính cuộc hẹn hoặc bàn giao.',
   SYSTEM_ADMIN_ONLY: 'Bài bị gỡ từ trang Báo cáo vi phạm: chỉ Quản trị hệ thống khôi phục được.',
+  UNKNOWN_REMOVAL_SOURCE: 'Chưa xác định được nguồn gỡ bài. Liên hệ Quản trị hệ thống để xử lý.',
 })
 
 // Ô xác nhận khi bấm "Khôi phục". blocked = chỉ hiện lý do, không có nút xác nhận.
@@ -84,13 +85,16 @@ export function restoreCheck(listing) {
   if (listing.restoreBlocker) {
     return { blocked: true, message: RESTORE_BLOCKER_MESSAGE[listing.restoreBlocker] || 'Bài này không khôi phục được.', confirmLabel: '', tone: 'danger' }
   }
-  return { blocked: false, message: 'Khôi phục bài này? Bài hiện lại trên app ở trạng thái “Đang mở”.', confirmLabel: 'Khôi phục', tone: 'warning' }
+  const message = 'Khôi phục bài này? Bài hiện lại trên app ở trạng thái “Đang mở”.'
+  const protection = listing.moderation?.source === 'ai' ? ' AI sẽ không tự gỡ lại bài này.' : ''
+  return { blocked: false, message: message + protection, confirmLabel: 'Khôi phục', tone: 'warning' }
 }
 
 export function moderationNote(moderation) {
   if (!moderation) return ''
   if (moderation.action === 'restore') return 'Đã được khôi phục sau khi gỡ.'
-  const source = moderation.source === 'admin_p2p' ? 'Gỡ từ trang Kho đồ 0đ'
+  const source = moderation.source === 'ai' ? 'Gỡ tự động bởi AI'
+    : moderation.source === 'admin_p2p' ? 'Gỡ từ trang Kho đồ 0đ'
     : moderation.source === 'report' ? 'Gỡ qua Báo cáo vi phạm' : 'Đã gỡ'
   return moderation.reason ? `${source}: ${moderation.reason}` : source
 }
@@ -101,14 +105,27 @@ export const AI_CATEGORY_LABEL = Object.freeze({
 })
 
 export function aiBadge(moderation) {
-  if (moderation?.status === 'safe') return { label: 'AI: An toàn', tone: 'success' }
+  const confidence = moderation?.confidence
+  const score = Number.isFinite(confidence) && confidence >= 0 && confidence <= 1 ? ` (${percent(confidence)})` : ''
+  if (moderation?.status === 'safe') return { label: `AI: An toàn${score}`, tone: 'success' }
   if (moderation?.status === 'flagged') {
     const categories = (Array.isArray(moderation.categories) ? moderation.categories : [])
       .map((category) => AI_CATEGORY_LABEL[category] || 'Khác')
-    return { label: `AI: Nghi vấn — ${[...new Set(categories)].join(', ') || 'Cần xem xét'}`, tone: 'danger' }
+    return { label: `AI: Nghi vấn — ${[...new Set(categories)].join(', ') || 'Cần xem xét'}${score}`, tone: 'danger' }
   }
   if (moderation?.status === 'error') return { label: 'AI: Lỗi kiểm tra', tone: 'muted' }
   return { label: 'AI: Chưa kiểm', tone: 'muted' }
+}
+
+const percent = new Intl.NumberFormat('vi-VN', { style: 'percent', maximumFractionDigits: 4 }).format
+
+export function aiAutoRemoveNote(config) {
+  if (!config?.enabled) return 'Tự gỡ bằng AI đang tắt'
+  return `AI tự gỡ bài đang mở có dấu hiệu vi phạm nặng khi chắc chắn ≥ ${percent(config.threshold)} (ngưỡng ban đầu, chưa hiệu chuẩn)`
+}
+
+export function historyActor(entry) {
+  return entry.actorRole === 'ai' ? 'AI tự động' : entry.actorEmail || 'Nhân sự'
 }
 
 export const HISTORY_ACTION_LABEL = Object.freeze({ remove: 'Gỡ bài', restore: 'Khôi phục' })

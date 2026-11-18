@@ -1,7 +1,8 @@
 const { createHash, randomUUID } = require('node:crypto');
 const { ApiError } = require('./image-api.cjs');
 const { runTransaction } = require('./firestore-transaction.cjs');
-const { ERROR_REASON, moderationInput } = require('./ai-moderation.cjs');
+const { ERROR_REASON, AUTO_REMOVE_DEFAULT_THRESHOLD, normalizeConfidence, moderationInput } = require('./ai-moderation.cjs');
+const { AUDIT_COLLECTION, readRemovalReports, applyListingRemoval } = require('./p2p-listing-removal.cjs');
 
 // Khoá lượt kiểm tra dùng chung giữa nút bấm, job và các process. Collection không có match block
 // trong rules nên client không đọc/ghi được; chỉ chứa mã lượt và thời gian, không lưu nội dung bài.
@@ -9,7 +10,10 @@ const CHECKS_COLLECTION = 'p2p_ai_checks';
 const ERROR_RETRY_DELAYS_MS = [120000, 600000, 1800000, 3600000];
 const COOLDOWN_MS = 60000;
 const LISTENER_RETRY_MS = 30000;
-const BACKGROUND_STATUSES = ['available', 'Sẵn sàng nhận đồ', 'completed'];
+const OPEN_STATUSES = ['available', 'Sẵn sàng nhận đồ'];
+const BACKGROUND_STATUSES = [...OPEN_STATUSES, 'reserved', 'Đã có người hẹn', 'completed', 'Đã trao tặng'];
+const SEVERE_CATEGORIES = new Set(['sexual', 'violence', 'weapons', 'drugs', 'hate']);
+const AI_ACTOR = Object.freeze({ source: 'ai', uid: 'ai-moderation', role: 'ai', email: null });
 const DEFAULT_CONFIG = { batchSize: 30, concurrency: 3, intervalMs: 180000, timeoutMs: 15000 };
 const fingerprint = data => createHash('sha256').update(JSON.stringify(moderationInput(data))).digest('hex');
 const millis = value => value?.toMillis?.() ?? new Date(value || 0).getTime();
@@ -36,7 +40,12 @@ function consecutiveErrors(label) {
   return Number.isSafeInteger(count) && count > 0 ? count : 1;
 }
 
+function staffReviewed(data) {
+  return Boolean(data.aiModeration?.staffOverride);
+}
+
 function needsBackgroundCheck(data, time) {
+  if (staffReviewed(data)) return false;
   if (!Object.hasOwn(data, 'aiModeration')) return true;
   const label = data.aiModeration;
   const errors = consecutiveErrors(label);
@@ -49,8 +58,10 @@ function needsBackgroundCheck(data, time) {
 function createAiModerationJobs({ db, moderator, clock = () => new Date(),
   batchSize = DEFAULT_CONFIG.batchSize, concurrency = DEFAULT_CONFIG.concurrency,
   intervalMs = DEFAULT_CONFIG.intervalMs, timeoutMs = DEFAULT_CONFIG.timeoutMs,
+  autoRemoveConfig = { enabled: false, threshold: AUTO_REMOVE_DEFAULT_THRESHOLD },
   onError = () => console.error('Không thể hoàn tất lượt kiểm duyệt AI.') }) {
   const enabled = moderator?.enabled === true;
+  const autoRemove = { enabled: enabled && autoRemoveConfig.enabled === true, threshold: autoRemoveConfig.threshold };
   // Khóa phải bao phủ timeout gửi model, tối đa 10 giây tải ảnh song song và phần đệm để ghi nhãn.
   const leaseMs = Math.max(COOLDOWN_MS, timeoutMs + 20000);
   const pending = [];
@@ -92,10 +103,10 @@ function createAiModerationJobs({ db, moderator, clock = () => new Date(),
       catch { result = { status: 'error', categories: [], reason: ERROR_REASON, model: null }; }
       const aiModeration = {
         status: result.status, categories: result.categories, reason: result.reason, model: result.model,
-        checkedAt: clock(),
+        confidence: normalizeConfidence(result.confidence), checkedAt: clock(),
       };
       if (result.status === 'error') aiModeration.errorCount = Math.min(input.errors + 1, Number.MAX_SAFE_INTEGER);
-      await runTransaction(db, async tx => {
+      const removed = await runTransaction(db, async tx => {
         const doc = await tx.get(ref);
         const lease = await tx.get(lock);
         if (!doc.exists) throw new ApiError(404, 'Listing not found');
@@ -105,10 +116,26 @@ function createAiModerationJobs({ db, moderator, clock = () => new Date(),
         if (!lease.exists || lease.data().checkId !== checkId || fingerprint(data) !== input.fingerprint) {
           throw new ApiError(409, 'Listing content changed; check again', 'AI_CONTENT_CHANGED');
         }
-        // Chỉ cập nhật nhãn; không ghi status, moderation hoặc bất kỳ quyết định nghiệp vụ nào.
-        tx.update(ref, { aiModeration });
+        const label = data.aiModeration?.staffOverride
+          ? { ...aiModeration, staffOverride: data.aiModeration.staffOverride } : aiModeration;
+        // Quyết định gỡ dựa trên trạng thái đọc lại trong transaction, sau khi chờ model.
+        const shouldRemove = autoRemove.enabled && OPEN_STATUSES.includes(data.status)
+          && !staffReviewed(data) && label.status === 'flagged' && label.confidence >= autoRemove.threshold
+          && label.categories.some(category => SEVERE_CATEGORIES.has(category));
+        if (!shouldRemove) {
+          tx.update(ref, { aiModeration: label });
+          return false;
+        }
+        const reports = await readRemovalReports(tx, db, id);
+        applyListingRemoval(tx, {
+          ref, data, reports, auditRef: db.collection(AUDIT_COLLECTION).doc(),
+          actor: AI_ACTOR, reason: label.reason, previousStatus: 'available',
+          timestamp: clock(), aiModeration: label,
+        });
+        return true;
       });
-      return { enabled: true, aiEnabled: true, aiModeration: { ...aiModeration, checkedAt: aiModeration.checkedAt.toISOString() } };
+      return { enabled: true, aiEnabled: true, removed,
+        aiModeration: { ...aiModeration, checkedAt: aiModeration.checkedAt.toISOString() } };
     } finally {
       await runTransaction(db, async tx => {
         const lease = await tx.get(lock);
@@ -228,7 +255,7 @@ function createAiModerationJobs({ db, moderator, clock = () => new Date(),
     }
   }
 
-  return { enabled, checkListing, runOnce, start, stop };
+  return { enabled, autoRemove, checkListing, runOnce, start, stop };
 }
 
 module.exports = { CHECKS_COLLECTION, createAiModerationJobs, needsBackgroundCheck, readAiModerationConfig };

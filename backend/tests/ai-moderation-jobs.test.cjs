@@ -32,7 +32,7 @@ function listingStore(listings) {
           assert.equal(name, 'catalog_items');
           assert.equal(field, 'status');
           assert.equal(operator, 'in');
-          assert.deepEqual(statuses, ['available', 'Sẵn sàng nhận đồ', 'completed']);
+          assert.deepEqual(statuses, ['available', 'Sẵn sàng nhận đồ', 'reserved', 'Đã có người hẹn', 'completed', 'Đã trao tặng']);
           return { limit(max) {
             assert.equal(max, 500);
             return { get: async () => ({
@@ -134,6 +134,7 @@ test('AI kiểm duyệt nền: thử lại lỗi ở đúng mốc 2, 10, 30 và 
   }
   assert.equal(needsBackgroundCheck({ aiModeration: { status: 'safe', checkedAt } }, new Date()), false);
   assert.equal(needsBackgroundCheck({ aiModeration: { status: 'flagged', checkedAt } }, new Date()), false);
+  assert.equal(needsBackgroundCheck({ aiModeration: { status: 'error', checkedAt, staffOverride: { by: 'staff' } } }, new Date()), false);
 });
 
 test('AI kiểm duyệt nền: lỗi liên tiếp tăng errorCount, thành công xoá errorCount', async () => {

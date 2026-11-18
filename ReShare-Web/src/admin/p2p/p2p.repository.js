@@ -41,12 +41,14 @@ export function createP2pRepository({ apiBase = defaultBase, authInstance = null
     async list() {
       const data = await request('/v1/admin/p2p/listings')
       if (!Array.isArray(data.listings) || !data.scope) throw Object.assign(new Error('Danh sách không hợp lệ.'), { status: 0 })
-      return { listings: data.listings, scope: data.scope, truncated: data.truncated === true, aiEnabled: data.aiEnabled === true }
+      return { listings: data.listings, scope: data.scope, truncated: data.truncated === true,
+        aiEnabled: data.aiEnabled === true, aiAutoRemove: data.aiAutoRemove ?? { enabled: false, threshold: 0.9 } }
     },
     async detail(id) {
       const data = await request(listingPath(id))
       if (!data.listing) throw Object.assign(new Error('Chi tiết không hợp lệ.'), { status: 0 })
-      return { listing: data.listing, reports: data.reports || [], history: data.history || [], aiEnabled: data.aiEnabled === true }
+      return { listing: data.listing, reports: data.reports || [], history: data.history || [],
+        aiEnabled: data.aiEnabled === true, aiAutoRemove: data.aiAutoRemove ?? { enabled: false, threshold: 0.9 } }
     },
     aiCheck: (id) => request(`${listingPath(id)}/ai-check`, { method: 'POST', body: JSON.stringify({}) }),
     remove: (id, expectedStatus, reason = '') => request(`${listingPath(id)}/remove`, {
