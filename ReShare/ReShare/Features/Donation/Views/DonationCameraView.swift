@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import PhotosUI
 
 // MARK: - Chế độ chụp của Camera ReShare
 enum CameraMode {
@@ -50,6 +51,8 @@ struct DonationCameraView: View {
     @State private var capturedImages: [UIImage] = []
     @State private var isFlashOn: Bool = false
     @State private var showImagePicker: Bool = false
+    @State private var libraryItems: [PhotosPickerItem] = []
+    @State private var libraryLoadError: String?
     @State private var isCameraScreenVisible: Bool = false
 
     // Màu xanh chủ đạo của ReShare
@@ -131,17 +134,11 @@ struct DonationCameraView: View {
         .onChange(of: camera.supportsFlash) { _, supportsFlash in
             if !supportsFlash { isFlashOn = false }
         }
-        .sheet(isPresented: $showImagePicker) {
-            ImagePicker(selectedImage: Binding(
-                get: { nil },
-                set: { newImage in
-                    if let img = newImage, capturedImages.count < maxPhotos {
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                            capturedImages.append(img)
-                        }
-                    }
-                }
-            ), sourceType: .photoLibrary)
+        .photosPicker(isPresented: $showImagePicker, selection: $libraryItems,
+                      maxSelectionCount: max(1, maxPhotos - capturedImages.count),
+                      selectionBehavior: .ordered, matching: .images)
+        .task(id: libraryItems) {
+            await loadLibraryImages()
         }
         .alert("Không thể chụp ảnh", isPresented: Binding(
             get: { camera.captureError != nil },
@@ -181,6 +178,32 @@ struct DonationCameraView: View {
         }
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
+    }
+
+    @MainActor
+    private func loadLibraryImages() async {
+        let selection = libraryItems
+        guard !selection.isEmpty else { return }
+        var loaded: [UIImage] = []
+        var failedCount = 0
+        for item in selection.prefix(max(0, maxPhotos - capturedImages.count)) {
+            guard !Task.isCancelled else { return }
+            let data = try? await item.loadTransferable(type: Data.self)
+            guard !Task.isCancelled else { return }
+            if let data, let image = UIImage(data: data) {
+                loaded.append(image)
+            } else {
+                failedCount += 1
+            }
+        }
+        guard !Task.isCancelled, libraryItems == selection else { return }
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+            capturedImages.append(contentsOf: loaded.prefix(max(0, maxPhotos - capturedImages.count)))
+        }
+        libraryItems = []
+        if failedCount > 0 {
+            libraryLoadError = "Không tải được \(failedCount) ảnh, vui lòng chọn lại"
+        }
     }
 
     // MARK: - 1. Trạng thái Camera khi chưa thể hiển thị preview
@@ -435,13 +458,21 @@ struct DonationCameraView: View {
                             .scaledFont(size: 20)
                             .foregroundColor(.white)
                     }
-                    Text("Kho ảnh")
+                    Text(libraryItems.isEmpty ? "Kho ảnh" : "Đang tải…")
                         .scaledFont(size: 11, weight: .medium)
                         .foregroundColor(.white.opacity(0.85))
                 }
             }
-            .disabled(capturedImages.count >= maxPhotos)
-            .opacity(capturedImages.count >= maxPhotos ? 0.4 : 1.0)
+            .disabled(capturedImages.count >= maxPhotos || !libraryItems.isEmpty || camera.isCapturing)
+            .opacity(capturedImages.count >= maxPhotos || !libraryItems.isEmpty || camera.isCapturing ? 0.4 : 1.0)
+            .alert("Không tải được ảnh", isPresented: Binding(
+                get: { libraryLoadError != nil },
+                set: { if !$0 { libraryLoadError = nil } }
+            )) {
+                Button("Đóng", role: .cancel) { libraryLoadError = nil }
+            } message: {
+                Text(libraryLoadError ?? "")
+            }
 
             Spacer()
 
@@ -464,7 +495,7 @@ struct DonationCameraView: View {
                         .foregroundColor(primaryGreen)
                 }
             }
-            .disabled(capturedImages.count >= maxPhotos || camera.status != .ready || camera.isCapturing)
+            .disabled(capturedImages.count >= maxPhotos || camera.status != .ready || camera.isCapturing || !libraryItems.isEmpty)
 
             Spacer()
 
@@ -508,14 +539,14 @@ struct DonationCameraView: View {
                             .foregroundColor(.white)
                     }
                 }
-                .disabled(camera.isCapturing)
+                .disabled(camera.isCapturing || !libraryItems.isEmpty)
                 .transition(.scale.combined(with: .opacity))
             }
         }
     }
 
     private func finishCaptureFlow() {
-        guard capturedImages.count >= minPhotos, !camera.isCapturing else { return }
+        guard capturedImages.count >= minPhotos, !camera.isCapturing, libraryItems.isEmpty else { return }
         if let onFinishCapturing = onFinishCapturing {
             onFinishCapturing(capturedImages)
         }
