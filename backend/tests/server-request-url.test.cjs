@@ -6,9 +6,10 @@ const { Readable } = require('node:stream');
 const vm = require('node:vm');
 const { ApiError } = require('../image-api.cjs');
 const { errorBody } = require('../error-body.cjs');
+const { readAiModerationConfig } = require('../ai-moderation-jobs.cjs');
 
 // Load the real entry point with external services replaced; no credentials or port needed.
-function loadHandler(extraEnv = {}) {
+function loadHandler(extraEnv = {}, aiOptions = {}) {
   let handler;
   const api = { handle: async (_method, path) => ({ status: 200, body: { path } }) };
   const factories = new Proxy({ ApiError }, { get: (target, key) => target[key] || (() => api) });
@@ -23,7 +24,15 @@ function loadHandler(extraEnv = {}) {
       if (name === 'cloudinary') return { v2: { config() {} } };
       if (name === './error-body.cjs') return { errorBody };
       if (name === './p2p-reservation-expiry.cjs') return { createReservationExpiry: () => ({ start() {}, stop() {} }) };
-      if (name === './ai-moderation-jobs.cjs') return { createAiModerationJobs: () => ({ start() {}, stop() {} }) };
+      if (name === './ai-moderation.cjs') return { createAiModerator(options) {
+        aiOptions.timeoutMs = options.timeoutMs;
+        return { enabled: false };
+      } };
+      if (name === './ai-moderation-jobs.cjs') return { readAiModerationConfig, createAiModerationJobs(options) {
+        const { batchSize, concurrency, intervalMs, timeoutMs } = options;
+        aiOptions.job = { batchSize, concurrency, intervalMs, timeoutMs };
+        return { start() {}, stop() {} };
+      } };
       if (name === './p2p-listings-api.cjs') return { createP2pListingsApi: () => ({ handle: async (_method, path) => ({ status: 200, body: { path, api: 'p2p' } }) }) };
       if (name === './image-cleanup-jobs.cjs') {
         return { cloudinaryCatalogImageDeleter: () => async () => {}, createImageCleanupJobs: () => ({ start() {}, stop() {} }) };
@@ -33,6 +42,17 @@ function loadHandler(extraEnv = {}) {
   }, { filename: 'server.cjs' });
   return handler;
 }
+
+test('Cấu hình AI từ env được chuyển đúng vào moderator và job của server', () => {
+  const aiOptions = {};
+  loadHandler({
+    AI_MODERATION_BATCH_SIZE: '25', AI_MODERATION_CONCURRENCY: '9',
+    AI_MODERATION_INTERVAL_MS: '60000', AI_MODERATION_TIMEOUT_MS: '120000',
+  }, aiOptions);
+  assert.deepEqual(aiOptions, {
+    timeoutMs: 120000, job: { batchSize: 25, concurrency: 5, intervalMs: 60000, timeoutMs: 120000 },
+  });
+});
 
 async function send(handler, url, method = 'GET', origin = 'http://localhost:5173') {
   const request = Readable.from([]);

@@ -118,6 +118,24 @@ test('AI kiểm duyệt: hai process dùng chung khoá lượt, không gọi AI 
   await assert.rejects(second.handle('POST', `${base}/item/ai-check`, headers('sa'), {}), { status: 429 });
 }));
 
+test('AI kiểm duyệt: giữ khoá sau mốc cooldown nếu lượt kiểm dài vẫn đang chạy', options, () => fixture(async db => {
+  let now = new Date('2026-11-17T10:00:00Z');
+  const moderator = gateModerator();
+  const first = apiFor(db, createAiModerationJobs({ db, moderator, clock: () => now, timeoutMs: 120000 }));
+  const second = apiFor(db, createAiModerationJobs({ db, moderator, clock: () => now }));
+  const pending = first.handle('POST', `${base}/item/ai-check`, headers('hc'), {});
+  await moderator.entered;
+  try {
+    now = new Date(now.getTime() + 60001);
+    await assert.rejects(second.handle('POST', `${base}/item/ai-check`, headers('sa'), {}), { status: 429 });
+    assert.equal(moderator.calls, 1);
+  } finally {
+    moderator.release();
+    await pending;
+  }
+  assert.equal((await db.doc('catalog_items/item').get()).data().aiModeration.status, 'flagged');
+}));
+
 test('AI kiểm duyệt: nội dung đổi trong lúc quét thì không ghi nhãn cũ', options, () => fixture(async db => {
   const moderator = gateModerator();
   const api = apiFor(db, createAiModerationJobs({ db, moderator }));
@@ -129,7 +147,7 @@ test('AI kiểm duyệt: nội dung đổi trong lúc quét thì không ghi nhã
   assert.equal((await db.doc('catalog_items/item').get()).data().aiModeration, undefined);
 }));
 
-test('AI kiểm duyệt nền: tối đa 10 bài, bỏ bài đã kiểm và đi qua 200 bài đầu', options, () => fixture(async db => {
+test('AI kiểm duyệt nền: xét cả các bài sau mốc 200 và bỏ bài đã có nhãn', options, () => fixture(async db => {
   await db.doc('catalog_items/item').delete();
   const batch = db.batch();
   for (let i = 0; i < 212; i += 1) {
@@ -139,9 +157,8 @@ test('AI kiểm duyệt nền: tối đa 10 bài, bỏ bài đã kiểm và đi 
   await batch.commit();
   let calls = 0;
   const jobs = createAiModerationJobs({ db, moderator: { enabled: true, check: async () => { calls += 1; return result('safe'); } } });
-  assert.equal((await jobs.runOnce()).checked, 0, '200 bài đầu đều đã kiểm');
-  assert.equal((await jobs.runOnce()).checked, 10);
-  assert.equal((await jobs.runOnce()).checked, 2);
+  assert.equal((await jobs.runOnce()).checked, 12, 'tìm đủ bài chưa kiểm trong một lần quét');
+  assert.equal((await jobs.runOnce()).checked, 0);
   assert.equal(calls, 12);
   assert.equal((await db.doc('catalog_items/reserved').get()).data().aiModeration, undefined);
   assert.equal((await db.doc('catalog_items/item-211').get()).data().status, 'available');
@@ -149,7 +166,47 @@ test('AI kiểm duyệt nền: tối đa 10 bài, bỏ bài đã kiểm và đi 
 }));
 
 
-test('AI kiểm duyệt nền: chỉ kiểm lại error đủ một giờ, không kiểm lại safe/flagged hoặc lỗi còn mới', options, () => fixture(async db => {
+test('AI kiểm duyệt nền: nhận bài mở lưu trạng thái tiếng Việt và giữ nguyên trạng thái', options, () => fixture(async db => {
+  await db.doc('catalog_items/item').update({ status: 'Sẵn sàng nhận đồ' });
+  const jobs = createAiModerationJobs({ db, moderator: { enabled: true, check: async () => result('safe') } });
+  assert.equal((await jobs.runOnce()).checked, 1);
+  const item = (await db.doc('catalog_items/item').get()).data();
+  assert.equal(item.aiModeration.status, 'safe');
+  assert.equal(item.status, 'Sẵn sàng nhận đồ');
+  assert.equal(item.moderation, undefined);
+}));
+
+test('Listener kiểm bù bài có sẵn và tự gắn nhãn bài mới mà không chờ lượt quét tiếp theo', options, () => fixture(async db => {
+  await db.doc('catalog_items/initial').set(listing({ title: 'Bài trước khi bật server', status: 'completed' }));
+  const calls = [];
+  const jobs = createAiModerationJobs({ db, batchSize: 1, intervalMs: 180000, moderator: {
+    enabled: true, check: async ({ title }) => { calls.push(title); return result('safe'); },
+  } });
+
+  async function waitForLabel(id) {
+    const deadline = Date.now() + 6000;
+    while (Date.now() < deadline) {
+      const [item, lock] = await db.getAll(db.doc(`catalog_items/${id}`), db.doc(`${CHECKS_COLLECTION}/${id}`));
+      if (item.data()?.aiModeration?.status === 'safe' && lock.data()?.checkId === null) return item.data();
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    assert.fail(`Listener chưa hoàn tất gắn nhãn cho ${id}`);
+  }
+
+  jobs.start();
+  try {
+    const initial = await waitForLabel('initial');
+    assert.equal(initial.status, 'completed');
+    await waitForLabel('item');
+    await db.doc('catalog_items/new-post').set(listing({ title: 'Bài đăng mới' }));
+    assert.equal((await waitForLabel('new-post')).status, 'available');
+    assert.deepEqual(calls.sort(), ['Bài trước khi bật server', 'Áo mới', 'Bài đăng mới'].sort());
+  } finally {
+    jobs.stop();
+  }
+}));
+
+test('AI kiểm duyệt nền: lỗi từ lần thứ tư thử lại sau một giờ, bỏ safe/flagged và lỗi còn mới', options, () => fixture(async db => {
   const now = new Date('2026-11-17T10:00:00Z');
   const old = new Date(now.getTime() - 3600001);
   const atHour = new Date(now.getTime() - 3600000);
@@ -158,7 +215,9 @@ test('AI kiểm duyệt nền: chỉ kiểm lại error đủ một giờ, khôn
     ['error-old', 'error', old], ['error-hour', 'error', atHour], ['error-epoch', 'error', new Date(0)], ['error-new', 'error', tooNew],
     ['safe-old', 'safe', old], ['flagged-old', 'flagged', old], ['error-invalid', 'error', 'không phải thời gian'],
   ];
-  await Promise.all(seed.map(([id, status, checkedAt]) => db.doc(`catalog_items/${id}`).set(listing({ title: id, aiModeration: { ...result(status), checkedAt } }))));
+  await Promise.all(seed.map(([id, status, checkedAt]) => db.doc(`catalog_items/${id}`).set(listing({
+    title: id, aiModeration: { ...result(status), checkedAt, ...(status === 'error' ? { errorCount: 4 } : {}) },
+  }))));
   const calls = [];
   const jobs = createAiModerationJobs({ db, clock: () => now, moderator: { enabled: true, check: async input => {
     calls.push(input.title); return result(input.title.startsWith('error-') ? 'error' : 'safe');
@@ -167,6 +226,7 @@ test('AI kiểm duyệt nền: chỉ kiểm lại error đủ một giờ, khôn
   assert.deepEqual(calls.sort(), ['error-hour', 'error-old', 'error-epoch', 'Áo mới'].sort());
   const retried = (await db.doc('catalog_items/error-old').get()).data();
   assert.equal(retried.aiModeration.checkedAt.toMillis(), now.getTime());
+  assert.equal(retried.aiModeration.errorCount, 5);
   assert.equal(retried.status, 'available');
   assert.equal(retried.moderation, undefined);
   assert.equal((await jobs.runOnce()).checked, 0, 'lỗi vừa thử lại phải chờ đủ một giờ nữa');
