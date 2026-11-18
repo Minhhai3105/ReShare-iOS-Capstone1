@@ -12,8 +12,10 @@ Document/
 node_modules
 firestore-debug.log
 
-# OS metadata
+# OS metadata & SwiftPM build artifacts
 .DS_Store
+.build
+ReShare/.build
 
 # Image API local files and credentials
 backend/node_modules
