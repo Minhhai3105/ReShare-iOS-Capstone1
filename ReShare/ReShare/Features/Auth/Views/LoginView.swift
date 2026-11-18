@@ -123,6 +123,7 @@ struct LoginView: View {
                 .resizable()
                 .scaledToFit()
                 .frame(width: 54, height: 54)
+                .frame(maxWidth: .infinity)
                 .accessibilityLabel("Logo ReShare")
 
             VStack(alignment: .leading, spacing: 6) {
