@@ -125,6 +125,7 @@ final class AppState: ObservableObject {
         currentUserProfile = profile
         sessionError = nil
         isAuthenticated = true
+        CatalogPublishQueue.shared.setUser(profile.id)
     }
 
     func updateProfile(displayName: String, phoneNumber: String) async throws {
@@ -175,6 +176,7 @@ final class AppState: ObservableObject {
     }
 
     private func clearSession(message: String?) {
+        CatalogPublishQueue.shared.setUser(nil)
         isAuthenticated = false
         currentUserId = nil
         currentUserProfile = nil

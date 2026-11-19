@@ -6,7 +6,7 @@ const donationId = '6d4a2909-bb7f-459d-bbcd-2117d96ff7e1';
 const catalogId = `cat_${donationId}`;
 const clientImageId = '12c135b8-1c53-4de1-a244-5e1a5f7da92a';
 
-function setup() {
+function setup({ verifyToken = async token => ({ uid: token, role: token === 'admin' ? 'system_admin' : 'donor' }) } = {}) {
   const documents = new Map();
   const ref = (collection, id) => ({
     key: `${collection}/${id}`,
@@ -33,9 +33,9 @@ function setup() {
     uploader: { async destroy(id, options) { destroyed.push({ id, options }); return { result: 'ok' }; } },
     api: { async resource(id) { return { public_id: id, type: 'authenticated', format: 'jpg' }; } }
   };
-  const api = createImageApi({ db, verifyToken: async token => ({ uid: token, role: token === 'admin' ? 'system_admin' : 'donor' }), cloudinary, cloudName: 'c9ide1cv', apiKey: 'public-key', apiSecret: 'test-only', now: () => 1780000000000 });
+  const api = createImageApi({ db, verifyToken, cloudinary, cloudName: 'c9ide1cv', apiKey: 'public-key', apiSecret: 'test-only', now: () => 1780000000000 });
   const call = (path, uid, body) => api.handle('POST', path, { authorization: `Bearer ${uid}` }, body);
-  return { documents, destroyed, call, api };
+  return { documents, destroyed, call, api, cloudinary };
 }
 
 function snapshot(data) { return { exists: data !== undefined, data: () => data }; }
@@ -65,9 +65,12 @@ test('intent is signed for the server-selected type and bound to its owner', asy
 });
 
 test('catalog intent uses public delivery; no token is rejected', async () => {
-  const { call, api } = setup();
+  const { call, api, documents } = setup();
   const result = (await call('/v1/images/upload-intents', 'donor', { purpose: 'catalog_item', recordId: catalogId, clientImageId })).body;
   assert.equal(result.deliveryType, 'upload');
+  const resumed = (await call('/v1/images/upload-intents', 'donor', { purpose: 'catalog_item', recordId: catalogId, clientImageId })).body;
+  assert.equal(resumed.publicId, result.publicId, 'resuming the same queued photo reuses its asset');
+  assert.equal(documents.get('image_upload_quotas/donor_2026-05-28').count, 1);
   await assert.rejects(api.handle('POST', '/v1/images/upload-intents', {}, {}), { status: 401 });
 });
 
@@ -82,6 +85,71 @@ test('cleanup cannot remove another owner image or an attached image', async () 
   documents.delete(`donations/${donationId}`);
   await call('/v1/images/cleanup', 'donor', request);
   assert.equal(destroyed[0].options.type, 'authenticated');
+});
+
+test('pending catalog cleanup includes assets absent from the client checkpoint and can be repeated', async () => {
+  const { call, documents, destroyed } = setup();
+  const ids = [];
+  for (const imageId of [clientImageId, '22222222-2222-4222-8222-222222222222']) {
+    ids.push((await call('/v1/images/upload-intents', 'donor', { purpose: 'catalog_item', recordId: catalogId, clientImageId: imageId })).body.publicId);
+  }
+  const body = { purpose: 'catalog_item', recordId: catalogId, allPending: true };
+  await call('/v1/images/cleanup', 'donor', body);
+  assert.deepEqual(destroyed.map(item => item.id), ids);
+  assert.ok(destroyed.every(item => item.options.type === 'upload'));
+  await call('/v1/images/cleanup', 'donor', body);
+  assert.equal(destroyed.length, 4);
+  assert.equal(documents.get('image_upload_quotas/donor_2026-05-28').count, 2, 'cleanup must not allocate new upload intents');
+});
+
+test('pending cleanup refuses another owner, published records and donation batches', async () => {
+  const { call, destroyed, documents } = setup();
+  const id = (await call('/v1/images/upload-intents', 'donor', { purpose: 'catalog_item', recordId: catalogId, clientImageId })).body.publicId;
+  const body = { purpose: 'catalog_item', recordId: catalogId, allPending: true };
+  await assert.rejects(call('/v1/images/cleanup', 'other', body), { status: 403 });
+  documents.set(`catalog_items/${catalogId}`, { donorId: 'donor', imagePublicIds: [id] });
+  await assert.rejects(call('/v1/images/cleanup', 'donor', body), { status: 409 });
+  await assert.rejects(call('/v1/images/cleanup', 'donor', { purpose: 'donation', recordId: donationId, allPending: true }), { status: 400 });
+  assert.equal(destroyed.length, 0);
+});
+
+test('pending cleanup with no allocated images is a no-op but cannot hide a published record', async () => {
+  const { call, destroyed, documents } = setup();
+  const body = { purpose: 'catalog_item', recordId: catalogId, allPending: true };
+  assert.equal((await call('/v1/images/cleanup', 'donor', body)).status, 200);
+  documents.set(`catalog_items/${catalogId}`, { donorId: 'donor' });
+  await assert.rejects(call('/v1/images/cleanup', 'donor', body), { status: 409 });
+  assert.equal(destroyed.length, 0);
+});
+
+test('pending cleanup retries safely after Cloudinary deleted only part of the batch', async () => {
+  const { call, cloudinary } = setup();
+  const ids = [];
+  for (const imageId of [clientImageId, '22222222-2222-4222-8222-222222222222']) {
+    ids.push((await call('/v1/images/upload-intents', 'donor', { purpose: 'catalog_item', recordId: catalogId, clientImageId: imageId })).body.publicId);
+  }
+  let fail = true;
+  const deleted = new Set();
+  cloudinary.uploader.destroy = async id => {
+    if (id === ids[1] && fail) return { result: 'error' };
+    if (deleted.has(id)) return { result: 'not found' };
+    deleted.add(id);
+    return { result: 'ok' };
+  };
+  const body = { purpose: 'catalog_item', recordId: catalogId, allPending: true };
+  await assert.rejects(call('/v1/images/cleanup', 'donor', body), { status: 502 });
+  assert.deepEqual([...deleted], [ids[0]]);
+  fail = false;
+  assert.equal((await call('/v1/images/cleanup', 'donor', body)).status, 200);
+  assert.deepEqual([...deleted], ids);
+});
+
+test('pending cleanup keeps authentication checks for missing and revoked sessions', async () => {
+  const { api, call, destroyed } = setup({ verifyToken: async () => { throw new Error('revoked'); } });
+  const body = { purpose: 'catalog_item', recordId: catalogId, allPending: true };
+  await assert.rejects(api.handle('POST', '/v1/images/cleanup', {}, body), { status: 401 });
+  await assert.rejects(call('/v1/images/cleanup', 'donor', body), { status: 401 });
+  assert.equal(destroyed.length, 0);
 });
 
 test('private donation image requires donor or system admin plus attached intent', async () => {

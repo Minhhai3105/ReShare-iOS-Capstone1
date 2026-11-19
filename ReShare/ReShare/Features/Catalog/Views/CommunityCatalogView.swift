@@ -3,6 +3,7 @@ import SwiftUI
 /// Màn hình Kho đồ 0đ Cộng đồng (P2P Community Catalog tại Đà Nẵng)
 struct CommunityCatalogView: View {
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var publishQueue = CatalogPublishQueue.shared
 
     // Nếu mở dạng Sheet thì hiện nút đóng, nếu ở Tabbar gốc thì ẩn nút Back
     var isSheet: Bool = false
@@ -30,6 +31,7 @@ struct CommunityCatalogView: View {
     // Con trỏ trang kế; nil khi đã tải hết
     @State private var nextCatalogCursor: CatalogPageCursor? = nil
     @State private var isLoadingMore: Bool = false
+    @State private var catalogLoadToken = UUID()
 
     // Cột lưới 2 cột
     private let gridColumns = [
@@ -76,6 +78,23 @@ struct CommunityCatalogView: View {
                     categoryFilterSection
 
                     // 4. Lưới 2 cột hiển thị các món đồ đã lọc (Dùng Push NavigationLink, không bị chồng Sheet)
+                    if let error = publishQueue.loadError {
+                        Text(error).scaledFont(size: 12).foregroundColor(.orange)
+                    }
+                    if !pendingJobs.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Bài chờ đăng của bạn")
+                                .scaledFont(size: 14, weight: .bold)
+                            ForEach(pendingJobs) { job in
+                                CatalogPublishPendingCard(job: job, queue: publishQueue)
+                            }
+                            if pendingJobs.contains(where: { $0.state == .published }) {
+                                Button("Cập nhật danh sách") { Task { await loadCatalog() } }
+                                    .scaledFont(size: 13, weight: .semibold)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                     if let loadError {
                         VStack(spacing: 6) {
                             Text(loadError)
@@ -132,17 +151,15 @@ struct CommunityCatalogView: View {
                     onBackToHome: {
                         showPublishCamera = false
                     },
-                    mode: .communityCatalog,
-                    onCatalogPublished: { newItem in
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                            catalogItems.insert(newItem, at: 0)
-                        }
-                    }
+                    mode: .communityCatalog
                 )
             }
         }
         .task {
             await loadCatalog()
+        }
+        .onChange(of: publishQueue.publishedIDs) { _, ids in
+            if !ids.isEmpty { Task { await loadCatalog() } }
         }
         // Chạy lại mỗi lần quay về màn này, để bài của người vừa bị chặn biến mất ngay.
         .onAppear {
@@ -154,17 +171,29 @@ struct CommunityCatalogView: View {
         }
     }
 
+    private var pendingJobs: [CatalogPublishJob] {
+        let visibleIDs = Set(catalogItems.map(\.id))
+        return publishQueue.jobs.filter {
+            $0.payload.donorId == currentUserId && !visibleIDs.contains($0.id)
+        }
+    }
+
     // Tải danh sách đồ 0đ thật từ Cloud Firestore
     private func loadCatalog() async {
+        let token = UUID()
+        catalogLoadToken = token
         do {
             let page = try await FirestoreService.shared.fetchCatalogItems()
             await MainActor.run {
+                guard catalogLoadToken == token else { return }
                 self.catalogItems = page.items
                 self.nextCatalogCursor = page.nextCursor
                 self.loadError = nil
+                publishQueue.acknowledgePublished(Set(page.items.map(\.id)))
             }
         } catch {
             await MainActor.run {
+                guard catalogLoadToken == token else { return }
                 self.loadError = "Không thể tải Kho đồ 0đ: \(error.localizedDescription)"
             }
         }

@@ -94,6 +94,12 @@ final class CloudinaryImageService {
         let publicIds: [String]
     }
 
+    private struct PendingCatalogCleanupRequest: Encodable {
+        let purpose = CloudinaryImagePurpose.catalogItem
+        let recordId: String
+        let allPending = true
+    }
+
     private struct ReadAccessRequest: Encodable {
         let donationId: String
         let publicId: String
@@ -113,14 +119,29 @@ final class CloudinaryImageService {
         onProgress: (@MainActor (Int, Int) -> Void)? = nil
     ) async throws -> [CloudinaryUploadedImage] {
         guard !images.isEmpty else { return [] }
+        let startedAt = Date()
+        let preparedJPEGs = try await Task.detached(priority: .userInitiated) {
+            try images.map { try Self.prepareJPEG($0, maxPixelDimension: maxPixelDimension) }
+        }.value
+        logger.info("Chuẩn bị \(preparedJPEGs.count) ảnh: \(Date().timeIntervalSince(startedAt), privacy: .public)s")
+        return try await uploadPreparedImages(preparedJPEGs, purpose: purpose, recordId: recordId, onProgress: onProgress)
+    }
+
+    /// JPEG của hàng đợi đã được chuẩn bị và lưu trên máy; ID ảnh giữ nguyên qua các lần mở app.
+    func uploadPreparedImages(
+        _ preparedJPEGs: [Data], purpose: CloudinaryImagePurpose, recordId: String,
+        clientImageIDs: [String]? = nil, expectedUserId: String? = nil,
+        cleanupOnFailure: Bool = true,
+        onProgress: (@MainActor (Int, Int) -> Void)? = nil,
+        onUploaded: (@MainActor (Int, CloudinaryUploadedImage) async throws -> Void)? = nil
+    ) async throws -> [CloudinaryUploadedImage] {
+        guard !preparedJPEGs.isEmpty else { return [] }
+        let ids = clientImageIDs ?? preparedJPEGs.map { _ in UUID().uuidString.lowercased() }
+        guard ids.count == preparedJPEGs.count else { throw CloudinaryImageError.invalidImage }
         var uploaded: [CloudinaryUploadedImage] = []
         let startedAt = Date()
 
         do {
-            let preparedJPEGs = try await Task.detached(priority: .userInitiated) {
-                try images.map { try Self.prepareJPEG($0, maxPixelDimension: maxPixelDimension) }
-            }.value
-            logger.info("Chuẩn bị \(preparedJPEGs.count) ảnh: \(Date().timeIntervalSince(startedAt), privacy: .public)s")
             onProgress?(0, preparedJPEGs.count)
 
             var uploadedByIndex = [CloudinaryUploadedImage?](repeating: nil, count: preparedJPEGs.count)
@@ -131,13 +152,15 @@ final class CloudinaryImageService {
                         let jpeg = preparedJPEGs[index]
                         group.addTask {
                             do {
+                                try Task.checkCancellation()
                                 let intent: UploadIntent = try await self.backendRequest(
                                     "v1/images/upload-intents",
                                     body: UploadIntentRequest(
                                         purpose: purpose,
                                         recordId: recordId,
-                                        clientImageId: UUID().uuidString.lowercased()
-                                    )
+                                        clientImageId: ids[index]
+                                    ),
+                                    expectedUserId: expectedUserId
                                 )
                                 guard intent.deliveryType == purpose.deliveryType,
                                       intent.publicId.hasPrefix("\(purpose.pathPrefix)/\(recordId)/"),
@@ -169,6 +192,7 @@ final class CloudinaryImageService {
                     case .success(let image):
                         uploadedByIndex[index] = image
                         uploaded.append(image)
+                        try await onUploaded?(index, image)
                     case .failure(let error):
                         if firstError == nil { firstError = error }
                     }
@@ -178,7 +202,7 @@ final class CloudinaryImageService {
             logger.info("Hoàn tất tải \(preparedJPEGs.count) ảnh: \(Date().timeIntervalSince(startedAt), privacy: .public)s")
             return uploadedByIndex.compactMap { $0 }
         } catch {
-            if !uploaded.isEmpty {
+            if cleanupOnFailure, !uploaded.isEmpty {
                 do {
                     try await deleteImages(uploaded, purpose: purpose, recordId: recordId)
                 } catch {
@@ -189,7 +213,7 @@ final class CloudinaryImageService {
         }
     }
 
-    private nonisolated static func prepareJPEG(_ image: UIImage, maxPixelDimension: CGFloat?) throws -> Data {
+    nonisolated static func prepareJPEG(_ image: UIImage, maxPixelDimension: CGFloat?) throws -> Data {
         guard let maxPixelDimension, maxPixelDimension > 0 else {
             guard let jpeg = image.jpegData(compressionQuality: 0.7) else { throw CloudinaryImageError.invalidImage }
             return jpeg
@@ -222,6 +246,13 @@ final class CloudinaryImageService {
         let _: EmptyResponse = try await backendRequest(
             "v1/images/cleanup",
             body: CleanupRequest(purpose: purpose, recordId: recordId, publicIds: images.map(\.publicId))
+        )
+    }
+
+    func deletePendingCatalogImages(recordId: String, expectedUserId: String) async throws {
+        let _: EmptyResponse = try await backendRequest(
+            "v1/images/cleanup", body: PendingCatalogCleanupRequest(recordId: recordId),
+            expectedUserId: expectedUserId
         )
     }
 
@@ -288,14 +319,17 @@ final class CloudinaryImageService {
         return body
     }
 
-    private func backendRequest<Request: Encodable, Response: Decodable>(_ path: String, body: Request) async throws -> Response {
+    private func backendRequest<Request: Encodable, Response: Decodable>(_ path: String, body: Request, expectedUserId: String? = nil) async throws -> Response {
         let startedAt = Date()
         defer { logger.info("Image API \(path, privacy: .public): \(Date().timeIntervalSince(startedAt), privacy: .public)s") }
         guard let baseURL = ReShareAPIConfiguration.configuredBaseURL() else {
             throw CloudinaryImageError.missingConfiguration
         }
         guard let user = Auth.auth().currentUser else { throw CloudinaryImageError.signedOut }
+        guard expectedUserId == nil || user.uid == expectedUserId else { throw CloudinaryImageError.signedOut }
         let token = try await user.getIDToken(forcingRefresh: false)
+        try Task.checkCancellation()
+        guard expectedUserId == nil || Auth.auth().currentUser?.uid == expectedUserId else { throw CloudinaryImageError.signedOut }
         var request = URLRequest(url: baseURL.appendingPathComponent(path))
         request.httpMethod = "POST"
         request.timeoutInterval = 120 // Render Free có thể khởi động lại sau thời gian không hoạt động.

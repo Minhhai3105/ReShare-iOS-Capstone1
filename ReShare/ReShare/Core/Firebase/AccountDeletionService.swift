@@ -42,6 +42,7 @@ enum AccountDeletionService {
     /// máy chủ sẽ tự thử lại (image_cleanup_jobs) — app báo cho người dùng biết thay vì nói đã xong hết.
     struct Outcome: Equatable {
         let imagesPending: Int
+        var localDraftsPending = false
     }
 
     /// true: tài khoản có mật khẩu (đăng ký bằng email). false: chỉ đăng nhập bằng Google.
@@ -85,6 +86,11 @@ enum AccountDeletionService {
 
     private static func requestDeletion(_ user: User) async throws -> Outcome {
         guard let baseURL = ReShareAPIConfiguration.configuredBaseURL() else { throw DeletionError.missingConfiguration }
+        CatalogPublishQueue.shared.setUser(nil)
+        var deleted = false
+        defer {
+            if !deleted { CatalogPublishQueue.shared.setUser(user.uid) }
+        }
         var request = URLRequest(url: baseURL.appendingPathComponent("v1/account/delete"))
         request.httpMethod = "POST"
         // Máy chủ Render bản miễn phí có thể mất 30–50 giây để khởi động.
@@ -106,6 +112,10 @@ enum AccountDeletionService {
             throw DeletionError.server("Chưa xác nhận được việc xoá. Vui lòng thử lại; thao tác này an toàn khi lặp lại.")
         }
         let summary = payload["summary"] as? [String: Any]
-        return Outcome(imagesPending: (summary?["imagesPending"] as? Int) ?? 0)
+        deleted = true
+        var localDraftsPending = false
+        do { try await CatalogPublishQueue.shared.discardDrafts(donorId: user.uid) }
+        catch { localDraftsPending = true }
+        return Outcome(imagesPending: (summary?["imagesPending"] as? Int) ?? 0, localDraftsPending: localDraftsPending)
     }
 }

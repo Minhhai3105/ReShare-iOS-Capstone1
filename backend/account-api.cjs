@@ -117,6 +117,27 @@ function createAccountApi({ db, auth, verifyToken, deleteCatalogImage, clock }) 
       if (outcome === 'removed') summary.itemsRemoved += 1;
     }
 
+    // Ảnh của bản chờ đăng có thể đã lên Cloudinary nhưng chưa có catalog_items.
+    // Ghi việc dọn ảnh cùng transaction xoá batch; giữ nguyên ảnh của bài đã hoàn tất.
+    const uploadBatches = await readCapped(db.collection('image_upload_batches').where('ownerUid', '==', uid), 'pending image uploads');
+    for (const doc of uploadBatches) {
+      await runTransaction(db, async tx => {
+        const snapshot = await tx.get(doc.ref);
+        if (!snapshot.exists) return;
+        const batch = snapshot.data();
+        if (batch.ownerUid !== uid || batch.purpose !== 'catalog_item' ||
+            typeof batch.recordId !== 'string' || !batch.recordId.startsWith('cat_') || !VALID_ID.test(batch.recordId)) return;
+        const listing = await tx.get(db.collection('catalog_items').doc(batch.recordId));
+        if (listing.exists) return;
+        const prefix = `catalog_items/${batch.recordId}/`;
+        const publicIds = Object.values(batch.assets || {}).filter(id => typeof id === 'string' && id.startsWith(prefix));
+        if (publicIds.length) {
+          tx.set(jobRef, { reason: 'account_deletion', publicIds: FieldValue.arrayUnion(...publicIds), createdAt: timestamp }, { merge: true });
+        }
+        tx.delete(doc.ref);
+      });
+    }
+
     // 2. Món của người khác mà người này đang giữ: mở lại, nhưng chỉ khi vẫn đúng là lượt giữ của họ.
     for (const doc of held) {
       const released = await runTransaction(db, async tx => {
