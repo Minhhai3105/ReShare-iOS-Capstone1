@@ -26,6 +26,7 @@ struct ContentView: View {
         .preferredColorScheme(.light)
         // Cỡ chữ co giãn theo cài đặt iPhone (scaledFont) nhưng chặn ở xxLarge để bố cục không vỡ.
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+        .dismissKeyboardOnInteraction()
     }
 }
 
