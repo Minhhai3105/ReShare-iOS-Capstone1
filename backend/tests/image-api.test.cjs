@@ -65,9 +65,12 @@ test('intent is signed for the server-selected type and bound to its owner', asy
 });
 
 test('catalog intent uses public delivery; no token is rejected', async () => {
-  const { call, api } = setup();
+  const { call, api, documents } = setup();
   const result = (await call('/v1/images/upload-intents', 'donor', { purpose: 'catalog_item', recordId: catalogId, clientImageId })).body;
   assert.equal(result.deliveryType, 'upload');
+  const resumed = (await call('/v1/images/upload-intents', 'donor', { purpose: 'catalog_item', recordId: catalogId, clientImageId })).body;
+  assert.equal(resumed.publicId, result.publicId, 'resuming the same queued photo reuses its asset');
+  assert.equal(documents.get('image_upload_quotas/donor_2026-05-28').count, 1);
   await assert.rejects(api.handle('POST', '/v1/images/upload-intents', {}, {}), { status: 401 });
 });
 

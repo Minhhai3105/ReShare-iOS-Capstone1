@@ -8,7 +8,6 @@ struct CatalogItemPublishView: View {
 
     // Ảnh chụp thực tế từ Camera AI
     var capturedImages: [UIImage] = []
-    var onPublished: ((CatalogItem) -> Void)? = nil
     var onBackToCatalog: (() -> Void)? = nil
 
     // Form fields
@@ -27,7 +26,6 @@ struct CatalogItemPublishView: View {
     @State private var publishStatus: String = ""
     @State private var errorMessage: String? = nil
     @State private var itemDocumentId: String = "cat_\(UUID().uuidString.lowercased())"
-    @State private var uploadedImageAssets: [CloudinaryUploadedImage] = []
     @FocusState private var isInputFocused: Bool
     private let publishLogger = Logger(subsystem: "ReShare", category: "CatalogPublish")
 
@@ -120,6 +118,7 @@ struct CatalogItemPublishView: View {
                     }
                     .foregroundColor(primaryGreen)
                 }
+                .disabled(isPublishing)
             }
         }
         .onAppear {
@@ -382,6 +381,7 @@ struct CatalogItemPublishView: View {
     }
 
     private func handlePublish() {
+        guard !isPublishing else { return }
         guard !itemTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             errorMessage = "Vui lòng nhập tên món đồ"
             return
@@ -402,64 +402,29 @@ struct CatalogItemPublishView: View {
 
         isPublishing = true
         isInputFocused = false
-        publishStatus = "Đang chuẩn bị ảnh..."
+        publishStatus = "Đang lưu bản chờ trên máy..."
         errorMessage = nil
 
         let donorName = appState.currentUserProfile?.displayName ?? "Người dân Đà Nẵng"
         let startedAt = Date()
+        let payload = CatalogPublishPayload(
+            donorId: donorId, donorName: donorName,
+            title: itemTitle.trimmingCharacters(in: .whitespacesAndNewlines),
+            category: selectedCategory, condition: selectedCondition, district: selectedDistrict,
+            pickupAddress: pickupAddress.isEmpty ? "Q. \(selectedDistrict), Đà Nẵng" : "\(pickupAddress), Q. \(selectedDistrict), Đà Nẵng",
+            donorNote: donorNote.isEmpty ? "Món đồ này mình không còn dùng tới nên muốn tặng lại cho ai cần. Các bạn nhắn tin hẹn trước nhé!" : donorNote,
+            imageName: selectedIcon
+        )
+        let job = CatalogPublishJob(id: itemDocumentId, payload: payload, imageCount: capturedImages.count)
 
         Task {
             do {
-                // Dùng lại ảnh và ID khi thử lại sau lỗi ghi Firestore.
-                let uploadedAssets: [CloudinaryUploadedImage]
-                if uploadedImageAssets.count == capturedImages.count {
-                    uploadedAssets = uploadedImageAssets
-                } else {
-                    uploadedAssets = try await CloudinaryImageService.shared.uploadImages(
-                        capturedImages,
-                        purpose: .catalogItem,
-                        recordId: itemDocumentId,
-                        maxPixelDimension: 2048,
-                        onProgress: { completed, total in
-                            publishStatus = "Đang tải ảnh (\(completed)/\(total))..."
-                        }
-                    )
-                    await MainActor.run { uploadedImageAssets = uploadedAssets }
-                }
-                publishLogger.info("Ảnh sẵn sàng: \(Date().timeIntervalSince(startedAt), privacy: .public)s")
-                await MainActor.run { publishStatus = "Đang lưu món đồ..." }
-                let imageUrls = uploadedAssets.compactMap(\.secureURL)
-                guard imageUrls.count == capturedImages.count else {
-                    throw CloudinaryImageError.invalidServerResponse
-                }
-
-                let newItem = CatalogItem(
-                    id: itemDocumentId,
-                    donorId: donorId,
-                    donorName: donorName,
-                    title: itemTitle.trimmingCharacters(in: .whitespaces),
-                    category: selectedCategory,
-                    condition: selectedCondition,
-                    district: selectedDistrict,
-                    timeAgo: "Vừa xong",
-                    imageName: selectedIcon,
-                    status: .available,
-                    pickupAddress: pickupAddress.isEmpty ? "Q. \(selectedDistrict), Đà Nẵng" : "\(pickupAddress), Q. \(selectedDistrict), Đà Nẵng",
-                    donorNote: donorNote.isEmpty ? "Món đồ này mình không còn dùng tới nên muốn tặng lại cho ai cần. Các bạn nhắn tin hẹn trước nhé!" : donorNote,
-                    createdAt: Date(),
-                    imageUrl: imageUrls.first,
-                    images: imageUrls,
-                    imageProvider: "cloudinary",
-                    imagePublicIds: uploadedAssets.map(\.publicId)
-                )
-
-                try await FirestoreService.shared.publishCatalogItem(newItem)
-                publishLogger.info("Đăng món hoàn tất: \(Date().timeIntervalSince(startedAt), privacy: .public)s")
+                try await CatalogPublishQueue.shared.enqueue(job, images: capturedImages)
+                publishLogger.info("Đã lưu bản chờ đăng trên máy: \(Date().timeIntervalSince(startedAt), privacy: .public)s")
 
                 await MainActor.run {
                     isPublishing = false
                     publishStatus = ""
-                    onPublished?(newItem)
                     if let onBackToCatalog = onBackToCatalog {
                         onBackToCatalog()
                     } else {
@@ -470,7 +435,7 @@ struct CatalogItemPublishView: View {
                 await MainActor.run {
                     isPublishing = false
                     publishStatus = ""
-                    errorMessage = "Không thể đăng đồ: \(error.localizedDescription). Bạn có thể thử lại; ảnh tải lên thành công sẽ được dùng lại."
+                    errorMessage = "Chưa lưu được bản chờ đăng: \(error.localizedDescription). Nội dung và ảnh vẫn còn ở màn này; bạn có thể thử lại."
                 }
             }
         }

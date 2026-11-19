@@ -48,6 +48,12 @@ struct DeleteAccountView: View {
                 .scaledFont(size: 14)
                 .foregroundColor(textMuted)
                 .multilineTextAlignment(.center)
+            if outcome.localDraftsPending {
+                Text("Tài khoản đã xoá, nhưng chưa dọn được bản chờ đăng trên máy. Bạn có thể xoá ứng dụng để dọn dữ liệu cục bộ này.")
+                    .scaledFont(size: 13)
+                    .foregroundColor(.orange)
+                    .multilineTextAlignment(.center)
+            }
             Button {
                 dismiss()
                 onDeleted()
@@ -80,6 +86,7 @@ struct DeleteAccountView: View {
                         "Tài khoản đăng nhập",
                         "Họ tên, email và số điện thoại trong hồ sơ",
                         "Các bài Kho đồ 0đ đang mở, kèm ảnh và địa chỉ nhận đồ",
+                        "Bản chờ đăng và ảnh lưu trên máy này",
                     ])
                     infoCard(title: "Được giữ ở dạng ẩn danh", icon: "eye.slash.fill", color: textMuted, lines: [
                         "Đơn quyên góp đã gửi, vì phiếu nhập kho và phân phối tham chiếu tới chúng",

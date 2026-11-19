@@ -21,20 +21,17 @@ struct DonationCameraView: View {
 
     // Chế độ hoạt động
     var mode: CameraMode = .hubDonation
-    var onCatalogPublished: ((CatalogItem) -> Void)? = nil
 
     init(
         onFinishCapturing: (([UIImage]) -> Void)? = nil,
         onBackToHome: (() -> Void)? = nil,
         campaign: DonationCampaign? = nil,
-        mode: CameraMode = .hubDonation,
-        onCatalogPublished: ((CatalogItem) -> Void)? = nil
+        mode: CameraMode = .hubDonation
     ) {
         self.onFinishCapturing = onFinishCapturing
         self.onBackToHome = onBackToHome
         self.campaign = campaign
         self.mode = mode
-        self.onCatalogPublished = onCatalogPublished
     }
 
     // Điều hướng sang Bước 2:
@@ -167,9 +164,6 @@ struct DonationCameraView: View {
         .navigationDestination(isPresented: $navigateToCatalogPublish) {
             CatalogItemPublishView(
                 capturedImages: capturedImages,
-                onPublished: { item in
-                    onCatalogPublished?(item)
-                },
                 onBackToCatalog: {
                     if let onBackToHome = onBackToHome {
                         onBackToHome()

@@ -3,6 +3,57 @@ const assert = require('node:assert/strict');
 const { initializeApp, deleteApp } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
 const { createAccountApi, DELETED_NAME } = require('../account-api.cjs');
+const { createImageCleanupJobs } = require('../image-cleanup-jobs.cjs');
+
+test('Xoá tài khoản dọn ảnh của bản chờ đăng, giữ batch người khác/donation/bài hoàn tất và retry được sau lỗi Cloudinary', {
+  skip: !process.env.FIRESTORE_EMULATOR_HOST,
+}, async () => {
+  const app = initializeApp({ projectId: 'demo-reshare' }, 'account-pending-upload-test');
+  const db = getFirestore(app);
+  const owner = 'acc-pending-owner';
+  const prefix = 'acc-pending-fixture';
+  const pendingId = 'cat_acc-pending';
+  const doneId = 'cat_acc-pending-done';
+  const pendingImage = `catalog_items/${pendingId}/image-1`;
+  const paths = [`users/${owner}`, `catalog_items/${doneId}`,
+    `image_upload_batches/${prefix}-own`, `image_upload_batches/${prefix}-other`,
+    `image_upload_batches/${prefix}-donation`, `image_upload_batches/${prefix}-done`];
+  const cleaned = [];
+  let cloudinaryFails = true;
+  const deleteCatalogImage = async id => {
+    if (cloudinaryFails) throw new Error('temporary image service failure');
+    cleaned.push(id);
+  };
+  try {
+    await db.doc(`users/${owner}`).set({ role: 'donor', displayName: 'Test' });
+    await db.doc(`catalog_items/${doneId}`).set({ donorId: owner, status: 'completed', imagePublicIds: [`catalog_items/${doneId}/keep`] });
+    await db.doc(paths[2]).set({ ownerUid: owner, purpose: 'catalog_item', recordId: pendingId,
+      assets: { one: pendingImage, invalid: 'catalog_items/someone-else/keep' } });
+    await db.doc(paths[3]).set({ ownerUid: 'another-owner', purpose: 'catalog_item', recordId: 'cat_other', assets: { one: 'catalog_items/cat_other/keep' } });
+    await db.doc(paths[4]).set({ ownerUid: owner, purpose: 'donation', recordId: 'donation-keep', assets: { one: 'donations/donation-keep/keep' } });
+    await db.doc(paths[5]).set({ ownerUid: owner, purpose: 'catalog_item', recordId: doneId, assets: { one: `catalog_items/${doneId}/keep` } });
+    const api = createAccountApi({ db, auth: { deleteUser: async () => {} },
+      verifyToken: async () => ({ uid: owner, auth_time: Date.now() / 1000 }), deleteCatalogImage });
+    const result = await api.handle('POST', '/v1/account/delete', { authorization: 'Bearer test' });
+    assert.equal(result.body.deleted, true);
+    assert.equal(result.body.summary.imagesPending, 1);
+    assert.equal((await db.doc(paths[2]).get()).exists, false);
+    for (const path of paths.slice(3)) assert.equal((await db.doc(path).get()).exists, true);
+    const jobs = await db.collection('image_cleanup_jobs').get();
+    const ours = jobs.docs.filter(doc => doc.data().publicIds?.includes(pendingImage));
+    assert.equal(ours.length, 1);
+    assert.deepEqual(ours[0].data().publicIds, [pendingImage]);
+    cloudinaryFails = false;
+    await createImageCleanupJobs({ db, deleteCatalogImage }).processJob(ours[0].ref);
+    assert.deepEqual(cleaned, [pendingImage]);
+    assert.equal((await ours[0].ref.get()).exists, false);
+  } finally {
+    for (const path of paths) await db.doc(path).delete();
+    const jobs = await db.collection('image_cleanup_jobs').get();
+    for (const doc of jobs.docs) if (doc.data().publicIds?.includes(pendingImage)) await doc.ref.delete();
+    await deleteApp(app);
+  }
+});
 
 test('Xoá tài khoản: giữ đơn ẩn danh, gỡ bài đang mở, mở lại món đang giữ, đổi tên trong chat, xoá Auth sau cùng', {
   skip: !process.env.FIRESTORE_EMULATOR_HOST,
