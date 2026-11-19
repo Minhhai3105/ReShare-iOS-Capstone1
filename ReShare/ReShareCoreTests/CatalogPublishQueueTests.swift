@@ -65,6 +65,21 @@ final class CatalogPublishStoreTests: XCTestCase {
         } catch {}
         XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent(job.id).appendingPathComponent("0.jpg").path))
     }
+
+    func testReadsDraftCreatedBeforeCancellationFlagWasAdded() async throws {
+        let root = temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = CatalogPublishStore(root: root)
+        let job = makeJob()
+        try await store.create(job, images: sampleImages(), thumbnail: Data([1]))
+        let manifest = root.appendingPathComponent(job.id).appendingPathComponent("job.json")
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: manifest)) as? [String: Any])
+        json.removeValue(forKey: "cancellationRequested")
+        try JSONSerialization.data(withJSONObject: json).write(to: manifest)
+        let restored = try await store.load(donorId: "donor-a")
+        XCTAssertEqual(restored, [job])
+        XCTAssertNil(restored.first?.cancellationRequested)
+    }
 }
 
 @MainActor
@@ -269,6 +284,181 @@ final class CatalogPublishQueueTests: XCTestCase {
         queue.setUser(nil)
     }
 
+    func testCancellationCleansRemoteBeforeRemovingDraftWithOrWithoutCheckpointedImages() async throws {
+        for hasUploadedImage in [false, true] {
+            let root = temporaryRoot()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let store = CatalogPublishStore(root: root)
+            var job = makeJob()
+            job.state = .failed
+            if hasUploadedImage { job.uploaded[0] = asset(job, index: 0) }
+            try await store.create(job, images: sampleImages(), thumbnail: Data([1]))
+            let transport = PublishTransportStub()
+            transport.onCleanup = { candidate in
+                let durable = try await store.load(donorId: "donor-a")
+                XCTAssertEqual(durable.first?.id, candidate.id)
+                XCTAssertEqual(durable.first?.cancellationRequested, true)
+                let images = try await store.images(for: candidate)
+                XCTAssertEqual(images, sampleImages(), "Local photos must remain until cleanup succeeds")
+            }
+            let queue = CatalogPublishQueue(store: store, transport: transport)
+            queue.setUser("donor-a")
+            try await until { !queue.isRestoring }
+            await queue.cancel(job.id)
+            let durable = try await store.load(donorId: "donor-a")
+            XCTAssertEqual(transport.cleanupJobs.map(\.id), [job.id])
+            XCTAssertTrue(durable.isEmpty)
+            XCTAssertTrue(queue.jobs.isEmpty)
+            XCTAssertTrue(queue.cancellingIDs.isEmpty)
+            queue.setUser(nil)
+        }
+    }
+
+    func testCleanupFailureKeepsDraftAndPreventsPublishingPossiblyDeletedImages() async throws {
+        let root = temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = CatalogPublishStore(root: root)
+        var job = makeJob()
+        job.state = .failed
+        job.uploaded[0] = asset(job, index: 0)
+        try await store.create(job, images: sampleImages(), thumbnail: Data([1]))
+        let transport = PublishTransportStub()
+        transport.cleanupError = URLError(.networkConnectionLost)
+        let queue = CatalogPublishQueue(store: store, transport: transport)
+        queue.setUser("donor-a")
+        try await until { !queue.isRestoring }
+        await queue.cancel(job.id)
+        let durable = try await store.load(donorId: "donor-a")
+        XCTAssertEqual(durable.first?.cancellationRequested, true)
+        XCTAssertEqual(queue.jobs.first?.state, .failed)
+        XCTAssertTrue(queue.jobs.first?.errorMessage?.contains("Chưa huỷ") == true)
+        let images = try await store.images(for: job)
+        XCTAssertEqual(images, sampleImages())
+        transport.cleanupError = nil
+        await queue.retry(job.id)
+        XCTAssertTrue(transport.sentIndices.isEmpty)
+        XCTAssertTrue(transport.publishAttempts.isEmpty)
+        await queue.cancel(job.id)
+        XCTAssertTrue(queue.jobs.isEmpty)
+        XCTAssertEqual(transport.cleanupJobs.count, 2)
+        queue.setUser(nil)
+    }
+
+    func testCancellationRejectsUploadingAndPublishedStates() async throws {
+        let root = temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let transport = PublishTransportStub()
+        transport.holdUploads = true
+        let queue = CatalogPublishQueue(store: CatalogPublishStore(root: root), transport: transport)
+        queue.setUser("donor-a")
+        let job = makeJob()
+        try await queue.enqueue(job, images: sampleImages(), thumbnail: Data([1]))
+        try await until { transport.heldCount == 1 }
+        await queue.cancel(job.id)
+        XCTAssertTrue(transport.cleanupJobs.isEmpty)
+        XCTAssertEqual(queue.jobs.first?.state, .uploading)
+        transport.releaseUploads()
+        try await until { queue.jobs.first?.state == .published }
+        await queue.cancel(job.id)
+        XCTAssertTrue(transport.cleanupJobs.isEmpty)
+        XCTAssertEqual(queue.jobs.first?.state, .published)
+        queue.setUser(nil)
+    }
+
+    func testCancellationSurvivesAccountSwitchWithoutDeletingTheOldOwnersDraft() async throws {
+        let root = temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = CatalogPublishStore(root: root)
+        var job = makeJob()
+        job.state = .failed
+        try await store.create(job, images: sampleImages(), thumbnail: Data([1]))
+        let transport = PublishTransportStub()
+        transport.holdCleanup = true
+        let queue = CatalogPublishQueue(store: store, transport: transport)
+        queue.setUser("donor-a")
+        try await until { !queue.isRestoring }
+        let cancellation = Task { await queue.cancel(job.id) }
+        try await until { transport.cleanupHeld }
+        queue.setUser("donor-b")
+        try await until { !queue.isRestoring }
+        XCTAssertTrue(queue.jobs.isEmpty)
+        queue.setUser("donor-a")
+        try await until { !queue.isRestoring }
+        await queue.retry(job.id)
+        await queue.cancel(job.id)
+        XCTAssertTrue(transport.sentIndices.isEmpty)
+        XCTAssertEqual(transport.cleanupJobs.count, 1)
+        transport.releaseCleanup()
+        await cancellation.value
+        let durable = try await store.load(donorId: "donor-a")
+        XCTAssertEqual(durable.first?.id, job.id)
+        XCTAssertEqual(queue.jobs.first?.id, job.id)
+        XCTAssertEqual(durable.first?.cancellationRequested, true)
+        XCTAssertTrue(queue.cancellingIDs.isEmpty)
+        queue.setUser(nil)
+    }
+
+    func testAlreadyPublishedCancellationRetainsPhotosAndRetryAcknowledgesSamePost() async throws {
+        let root = temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let transport = PublishTransportStub()
+        transport.losePublishAcknowledgementOnce = true
+        let queue = CatalogPublishQueue(store: CatalogPublishStore(root: root), transport: transport)
+        queue.setUser("donor-a")
+        let job = makeJob()
+        try await queue.enqueue(job, images: sampleImages(), thumbnail: Data([1]))
+        try await until { queue.jobs.first?.state == .failed }
+        await queue.cancel(job.id)
+        XCTAssertNil(queue.jobs.first?.cancellationRequested)
+        XCTAssertEqual(queue.jobs.first?.completedImageCount, 3)
+        XCTAssertTrue(queue.jobs.first?.errorMessage?.contains("được đăng") == true)
+        await queue.retry(job.id)
+        try await until { queue.jobs.first?.state == .published }
+        XCTAssertEqual(transport.sentIndices, [[0, 1, 2], []])
+        XCTAssertEqual(transport.publishedIDs.count, 1)
+        queue.setUser(nil)
+    }
+
+    func testInterruptedCancellationRestoresCleanupIntentInsteadOfPublishing() async throws {
+        let root = temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        var job = makeJob()
+        job.state = .failed
+        job.cancellationRequested = true
+        job.uploaded[0] = asset(job, index: 0)
+        let store = CatalogPublishStore(root: root)
+        try await store.create(job, images: sampleImages(), thumbnail: Data([1]))
+        let transport = PublishTransportStub()
+        let queue = CatalogPublishQueue(store: store, transport: transport)
+        queue.setUser("donor-a")
+        try await until { !queue.isRestoring }
+        await queue.retry(job.id)
+        XCTAssertTrue(transport.sentIndices.isEmpty)
+        XCTAssertTrue(transport.publishAttempts.isEmpty)
+        await queue.cancel(job.id)
+        XCTAssertTrue(queue.jobs.isEmpty)
+        XCTAssertEqual(transport.cleanupJobs.count, 1)
+        queue.setUser(nil)
+    }
+
+    func testPermissionAndExpiredSessionMessagesDoNotSuggestNetworkRetry() async throws {
+        for denied in [CatalogPublishQueueError.permissionDenied, .sessionExpired] {
+            let root = temporaryRoot()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let transport = PublishTransportStub()
+            transport.publishError = denied
+            let queue = CatalogPublishQueue(store: CatalogPublishStore(root: root), transport: transport)
+            queue.setUser("donor-a")
+            let job = makeJob()
+            try await queue.enqueue(job, images: sampleImages(), thumbnail: Data([1]))
+            try await until { queue.jobs.first?.state == .failed }
+            let message = try XCTUnwrap(queue.jobs.first?.errorMessage)
+            XCTAssertEqual(message, denied.errorDescription)
+            XCTAssertFalse(message.localizedCaseInsensitiveContains("mạng"))
+            queue.setUser(nil)
+        }
+    }
+
     private func until(_ condition: () -> Bool, file: StaticString = #filePath, line: UInt = #line) async throws {
         let deadline = Date().addingTimeInterval(5)
         while !condition() {
@@ -290,6 +480,13 @@ private final class PublishTransportStub: CatalogPublishTransport {
     var receivedImageIDs: [[String]] = []
     var publishAttempts: [String] = []
     var publishedIDs: Set<String> = []
+    var publishError: Error?
+    var cleanupError: Error?
+    var cleanupJobs: [CatalogPublishJob] = []
+    var onCleanup: ((CatalogPublishJob) async throws -> Void)?
+    var holdCleanup = false
+    private var cleanupContinuation: CheckedContinuation<Void, Never>?
+    var cleanupHeld: Bool { cleanupContinuation != nil }
     private var continuations: [CheckedContinuation<Void, Never>] = []
     var heldCount: Int { continuations.count }
 
@@ -309,11 +506,26 @@ private final class PublishTransportStub: CatalogPublishTransport {
 
     func publish(_ job: CatalogPublishJob) async throws {
         publishAttempts.append(job.id)
+        if let publishError { throw publishError }
         publishedIDs.insert(job.id)
         if losePublishAcknowledgementOnce {
             losePublishAcknowledgementOnce = false
             throw URLError(.timedOut)
         }
+    }
+
+    func cleanup(_ job: CatalogPublishJob) async throws {
+        cleanupJobs.append(job)
+        try await onCleanup?(job)
+        if holdCleanup { await withCheckedContinuation { cleanupContinuation = $0 } }
+        if publishedIDs.contains(job.id) { throw CatalogPublishQueueError.alreadyPublished }
+        if let cleanupError { throw cleanupError }
+    }
+
+    func releaseCleanup() {
+        holdCleanup = false
+        cleanupContinuation?.resume()
+        cleanupContinuation = nil
     }
 
     func releaseUploads() {

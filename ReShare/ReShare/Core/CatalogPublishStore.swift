@@ -43,7 +43,14 @@ actor CatalogPublishStore {
             let job = try JSONDecoder().decode(CatalogPublishJob.self, from: Data(contentsOf: manifest))
             try validate(job)
             guard job.id == directory.lastPathComponent else { throw CatalogPublishQueueError.invalidDraft }
-            return job.payload.donorId == donorId ? job : nil
+            guard job.payload.donorId == donorId else { return nil }
+            #if os(iOS)
+            // Cập nhật cả ảnh/manifest của bản chờ được tạo bởi bản app trước.
+            for file in try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) {
+                try FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: file.path)
+            }
+            #endif
+            return job
         }.sorted { $0.createdAt < $1.createdAt }
     }
 
@@ -91,7 +98,7 @@ actor CatalogPublishStore {
 
     private func write(_ data: Data, to url: URL) throws {
         #if os(iOS)
-        try data.write(to: url, options: [.atomic, .completeFileProtection])
+        try data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
         #else
         try data.write(to: url, options: .atomic)
         #endif

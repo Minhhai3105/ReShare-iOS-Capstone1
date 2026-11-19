@@ -29,6 +29,8 @@ nonisolated struct CatalogPublishJob: Codable, Identifiable, Equatable, Sendable
     var uploaded: [CatalogPublishAsset?]
     var state: State = .queued
     var errorMessage: String?
+    // Optional để đọc được bản chờ cũ. Khi đã xác nhận huỷ, chỉ tiếp tục cleanup, không đăng lại.
+    var cancellationRequested: Bool?
 
     init(id: String, payload: CatalogPublishPayload, imageCount: Int) {
         self.id = id
@@ -43,6 +45,7 @@ nonisolated struct CatalogPublishJob: Codable, Identifiable, Equatable, Sendable
 
 nonisolated enum CatalogPublishQueueError: LocalizedError {
     case invalidDraft, duplicateDraft, accountChanged, missingImage
+    case permissionDenied, sessionExpired, alreadyPublished
 
     var errorDescription: String? {
         switch self {
@@ -50,6 +53,9 @@ nonisolated enum CatalogPublishQueueError: LocalizedError {
         case .duplicateDraft: return "Bài này đã nằm trong danh sách chờ đăng."
         case .accountChanged: return "Tài khoản đã thay đổi. Vui lòng đăng nhập lại đúng tài khoản."
         case .missingImage: return "Không đọc được ảnh của bản chờ đăng. Nội dung vẫn được giữ trên máy."
+        case .permissionDenied: return "Bạn không có quyền thực hiện thao tác này hoặc tài khoản đã bị khoá. Vui lòng liên hệ quản trị viên."
+        case .sessionExpired: return "Phiên đăng nhập đã hết hiệu lực hoặc đã bị thu hồi. Vui lòng đăng nhập lại để tiếp tục."
+        case .alreadyPublished: return "Bài đã được đăng nên không thể huỷ như bản chờ. Hãy cập nhật danh sách hoặc bấm Thử lại để xác nhận bài đã đăng."
         }
     }
 }

@@ -1,5 +1,7 @@
 import Foundation
 import UIKit
+import FirebaseAuth
+import FirebaseFirestore
 
 extension CatalogPublishQueue {
     static let shared = CatalogPublishQueue(
@@ -24,6 +26,33 @@ private final class FirebaseCatalogPublishTransport: CatalogPublishTransport {
         _ images: [Data], job: CatalogPublishJob,
         onUploaded: @escaping @MainActor (Int, CatalogPublishAsset) async throws -> Void
     ) async throws {
+        do { try await uploadImages(images, job: job, onUploaded: onUploaded) }
+        catch { throw mappedError(error) }
+    }
+
+    func publish(_ job: CatalogPublishJob) async throws {
+        do { try await publishItem(job) }
+        catch { throw mappedError(error) }
+    }
+
+    func cleanup(_ job: CatalogPublishJob) async throws {
+        do {
+            try checkUser(job)
+            try await CloudinaryImageService.shared.deletePendingCatalogImages(
+                recordId: job.id, expectedUserId: job.payload.donorId
+            )
+        } catch {
+            if case CloudinaryImageError.serverRejected(409) = error {
+                throw CatalogPublishQueueError.alreadyPublished
+            }
+            throw mappedError(error)
+        }
+    }
+
+    private func uploadImages(
+        _ images: [Data], job: CatalogPublishJob,
+        onUploaded: @escaping @MainActor (Int, CatalogPublishAsset) async throws -> Void
+    ) async throws {
         try checkUser(job)
         let missing = job.uploaded.indices.filter { job.uploaded[$0] == nil }
         guard !missing.isEmpty else { return }
@@ -38,7 +67,7 @@ private final class FirebaseCatalogPublishTransport: CatalogPublishTransport {
         )
     }
 
-    func publish(_ job: CatalogPublishJob) async throws {
+    private func publishItem(_ job: CatalogPublishJob) async throws {
         try checkUser(job)
         let assets = job.uploaded.compactMap { $0 }
         guard assets.count == job.imageClientIDs.count else { throw CatalogPublishQueueError.missingImage }
@@ -60,5 +89,23 @@ private final class FirebaseCatalogPublishTransport: CatalogPublishTransport {
         guard AuthService.shared.currentUserId == job.payload.donorId else {
             throw CatalogPublishQueueError.accountChanged
         }
+    }
+
+    private func mappedError(_ error: Error) -> Error {
+        if case CloudinaryImageError.signedOut = error { return CatalogPublishQueueError.sessionExpired }
+        if case CloudinaryImageError.serverRejected(401) = error { return CatalogPublishQueueError.sessionExpired }
+        if case CloudinaryImageError.serverRejected(403) = error { return CatalogPublishQueueError.permissionDenied }
+        let nsError = error as NSError
+        if nsError.domain == FirestoreErrorDomain {
+            if nsError.code == FirestoreErrorCode.permissionDenied.rawValue { return CatalogPublishQueueError.permissionDenied }
+            if nsError.code == FirestoreErrorCode.unauthenticated.rawValue { return CatalogPublishQueueError.sessionExpired }
+        }
+        if nsError.domain == AuthErrorDomain {
+            if nsError.code == AuthErrorCode.userDisabled.rawValue { return CatalogPublishQueueError.permissionDenied }
+            if [AuthErrorCode.invalidUserToken, .userTokenExpired, .userNotFound].contains(where: { $0.rawValue == nsError.code }) {
+                return CatalogPublishQueueError.sessionExpired
+            }
+        }
+        return error
     }
 }

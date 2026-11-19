@@ -8,6 +8,7 @@ protocol CatalogPublishTransport {
         onUploaded: @escaping @MainActor (Int, CatalogPublishAsset) async throws -> Void
     ) async throws
     func publish(_ job: CatalogPublishJob) async throws
+    func cleanup(_ job: CatalogPublishJob) async throws
 }
 
 /// Hàng đợi thuộc vòng đời app, không thuộc màn nhập. Chỉ chạy một bài tại một thời điểm.
@@ -16,6 +17,7 @@ final class CatalogPublishQueue: ObservableObject {
     @Published private(set) var jobs: [CatalogPublishJob] = []
     @Published private(set) var loadError: String?
     @Published private(set) var isRestoring = false
+    @Published private(set) var cancellingIDs: Set<String> = []
     private(set) var donorId: String?
 
     private let store: CatalogPublishStore
@@ -75,7 +77,8 @@ final class CatalogPublishQueue: ObservableObject {
     }
 
     func retry(_ id: String) async {
-        guard let index = jobs.firstIndex(where: { $0.id == id && $0.state == .failed }),
+        guard let index = jobs.firstIndex(where: { $0.id == id && $0.state == .failed && $0.cancellationRequested != true }),
+              !cancellingIDs.contains(id),
               retrying.insert(id).inserted else { return }
         defer { retrying.remove(id) }
         let token = generation
@@ -94,6 +97,38 @@ final class CatalogPublishQueue: ObservableObject {
     }
 
     func resume() { startWorker() }
+
+    func cancel(_ id: String) async {
+        guard var job = jobs.first(where: { $0.id == id && $0.state == .failed }),
+              !retrying.contains(id), cancellingIDs.insert(id).inserted else { return }
+        // Không xoá set này khi đổi tài khoản: đăng nhập lại cùng chủ cũng phải chờ cleanup cũ xong.
+        defer { cancellingIDs.remove(id) }
+        let token = generation
+        job.cancellationRequested = true
+        job.errorMessage = "Chưa hoàn tất huỷ bản chờ. Vui lòng thử huỷ lại khi sẵn sàng."
+        do {
+            try checkSession(token, owner: job.payload.donorId)
+            try await store.save(job)
+            try checkSession(token)
+            replace(job)
+            try await transport.cleanup(job)
+            try checkSession(token, owner: job.payload.donorId)
+            try await store.remove(job)
+            try checkSession(token)
+            jobs.removeAll { $0.id == id }
+        } catch {
+            guard generation == token, !Task.isCancelled else { return }
+            if case CatalogPublishQueueError.alreadyPublished = error {
+                job.cancellationRequested = nil
+            }
+            let message = Self.failureMessage(error)
+            job.errorMessage = "Chưa huỷ được bản chờ. \(message) Nội dung vẫn được giữ trên máy."
+            do { try await store.save(job) }
+            catch { if generation == token { loadError = "Chưa lưu được trạng thái huỷ. Bản chờ vẫn được giữ trên máy." } }
+            guard generation == token else { return }
+            replace(job)
+        }
+    }
 
     func discardDrafts(donorId: String) async throws {
         if self.donorId == donorId { setUser(nil) }
@@ -164,19 +199,25 @@ final class CatalogPublishQueue: ObservableObject {
             guard generation == token, !Task.isCancelled,
                   var latest = jobs.first(where: { $0.id == initial.id }) else { return }
             latest.state = .failed
-            latest.errorMessage = (error as NSError).domain == NSURLErrorDomain
-                ? "Mất kết nối mạng. Nội dung và ảnh vẫn được giữ; hãy bấm Thử lại khi có mạng."
-                : (error as? LocalizedError)?.errorDescription
-                    ?? "Chưa đăng được bài. Kiểm tra mạng rồi bấm Thử lại; nội dung và ảnh vẫn được giữ."
-            replace(latest)
+            latest.errorMessage = Self.failureMessage(error)
             do { try await store.save(latest) }
             catch { if generation == token { loadError = "Chưa lưu được trạng thái lỗi. Bản chờ gốc vẫn ở trên máy." } }
+            guard generation == token, !Task.isCancelled else { return }
+            replace(latest)
         }
     }
 
     private func replace(_ job: CatalogPublishJob) {
         guard let index = jobs.firstIndex(where: { $0.id == job.id }) else { return }
         jobs[index] = job
+    }
+
+    private static func failureMessage(_ error: Error) -> String {
+        if (error as NSError).domain == NSURLErrorDomain {
+            return "Mất kết nối mạng. Hãy thử lại khi có mạng."
+        }
+        return (error as? LocalizedError)?.errorDescription
+            ?? "Không thể hoàn tất thao tác. Vui lòng thử lại sau hoặc liên hệ hỗ trợ."
     }
 
     private func checkSession(_ token: UUID, owner: String? = nil) throws {

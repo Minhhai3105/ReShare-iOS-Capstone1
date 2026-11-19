@@ -93,15 +93,26 @@ function createImageApi({ db, verifyToken, cloudinary, cloudName, apiKey, apiSec
   }
 
   async function cleanup(uid, body) {
-    const { purpose, recordId, publicIds } = body;
+    const { purpose, recordId } = body;
+    const allPending = body.allPending === true;
     const config = imagePurpose(purpose);
     validateRecordId(purpose, recordId);
-    validatePublicIds(publicIds, `${config.prefix}/${recordId}`);
+    if (allPending && purpose !== 'catalog_item') throw new ApiError(400, 'Batch cleanup is only available for pending catalog items');
+    if (!allPending) validatePublicIds(body.publicIds, `${config.prefix}/${recordId}`);
     const batch = await batchReference(purpose, recordId).get();
-    if (!batch.exists || batch.data().ownerUid !== uid) throw new ApiError(403, 'No upload intent');
-    const assigned = Object.values(batch.data().assets || {});
-    if (!publicIds.every(id => assigned.includes(id))) throw new ApiError(403, 'Image is not owned by this upload');
     const record = await recordSnapshot(purpose, recordId);
+    if (!batch.exists) {
+      if (allPending && !record.exists) return {};
+      if (allPending) throw new ApiError(409, 'Record already published');
+      throw new ApiError(403, 'No upload intent');
+    }
+    if (batch.data().ownerUid !== uid) throw new ApiError(403, 'No upload intent');
+    const assigned = Object.values(batch.data().assets || {});
+    const publicIds = allPending ? assigned : body.publicIds;
+    if (allPending && record.exists) throw new ApiError(409, 'Record already published');
+    if (allPending && publicIds.length === 0) return {};
+    if (allPending) validatePublicIds(publicIds, `${config.prefix}/${recordId}`);
+    if (!publicIds.every(id => assigned.includes(id))) throw new ApiError(403, 'Image is not owned by this upload');
     if (record.exists && publicIds.some(id => (record.data().imagePublicIds || []).includes(id))) {
       throw new ApiError(409, 'Image is attached to a published record');
     }

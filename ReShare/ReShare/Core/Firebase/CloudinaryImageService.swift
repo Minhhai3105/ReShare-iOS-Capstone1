@@ -94,6 +94,12 @@ final class CloudinaryImageService {
         let publicIds: [String]
     }
 
+    private struct PendingCatalogCleanupRequest: Encodable {
+        let purpose = CloudinaryImagePurpose.catalogItem
+        let recordId: String
+        let allPending = true
+    }
+
     private struct ReadAccessRequest: Encodable {
         let donationId: String
         let publicId: String
@@ -240,6 +246,13 @@ final class CloudinaryImageService {
         let _: EmptyResponse = try await backendRequest(
             "v1/images/cleanup",
             body: CleanupRequest(purpose: purpose, recordId: recordId, publicIds: images.map(\.publicId))
+        )
+    }
+
+    func deletePendingCatalogImages(recordId: String, expectedUserId: String) async throws {
+        let _: EmptyResponse = try await backendRequest(
+            "v1/images/cleanup", body: PendingCatalogCleanupRequest(recordId: recordId),
+            expectedUserId: expectedUserId
         )
     }
 
