@@ -39,6 +39,7 @@ export const ADMIN_ROUTE = Object.freeze({
 
   // Báo cáo vi phạm từ app (chỉ System Admin, App Store Guideline 1.2)
   moderation: 'admin-moderation',
+  users: 'admin-users',
 
   // Chiến dịch quyên góp (chỉ System Admin)
   campaignList: 'admin-campaign-list',

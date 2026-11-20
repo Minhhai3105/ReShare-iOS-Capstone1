@@ -18,4 +18,18 @@ async function assertCurrentStaffAccess(transaction, db, uid, { warehouseId, sys
   }
 }
 
-module.exports = { assertCurrentStaffAccess };
+async function requireSystemAdmin(db, verifyToken, headers) {
+  const match = /^Bearer (\S+)$/.exec(headers?.authorization || '');
+  if (!match) throw new ApiError(401, 'Sign in required');
+  let claims;
+  try { claims = await verifyToken(match[1]); }
+  catch { throw new ApiError(401, 'Invalid session'); }
+  if (!claims?.uid) throw new ApiError(401, 'Invalid session');
+  const assignment = (await db.collection('staff_assignments').doc(claims.uid).get()).data();
+  if (assignment?.active !== true || assignment.role !== 'system_admin') {
+    throw new ApiError(403, 'System Admin access required', 'SYSTEM_ADMIN_REQUIRED');
+  }
+  return { uid: claims.uid };
+}
+
+module.exports = { assertCurrentStaffAccess, requireSystemAdmin };

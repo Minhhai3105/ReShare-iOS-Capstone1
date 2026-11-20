@@ -3,7 +3,7 @@ const defaultBase = (typeof import.meta !== 'undefined' && import.meta.env?.VITE
   ? import.meta.env.VITE_ADMIN_API_BASE_URL
   : 'https://reshare-ios-capstone1-1.onrender.com').replace(/\/$/, '')
 
-export function createModerationRepository({ apiBase = defaultBase, authInstance = null, fetchImpl = fetch } = {}) {
+export function createModerationRequest({ apiBase = defaultBase, authInstance = null, fetchImpl = fetch } = {}) {
   async function token() {
     const auth = authInstance || (await import('../auth/firebase.js')).auth
     if (!auth?.currentUser) throw Object.assign(new Error('Vui lòng đăng nhập lại.'), { status: 401 })
@@ -32,6 +32,11 @@ export function createModerationRepository({ apiBase = defaultBase, authInstance
     return data
   }
 
+  return request
+}
+
+export function createModerationRepository(options) {
+  const request = createModerationRequest(options)
   return {
     async list(status = 'open') {
       const data = await request(`/v1/admin/moderation/reports?status=${encodeURIComponent(status)}`)
