@@ -1,6 +1,9 @@
 const { ApiError } = require('./image-api.cjs');
 const { runTransaction } = require('./firestore-transaction.cjs');
-const { assertCurrentStaffAccess } = require('./staff-access.cjs');
+const { assertCurrentStaffAccess, requireSystemAdmin } = require('./staff-access.cjs');
+const {
+  ACCOUNT_MODERATION_LEASE_MS, disableAccountSignIn, moderationInProgress, prepareSuspensionWrites, readSuspensionTarget,
+} = require('./account-suspension.cjs');
 
 // Xử lý báo cáo vi phạm (App Store Review Guideline 1.2): System Admin xem báo cáo người dùng gửi
 // từ app và gỡ bài, gỡ tin nhắn, khoá tài khoản hoặc bỏ qua. Client không đọc được `reports`
@@ -17,12 +20,7 @@ const ACTIONS = Object.freeze({
 const REMOVED_MESSAGE = 'Tin nhắn đã bị gỡ do vi phạm Điều khoản sử dụng.';
 const MAX_LIST = 200;
 const MAX_SUSPENDED_USERS = 100;
-const UNSUSPEND_LEASE_MS = 5 * 60 * 1000;
 const UNSUSPEND_INCOMPLETE = 'Account unsuspension is incomplete; retry to finish';
-
-function moderationInProgress() {
-  return new ApiError(409, 'Another account moderation action is in progress', 'MODERATION_IN_PROGRESS');
-}
 
 function dateString(value) {
   return value?.toDate?.().toISOString() || (value instanceof Date ? value.toISOString() : value || null);
@@ -31,20 +29,6 @@ function dateString(value) {
 function createModerationApi({ db, auth, verifyToken, serverTimestamp }) {
   if (!db || !auth || !verifyToken) throw new Error('Moderation API configuration is incomplete');
   const now = serverTimestamp || (() => new Date());
-
-  async function systemAdminFrom(headers) {
-    const match = /^Bearer (\S+)$/.exec(headers?.authorization || '');
-    if (!match) throw new ApiError(401, 'Sign in required');
-    let claims;
-    try { claims = await verifyToken(match[1]); }
-    catch { throw new ApiError(401, 'Invalid session'); }
-    if (!claims?.uid) throw new ApiError(401, 'Invalid session');
-    const assignment = await db.collection('staff_assignments').doc(claims.uid).get();
-    if (!assignment.exists || assignment.data().active !== true || assignment.data().role !== 'system_admin') {
-      throw new ApiError(403, 'System Admin access required', 'SYSTEM_ADMIN_REQUIRED');
-    }
-    return { uid: claims.uid };
-  }
 
   function messageRef(report) {
     return db.collection('conversations').doc(report.conversationId).collection('messages').doc(report.targetId);
@@ -160,11 +144,12 @@ function createModerationApi({ db, auth, verifyToken, serverTimestamp }) {
       const doc = await tx.get(ref);
       if (!doc.exists) throw new ApiError(404, 'User not found', 'USER_NOT_FOUND');
       const profile = doc.data();
+      if (profile.suspendPending === true) throw moderationInProgress();
       const retry = profile.unsuspendPending === true;
       if (profile.suspended !== true && !retry) throw new ApiError(409, 'Account is not suspended', 'NOT_SUSPENDED');
       const startedAt = Date.now();
       if (profile.unsuspendLeaseUntil > startedAt) throw moderationInProgress();
-      const until = startedAt + UNSUSPEND_LEASE_MS;
+      const until = startedAt + ACCOUNT_MODERATION_LEASE_MS;
       const update = { unsuspendPending: true, unsuspendLeaseUntil: until };
       if (!retry) {
         // Chờ hoàn tất khoá (kể cả thu hồi phiên lỗi) trước khi cho thao tác ngược lại.
@@ -189,17 +174,6 @@ function createModerationApi({ db, auth, verifyToken, serverTimestamp }) {
       throw new ApiError(502, UNSUSPEND_INCOMPLETE, 'UNSUSPEND_INCOMPLETE');
     }
     return { status: 200, body: { uid, suspended: false } };
-  }
-
-  // Khoá đăng nhập + thu hồi phiên. Gọi lại an toàn: tài khoản đã khoá/đã xoá thì coi như xong bước đó.
-  async function disableSignIn(uid) {
-    for (const step of [() => auth.updateUser(uid, { disabled: true }), () => auth.revokeRefreshTokens(uid)]) {
-      try { await step(); }
-      catch (error) {
-        if (error?.code === 'auth/user-not-found') return;
-        throw new ApiError(502, 'Account suspension is incomplete; retry to finish', 'SUSPEND_INCOMPLETE');
-      }
-    }
   }
 
   async function resolve(staff, reportId, body) {
@@ -252,21 +226,8 @@ function createModerationApi({ db, auth, verifyToken, serverTimestamp }) {
         const { owner } = await inspectTarget(report, ref => tx.get(ref));
         if (owner !== report.targetUserId) throw new ApiError(409, 'Reported user does not own the content', 'ATTRIBUTION_MISMATCH');
         if (typeof owner !== 'string' || !VALID_ID.test(owner)) throw new ApiError(400, 'Invalid target user');
-        const userRef = db.collection('users').doc(owner);
-        const userDoc = await tx.get(userRef);
-        if (userDoc.data()?.unsuspendPending === true) throw moderationInProgress();
-        const assignment = await tx.get(db.collection('staff_assignments').doc(owner));
-        if (assignment.exists && assignment.data().active === true) {
-          throw new ApiError(409, 'Staff accounts cannot be suspended here; revoke staff access first');
-        }
-        // Gỡ luôn các bài đang mở của người bị khoá để không còn ai liên hệ nhầm.
-        // Một điều kiện bằng rồi lọc trạng thái trong bộ nhớ: không phụ thuộc composite index.
-        const listings = await tx.get(db.collection('catalog_items').where('donorId', '==', owner).limit(200));
-        // Cờ suspended do server quản lý: Rules chặn ghi nội dung ngay, kể cả khi ID token cũ còn hạn.
-        writes.push(() => tx.set(userRef, { suspended: true, suspendedAt: timestamp }, { merge: true }));
-        for (const doc of listings.docs.filter(item => item.data().status === 'available')) {
-          writes.push(() => tx.update(doc.ref, { status: 'removed', moderation }));
-        }
+        const profile = await readSuspensionTarget(tx, db, owner);
+        writes.push(await prepareSuspensionWrites(tx, db, profile, moderation));
         suspendUid = owner;
       }
       await assertCurrentStaffAccess(tx, db, staff.uid, { systemOnly: true });
@@ -282,7 +243,7 @@ function createModerationApi({ db, auth, verifyToken, serverTimestamp }) {
     if (suspendUid) {
       // Gọi Auth ngoài transaction (callback transaction có thể chạy lại). Lỗi ở đây thì báo cáo vẫn
       // "Chờ xử lý" kèm pendingAction, admin bấm lại là chạy tiếp từ bước này.
-      await disableSignIn(suspendUid);
+      await disableAccountSignIn(auth, suspendUid);
       await runTransaction(db, async tx => {
         const reportDoc = await tx.get(reportRef);
         const report = reportDoc.exists ? reportDoc.data() : null;
@@ -300,7 +261,7 @@ function createModerationApi({ db, auth, verifyToken, serverTimestamp }) {
     const resolveMatch = /^\/v1\/admin\/moderation\/reports\/([^/]+)\/resolve$/.exec(path);
     const unsuspendMatch = /^\/v1\/admin\/moderation\/users\/([^/]+)\/unsuspend$/.exec(path);
     if (!listPath && !suspendedPath && !resolveMatch && !unsuspendMatch) throw new ApiError(404, 'Not found');
-    const staff = await systemAdminFrom(headers);
+    const staff = await requireSystemAdmin(db, verifyToken, headers);
     if (listPath && method === 'GET') return list(new URL(requestUrl || path, 'http://localhost'));
     if (suspendedPath && method === 'GET') return listSuspendedUsers();
     if (resolveMatch && method === 'POST') return resolve(staff, resolveMatch[1], body);

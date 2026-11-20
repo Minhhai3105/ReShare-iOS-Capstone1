@@ -22,6 +22,7 @@ const { createHubsApi } = require('./hubs-api.cjs');
 const { createAccountApi } = require('./account-api.cjs');
 const { cloudinaryCatalogImageDeleter, createImageCleanupJobs } = require('./image-cleanup-jobs.cjs');
 const { createModerationApi } = require('./moderation-api.cjs');
+const { createUsersAdminApi } = require('./users-admin-api.cjs');
 const { createP2pListingsApi } = require('./p2p-listings-api.cjs');
 const { createAiModerator, readAiAutoRemoveConfig } = require('./ai-moderation.cjs');
 const { createAiModerationJobs, readAiModerationConfig } = require('./ai-moderation-jobs.cjs');
@@ -68,6 +69,7 @@ const hubsApi = createHubsApi({ db, verifyToken, serverTimestamp: () => FieldVal
 const deleteCatalogImage = cloudinaryCatalogImageDeleter(cloudinary);
 const accountApi = createAccountApi({ db, auth: getAuth(), verifyToken, deleteCatalogImage });
 const moderationApi = createModerationApi({ db, auth: getAuth(), verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
+const usersAdminApi = createUsersAdminApi({ db, auth: getAuth(), verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const aiModerationConfig = readAiModerationConfig(process.env);
 const aiModerator = createAiModerator({
   baseUrl: process.env.AI_MODERATION_BASE_URL, apiKey: process.env.AI_MODERATION_API_KEY, model: process.env.AI_MODERATION_MODEL,
@@ -117,6 +119,7 @@ const server = http.createServer(async (request, response) => {
     pathname === '/v1/admin/moderation/suspended-users' ||
     /^\/v1\/admin\/moderation\/reports\/[^/]+\/resolve$/.test(pathname) ||
     /^\/v1\/admin\/moderation\/users\/[^/]+\/unsuspend$/.test(pathname);
+  const isUsersAdminPath = pathname === '/v1/admin/users' || /^\/v1\/admin\/users\/[^/]+\/(summary|suspend)$/.test(pathname);
   const isCampaignPath = pathname === '/v1/admin/campaigns' ||
     /^\/v1\/admin\/campaigns\/[^/]+(\/(update|status))?$/.test(pathname);
   const isHubPath = pathname === '/v1/admin/hubs' || /^\/v1\/admin\/hubs\/[^/]+\/(update|status|delete)$/.test(pathname);
@@ -187,6 +190,7 @@ const server = http.createServer(async (request, response) => {
       : isCampaignPath ? campaignsApi
       : isHubPath ? hubsApi
       : isModerationPath ? moderationApi
+      : isUsersAdminPath ? usersAdminApi
       : isP2pListingPath ? p2pListingsApi
       : isDonationAdminPath ? donationReviewApi
       : isAdminApi ? staffApi
