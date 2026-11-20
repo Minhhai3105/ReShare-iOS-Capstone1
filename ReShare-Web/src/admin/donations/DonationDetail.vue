@@ -3,6 +3,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import AdminFrame from '../layout/AdminFrame.vue'
 import { useInAdminShell } from '../layout/adminShell'
 import { decideDemoDonation, loadDemoDonation, statusLabels, steps } from './donation.demo'
+import { DONATION_STATUS_LABEL } from './donation.constants'
 import { assignDonationWarehouse, confirmDonationCategory, decideDonation, fetchQueueWarehouses, getAiAgreementSummary, getDonationForReview, getDonationImageUrl, resolveQueueAccess } from './donation.service'
 import { staffAssignment } from '../auth/auth.store'
 import { listWarehouses } from '../staff/staff.service'
@@ -332,12 +333,13 @@ watch(enlarged, async (value) => {
       <p v-if="donation && !allowed" role="alert" class="notice error">Donation thuộc kho ngoài phân công hoặc không khớp kho trên URL. Không hiển thị chi tiết và không cho xử lý.</p>
       <template v-if="donation && allowed">
         <section class="card status-card" aria-labelledby="status-title">
-          <div class="section-heading"><h2 id="status-title">{{ statusLabels[donation.status] }}</h2><span>Phiên bản {{ donation.version }}</span></div>
+          <div class="section-heading"><h2 id="status-title">{{ statusLabels[donation.status] || DONATION_STATUS_LABEL[donation.status] }}</h2><span>Phiên bản {{ donation.version }}</span></div>
           <p v-if="donation.reviewState === 'needs_information'" class="notice">Chờ người gửi bổ sung thông tin; chưa thể đưa ra quyết định tiếp theo.</p>
-          <ol class="stepper" aria-label="Tiến trình donation">
+          <ol v-if="donation.status !== 'cancelled'" class="stepper" aria-label="Tiến trình donation">
             <li v-for="(state, index) in steps" :key="state" :class="{ completed: donation.status !== 'rejected' && index <= steps.indexOf(donation.status) }" :aria-current="donation.status === state ? 'step' : undefined"><span>{{ index + 1 }}</span>{{ statusLabels[state] }}</li>
           </ol>
           <p v-if="donation.status === 'rejected'" class="rejected">Đơn đã bị từ chối; không tiếp tục luồng tiếp nhận.</p>
+          <p v-if="donation.status === 'cancelled'" class="notice">Người tặng đã huỷ đơn<span v-if="donation.cancelledAt"> lúc {{ formatDate(donation.cancelledAt) }}</span>.</p>
           <RouterLink v-if="!localPreview && donation.status === 'approved' && donation.warehouseId" :to="{ name: 'admin-donation-receipt', params: { donationId: donation.id } }">Ghi nhận hàng thực nhận →</RouterLink>
           <RouterLink v-if="!localPreview && ['received', 'in_stock'].includes(donation.status)" :to="{ name: 'admin-donation-stock-in', params: { donationId: donation.id } }">{{ donation.status === 'received' ? 'Nhập kho →' : 'Xem nhập kho →' }}</RouterLink>
           <p v-if="donation.statusNote"><strong>Nội dung công khai cho donor:</strong> {{ donation.statusNote }}</p>
@@ -388,7 +390,7 @@ watch(enlarged, async (value) => {
                 <div><dt>Nhân sự xác nhận</dt><dd>{{ donation.staffConfirmedCategory ? categoryName(donation.staffConfirmedCategory) : 'Chưa xác nhận' }}</dd></div>
               </dl>
               <p v-if="donation.staffConfirmedAt">Xác nhận lúc {{ formatDate(donation.staffConfirmedAt) }} bởi {{ donation.staffConfirmedByEmail || donation.staffConfirmedBy }}</p>
-              <form v-if="!localPreview" @submit.prevent="confirmCategory">
+              <form v-if="!localPreview && donation.status !== 'cancelled'" @submit.prevent="confirmCategory">
                 <label for="staff-category">Danh mục thực tế theo nhân sự</label>
                 <select id="staff-category" v-model="staffCategory" :disabled="aiSubmitting || !allowed">
                   <option value="clothing">Quần áo</option><option value="books">Sách vở</option><option value="household">Gia dụng</option>
@@ -421,7 +423,7 @@ watch(enlarged, async (value) => {
           </div>
           <aside class="card decision"><h2>Quyết định thẩm định</h2>
             <p v-if="!canDecide" class="notice">{{ conflict ? 'Cần tải phiên bản mới để tiếp tục.' : 'Trạng thái hiện tại không cho phép ra quyết định.' }}</p>
-            <form @submit.prevent="submit">
+            <form v-if="donation.status !== 'cancelled'" @submit.prevent="submit">
               <fieldset :disabled="!canDecide || submitting"><legend>Chọn quyết định</legend>
                 <label v-for="(label, value) in actionLabels" :key="value" class="radio"><input v-model="action" type="radio" :value="value" name="decision" :disabled="value === 'approve' && needsWarehouseBeforeApprove" />{{ label }}</label>
                 <p v-if="needsWarehouseBeforeApprove && canDecide" class="notice">Cần gán kho ở khối “Phân kho xử lý” trước khi duyệt.</p>

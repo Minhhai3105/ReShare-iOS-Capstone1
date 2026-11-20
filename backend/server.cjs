@@ -8,6 +8,7 @@ const { createStaffApi } = require('./staff-api.cjs');
 const { ApiError: ContactApiError, createContactApi } = require('./contact-api.cjs');
 const { createDonationReviewApi } = require('./donation-review-api.cjs');
 const { createDonationResubmitApi } = require('./donation-resubmit-api.cjs');
+const { CANCEL_PATH, createDonationCancelApi } = require('./donation-cancel-api.cjs');
 const { createReceiptApi } = require('./receipt-api.cjs');
 const { createStockIntakeApi } = require('./stock-intake-api.cjs');
 const { createInventoryApi } = require('./inventory-api.cjs');
@@ -54,6 +55,7 @@ const staffApi = createStaffApi({ db, auth: getAuth(), verifyToken });
 const contactApi = createContactApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const donationReviewApi = createDonationReviewApi({ db, auth: getAuth(), verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const donationResubmitApi = createDonationResubmitApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
+const donationCancelApi = createDonationCancelApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const receiptApi = createReceiptApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const stockIntakeApi = createStockIntakeApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const inventoryApi = createInventoryApi({ db, auth: getAuth(), verifyToken });
@@ -175,6 +177,7 @@ const server = http.createServer(async (request, response) => {
     // phải đứng trước isDonationAdminPath; isAdminApi là nhánh bắt tất cả cuối cùng.
     const handler = isContactPath ? contactApi
       : isDonationResubmitPath ? donationResubmitApi
+      : CANCEL_PATH.test(pathname) ? donationCancelApi
       : isAccountPath ? accountApi
       : isReceiptPath ? receiptApi
       : isStockIntakePath ? stockIntakeApi

@@ -25,6 +25,7 @@ const STATUS_TONE = {
   [DONATION_STATUS.inStock]: 'accent',
   [DONATION_STATUS.distributed]: 'success',
   [DONATION_STATUS.rejected]: 'danger',
+  [DONATION_STATUS.cancelled]: 'neutral',
 }
 const dateFormatter = new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
 const hourFormatter = new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit' })
@@ -607,6 +608,11 @@ watch(staffAssignment, () => {
 .queue-status--danger {
   background: var(--auth-danger-soft);
   color: var(--auth-danger);
+}
+
+.queue-status--neutral {
+  color: var(--text-secondary, #4b5563);
+  background: var(--surface-muted, #f3f4f6);
 }
 
 .queue-table__skeleton span {

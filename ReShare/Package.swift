@@ -8,6 +8,7 @@ let package = Package(
     products: [.library(name: "ReShareCore", targets: ["ReShareCore"])],
     targets: [
         .target(name: "ReShareCore", path: "ReShare/Core", sources: ["DonationQuantity.swift", "ReShareAPIConfiguration.swift", "CampaignRecord.swift", "ContentFilter.swift", "HubDisplayName.swift", "GoogleSignInSetup.swift", "PhoneNumberRule.swift", "CatalogPublishJob.swift", "CatalogPublishStore.swift", "CatalogPublishQueue.swift"]),
-        .testTarget(name: "ReShareCoreTests", dependencies: ["ReShareCore"], path: "ReShareCoreTests")
+        .target(name: "DonationStatusModel", path: "ReShare/Models", sources: ["DonationStatus.swift"]),
+        .testTarget(name: "ReShareCoreTests", dependencies: ["ReShareCore", "DonationStatusModel"], path: "ReShareCoreTests")
     ]
 )

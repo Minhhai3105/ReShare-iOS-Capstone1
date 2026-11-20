@@ -7,6 +7,7 @@ enum DonationStatus: String, Codable, CaseIterable {
     case inStock = "in_stock"
     case distributed = "distributed"
     case rejected = "rejected"
+    case cancelled = "cancelled"
 }
 
 // MARK: UI Helpers Extension
@@ -25,6 +26,8 @@ extension DonationStatus {
             return "Đã trao tặng"
         case .rejected:
             return "Từ chối"
+        case .cancelled:
+            return "Đã huỷ"
         }
     }
 
@@ -38,7 +41,7 @@ extension DonationStatus {
             return "shippingbox"
         case .distributed:
             return "gift"
-        case .rejected:
+        case .rejected, .cancelled:
             return "xmark.circle"
         }
     }
@@ -55,6 +58,8 @@ extension DonationStatus {
             return .green
         case .rejected:
             return .red
+        case .cancelled:
+            return .gray
         }
     }
 
@@ -72,6 +77,8 @@ extension DonationStatus {
             return "Đã trao tặng thành công đến người nhận."
         case .rejected:
             return "Món đồ chưa đạt tiêu chuẩn tiếp nhận của trạm."
+        case .cancelled:
+            return "Bạn đã huỷ đơn quyên góp."
         }
     }
 }

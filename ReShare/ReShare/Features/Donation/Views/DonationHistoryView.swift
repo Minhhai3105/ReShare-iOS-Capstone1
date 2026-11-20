@@ -11,7 +11,7 @@ struct DonationHistoryView: View {
     @State private var hubs: [String: HubRecord] = [:]
     @State private var isLoading: Bool = false
     @State private var loadError: String? = nil
-    private let filters = ["Tất cả", "Chờ tiếp nhận", "Đã duyệt", "Đã tiếp nhận", "Trong kho", "Đã trao", "Từ chối"]
+    private let filters = ["Tất cả", "Chờ tiếp nhận", "Đã duyệt", "Đã tiếp nhận", "Trong kho", "Đã trao", "Từ chối", "Đã huỷ"]
 
     var body: some View {
         NavigationStack {
@@ -78,7 +78,8 @@ struct DonationHistoryView: View {
                         VStack(spacing: 12) {
                             ForEach(filteredItems) { item in
                                 HistoryItemCard(item: item, hub: item.hubId.flatMap { hubs[$0] },
-                                                onResubmitted: { Task { await loadHistory() } })
+                                                onResubmitted: { Task { await loadHistory() } },
+                                                onCancelled: { await loadHistory() })
                             }
                         }
                         .padding(.horizontal, 20)
@@ -147,7 +148,8 @@ struct DonationHistoryView: View {
             "Đã tiếp nhận": .received,
             "Trong kho": .inStock,
             "Đã trao": .distributed,
-            "Từ chối": .rejected
+            "Từ chối": .rejected,
+            "Đã huỷ": .cancelled
         ]
         guard let status = statuses[selectedFilter] else {
             return items
@@ -163,9 +165,17 @@ struct HistoryItemCard: View {
     /// Điểm tiếp nhận đang hoạt động của đơn (nil khi đơn không chọn điểm, điểm đã ngừng hoặc chưa tải được).
     var hub: HubRecord? = nil
     var onResubmitted: () -> Void = {}
+    var onCancelled: () async -> Void = {}
     @State private var protectedImageURL: URL?
     @State private var showResubmit = false
     @State private var didResubmit = false
+    @State private var showCancelConfirmation = false
+    @State private var isCancelling = false
+    @State private var cancellationError: String?
+
+    private var canCancel: Bool {
+        item.status == .pending && item.reviewState != "needs_information"
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
@@ -279,6 +289,18 @@ struct HistoryItemCard: View {
                     Button("Bổ sung và gửi duyệt lại") { showResubmit = true }
                         .scaledFont(size: 12, weight: .semibold)
                 }
+                if canCancel {
+                    Button(isCancelling ? "Đang huỷ đơn…" : "Huỷ đơn", role: .destructive) {
+                        showCancelConfirmation = true
+                    }
+                    .scaledFont(size: 12, weight: .semibold)
+                    .disabled(isCancelling)
+                }
+                if let cancellationError {
+                    Text(cancellationError)
+                        .scaledFont(size: 12)
+                        .foregroundStyle(.red)
+                }
                 HStack {
                     HStack(spacing: 4) {
                         Image(systemName: "clock")
@@ -313,6 +335,26 @@ struct HistoryItemCard: View {
                 onResubmitted()
             }
         }) { DonationResubmitView(item: item, onResubmitted: { didResubmit = true }) }
+        .confirmationDialog("Huỷ đơn quyên góp này?", isPresented: $showCancelConfirmation, titleVisibility: .visible) {
+            Button("Huỷ đơn", role: .destructive) { Task { await cancelDonation() } }
+            Button("Giữ đơn", role: .cancel) { }
+        } message: {
+            Text("Kho sẽ không xử lý đơn nữa.")
+        }
+    }
+
+    @MainActor
+    private func cancelDonation() async {
+        guard canCancel, !isCancelling else { return }
+        isCancelling = true
+        cancellationError = nil
+        defer { isCancelling = false }
+        do {
+            try await DonationCancellationService.cancel(donationId: item.id, expectedVersion: item.version ?? 1)
+            await onCancelled()
+        } catch {
+            cancellationError = error is URLError ? "Không kết nối được để huỷ đơn. Vui lòng thử lại." : error.localizedDescription
+        }
     }
 
     // Tên lưu kèm đơn lúc gửi đứng trước; đơn cũ lấy tên điểm đang hoạt động; còn lại nhãn chung.
