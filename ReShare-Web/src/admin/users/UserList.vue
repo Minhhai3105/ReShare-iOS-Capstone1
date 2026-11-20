@@ -142,7 +142,7 @@ onMounted(() => load())
               <tr v-for="user in filtered" :key="user.uid" :class="{ 'is-selected': selected?.uid === user.uid }" @click="selectUser(user)">
                 <th scope="row">
                   <button type="button" class="users-name" :disabled="saving" @click.stop="selectUser(user)">
-                    {{ user.displayName || user.uid }}
+                    {{ user.displayName?.trim() || 'Chưa có tên' }}
                   </button>
                 </th>
                 <td>{{ user.email || '—' }}</td>
@@ -165,6 +165,7 @@ onMounted(() => load())
           <button type="button" class="auth-btn auth-btn--soft" :disabled="saving" @click="selectUser(null)">Đóng</button>
         </header>
         <dl>
+          <div><dt>Mã tài khoản</dt><dd>{{ selected.uid }}</dd></div>
           <div><dt>Email</dt><dd>{{ selected.email || '—' }}</dd></div>
           <div><dt>Số điện thoại</dt><dd>{{ selected.phoneNumber || '—' }}</dd></div>
           <div><dt>Trạng thái</dt><dd>{{ userStatus(selected).label }}</dd></div>
