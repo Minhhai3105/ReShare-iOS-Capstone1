@@ -386,7 +386,7 @@ struct CommunityCatalogView: View {
 
     private func itemCardView(for item: CatalogItem) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Khung ảnh có Huy hiệu Free/0đ & Trạng thái
+            // Khung ảnh có huy hiệu trạng thái
             ZStack(alignment: .bottomLeading) {
                 RoundedRectangle(cornerRadius: 14)
                     .fill(Color(red: 0.92, green: 0.94, blue: 0.90))
@@ -399,16 +399,17 @@ struct CommunityCatalogView: View {
                         )
                     }
                     .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .contentShape(RoundedRectangle(cornerRadius: 14))
 
-                // Huy hiệu Free / 0đ hoặc Đã có người hẹn
+                // Dùng cùng trạng thái và màu với màn chi tiết
                 HStack(spacing: 3) {
-                    Text(item.status == .reserved ? "Đã hẹn lấy" : "Free / 0đ")
+                    Text(item.status.displayText)
                         .scaledFont(size: 10, weight: .bold)
-                        .foregroundColor(item.status == .reserved ? Color.orange : Color(red: 0.08, green: 0.35, blue: 0.18))
+                        .foregroundColor(item.status.color)
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(item.status == .reserved ? Color.white : Color(red: 0.55, green: 0.92, blue: 0.70))
+                .background(item.status.badgeBgColor)
                 .clipShape(Capsule())
                 .padding(8)
             }
@@ -458,6 +459,7 @@ struct CommunityCatalogView: View {
         .padding(8)
         .background(Color.white)
         .cornerRadius(18)
+        .contentShape(Rectangle())
         .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 2)
     }
 
