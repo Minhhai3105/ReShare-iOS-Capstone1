@@ -160,6 +160,9 @@ async function logout() {
         </nav>
         <span class="admin-topbar__role"><AuthIcon name="shield-check" :size="15" />{{ roleLabel }}</span>
         <span class="admin-topbar__user" :title="userLabel"><AuthIcon name="user" :size="17" />{{ userLabel }}</span>
+        <RouterLink :to="{ name: ADMIN_ROUTE.changePassword }" class="admin-topbar__password" aria-label="Đổi mật khẩu" title="Đổi mật khẩu">
+          <AuthIcon name="key" :size="17" /><span>Đổi mật khẩu</span>
+        </RouterLink>
         <button type="button" class="admin-topbar__logout" @click="logout">
           <AuthIcon name="log-out" :size="17" /><span>Đăng xuất</span>
         </button>
@@ -271,7 +274,8 @@ async function logout() {
 .admin-topbar__crumb-current { overflow: hidden; color: var(--auth-text); font-weight: 600; text-overflow: ellipsis; }
 .admin-topbar__role { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; background: var(--auth-primary-soft); color: var(--auth-primary); font-size: 12px; white-space: nowrap; }
 .admin-topbar__user { display: inline-flex; align-items: center; gap: 6px; max-width: 220px; overflow: hidden; color: var(--auth-text-secondary); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
-.admin-topbar__logout {
+.admin-topbar__logout,
+.admin-topbar__password {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -287,6 +291,8 @@ async function logout() {
   cursor: pointer;
 }
 .admin-topbar__logout:hover { background: var(--auth-danger-soft); color: var(--auth-danger); }
+.admin-topbar__password { text-decoration: none; white-space: nowrap; }
+.admin-topbar__password:hover { background: var(--auth-primary-soft); color: var(--auth-primary); }
 
 .admin-layout__content { flex: 1; min-width: 0; padding: 24px; outline: none; }
 .admin-layout__backdrop { display: none; }
@@ -320,7 +326,8 @@ async function logout() {
 
 @media (max-width: 520px) {
   .admin-topbar__back { padding: 0 10px; }
-  .admin-topbar__logout span { display: none; }
+  .admin-topbar__logout span,
+  .admin-topbar__password span { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

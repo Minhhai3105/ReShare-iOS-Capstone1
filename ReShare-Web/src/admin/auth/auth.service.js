@@ -1,10 +1,13 @@
 import {
   browserLocalPersistence,
   browserSessionPersistence,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
   sendPasswordResetEmail,
   setPersistence,
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
+  updatePassword,
 } from 'firebase/auth'
 import { doc, getDocFromServer, onSnapshot } from 'firebase/firestore'
 import { AUTH_ERROR } from './auth.constants'
@@ -53,6 +56,18 @@ export function watchStaffAssignment(user, callback, onError) {
 export async function requestPasswordReset(email) {
   try {
     await sendPasswordResetEmail(auth, email.trim())
+  } catch (error) {
+    throw normalizeAuthError(error)
+  }
+}
+
+export async function requestPasswordChange(currentPassword, newPassword) {
+  const user = auth.currentUser
+  try {
+    if (!user?.email) throw Object.assign(new Error('No signed-in email account'), { code: 'auth/no-current-user' })
+    await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, currentPassword))
+    if (auth.currentUser !== user) throw Object.assign(new Error('Session changed'), { code: 'auth/no-current-user' })
+    await updatePassword(user, newPassword)
   } catch (error) {
     throw normalizeAuthError(error)
   }
