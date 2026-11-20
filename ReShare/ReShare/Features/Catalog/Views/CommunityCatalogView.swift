@@ -202,20 +202,23 @@ struct CommunityCatalogView: View {
     // Tải thêm trang cũ hơn; bỏ món đã có (vd. món vừa đăng được chèn sẵn ở đầu danh sách)
     private func loadMoreCatalog() async {
         guard let cursor = nextCatalogCursor, !isLoadingMore else { return }
+        let token = catalogLoadToken
         await MainActor.run { self.isLoadingMore = true }
         do {
             let page = try await FirestoreService.shared.fetchCatalogItems(after: cursor)
             await MainActor.run {
+                self.isLoadingMore = false
+                guard self.catalogLoadToken == token else { return }
                 let knownIds = Set(self.catalogItems.map(\.id))
                 self.catalogItems.append(contentsOf: page.items.filter { !knownIds.contains($0.id) })
                 self.nextCatalogCursor = page.nextCursor
                 self.loadError = nil
-                self.isLoadingMore = false
             }
         } catch {
             await MainActor.run {
-                self.loadError = "Không thể tải thêm Kho đồ 0đ: \(error.localizedDescription)"
                 self.isLoadingMore = false
+                guard self.catalogLoadToken == token else { return }
+                self.loadError = "Không thể tải thêm Kho đồ 0đ: \(error.localizedDescription)"
             }
         }
     }
@@ -347,7 +350,13 @@ struct CommunityCatalogView: View {
             } else {
                 LazyVGrid(columns: gridColumns, spacing: 14) {
                     ForEach(filteredItems) { item in
-                        NavigationLink(destination: CatalogItemDetailView(item: item)) {
+                        NavigationLink {
+                            CatalogItemDetailView(item: item) { deletedId in
+                                catalogLoadToken = UUID()
+                                catalogItems.removeAll { $0.id == deletedId }
+                                Task { await loadCatalog() }
+                            }
+                        } label: {
                             itemCardView(for: item)
                         }
                         .buttonStyle(PlainButtonStyle())

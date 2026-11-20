@@ -7,6 +7,7 @@ const vm = require('node:vm');
 const { ApiError } = require('../image-api.cjs');
 const { errorBody } = require('../error-body.cjs');
 const { CANCEL_PATH } = require('../donation-cancel-api.cjs');
+const { DELETE_PATH } = require('../p2p-owner-delete-api.cjs');
 const { readAiModerationConfig } = require('../ai-moderation-jobs.cjs');
 const { readAiAutoRemoveConfig } = require('../ai-moderation.cjs');
 
@@ -27,6 +28,9 @@ function loadHandler(extraEnv = {}, aiOptions = {}) {
       if (name === './error-body.cjs') return { errorBody };
       if (name === './donation-cancel-api.cjs') return { CANCEL_PATH, createDonationCancelApi: () => ({
         handle: async (_method, path) => ({ status: 200, body: { path, api: 'cancel' } }),
+      }) };
+      if (name === './p2p-owner-delete-api.cjs') return { DELETE_PATH, createP2pOwnerDeleteApi: () => ({
+        handle: async (_method, path) => ({ status: 200, body: { path, api: 'owner-delete' } }),
       }) };
       if (name === './p2p-reservation-expiry.cjs') return { createReservationExpiry: () => ({ start() {}, stop() {} }) };
       if (name === './ai-moderation.cjs') return { readAiAutoRemoveConfig, createAiModerator(options) {
@@ -79,6 +83,14 @@ test('Cancellation dispatches only the exact donor path', async () => {
   for (const other of [`${path}/extra`, `${path}led`, '/v1/donations/don-test/resubmit']) {
     assert.equal((await send(handler, other, 'POST')).body.api, undefined);
   }
+});
+
+test('P2P owner deletion dispatches only the exact non-admin path', async () => {
+  const handler = loadHandler();
+  const path = '/v1/p2p/listings/cat_test/delete';
+  assert.deepEqual((await send(handler, path, 'POST')).body, { path, api: 'owner-delete' });
+  assert.equal((await send(handler, `${path}/extra`, 'POST')).body.api, undefined);
+  assert.equal((await send(handler, '/v1/admin/p2p/listings/cat_test/remove', 'POST')).body.api, 'p2p');
 });
 
 test('Malformed URL returns a bounded 400 response; the same entry point handles the next request', async () => {
