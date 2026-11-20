@@ -7,6 +7,8 @@ struct RecentDonationsSection: View {
     var onSelectItem: ((DonationItem) -> Void)? = nil
 
     var body: some View {
+        let processingCount = items.filter { [.pending, .approved, .received, .inStock].contains($0.status) }.count
+
         VStack(alignment: .leading, spacing: 12) {
             // Tiêu đề Section + Badge đếm số lượng + Nút See All
             HStack(spacing: 8) {
@@ -15,15 +17,17 @@ struct RecentDonationsSection: View {
                     .foregroundColor(Color.primary)
 
                 // Badge đếm số lượng đang xử lý
-                Text("\(items.count) đơn đang xử lý")
-                    .scaledFont(size: 12, weight: .semibold)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(
-                        Capsule()
-                            .fill(Color(uiColor: .systemGray5))
-                    )
+                if processingCount > 0 {
+                    Text("\(processingCount) đơn đang xử lý")
+                        .scaledFont(size: 12, weight: .semibold)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(
+                            Capsule()
+                                .fill(Color(uiColor: .systemGray5))
+                        )
+                }
 
                 Spacer()
 
