@@ -48,7 +48,7 @@ Trong `firestore.rules`:
 - `donations`: client chỉ `create` được đơn `status == 'pending'`, **bị cấm** kèm `warehouseId`/`warehouseName`; `allow update: if false`.
 - `donation_reviews`: `read, write: if false` tuyệt đối (chứa internal note, tách khỏi dữ liệu donor thấy được).
 - `receipts`: read-only theo phân công kho; mọi ghi qua API.
-- **Không có match block** (⇒ client deny mặc định, chỉ Admin SDK chạm được): `inventory`, `inventory_movements`, `distribution_vouchers`, `beneficiaries`, `categories`, `staff_bootstrap`, `image_upload_batches`, `image_upload_quotas`, `p2p_listing_audit`.
+- **Không có match block** (⇒ client deny mặc định, chỉ Admin SDK chạm được): `inventory`, `inventory_movements`, `distribution_vouchers`, `beneficiaries`, `categories`, `staff_bootstrap`, `image_upload_batches`, `image_upload_quotas`, `p2p_listing_audit`, `moderation_audit`.
 
 Hệ quả: đừng bao giờ "sửa cho nhanh" bằng cách cho web client ghi trực tiếp Firestore. Nếu một rules test cũ mong client ghi được, sửa kỳ vọng của test thành *client bị từ chối* + mô phỏng ghi tin cậy qua Admin SDK.
 
