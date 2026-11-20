@@ -92,7 +92,7 @@ Kho đồ 0đ (P2P, `catalog_items`) có trang `/admin/p2p` trên Web Admin qua 
 - Donation lưu `aiPredictedCategory`, `aiConfidence` (0–1), `aiModelVersion`, và `donorConfirmedCategory` riêng biệt.
 - `firestore.rules` validate ngược: `aiModelVersion` phải đúng chuỗi `'ReShare_v8_baseline_01'`, confidence trong `[0,1]`, và 3 field AI phải có đủ hoặc không có field nào. **Đổi tên/phiên bản model là breaking change với rules** — phải sửa rules cùng lúc.
 - Ngưỡng 60% chỉ điều khiển gợi ý trên UI, không phải độ chính xác đã hiệu chuẩn. Donor luôn phải tự xác nhận danh mục.
-- `DonationCategoryConfirmView.swift` là **dead code** (chỉ tự tham chiếu trong `#Preview`); con số 94% trong đó là giá trị cứng, đừng dùng làm bằng chứng AI chạy.
+- Màn xem trước xác nhận danh mục cũ đã được xoá. Kiểm tra gợi ý Core ML qua luồng tạo đơn quyên góp đang dùng.
 
 ## Quy trình Git
 
