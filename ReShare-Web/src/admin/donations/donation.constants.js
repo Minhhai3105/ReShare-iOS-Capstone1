@@ -6,6 +6,7 @@ export const DONATION_STATUS = Object.freeze({
   inStock: 'in_stock',
   distributed: 'distributed',
   rejected: 'rejected',
+  cancelled: 'cancelled',
 })
 
 export const DONATION_STATUS_LABEL = Object.freeze({
@@ -15,6 +16,7 @@ export const DONATION_STATUS_LABEL = Object.freeze({
   [DONATION_STATUS.inStock]: 'Trong kho',
   [DONATION_STATUS.distributed]: 'Đã phân phối',
   [DONATION_STATUS.rejected]: 'Đã từ chối',
+  [DONATION_STATUS.cancelled]: 'Người tặng đã huỷ',
 })
 
 // Khớp DonationCategory (iOS).

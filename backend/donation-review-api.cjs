@@ -64,6 +64,7 @@ function createDonationReviewApi({ db, auth, verifyToken, serverTimestamp }) {
       await assertCurrentStaffAccess(transaction, db, staff.uid, { warehouseId, systemOnly: true });
       if (!donationDoc.exists) throw new ApiError(404, 'Donation not found');
       const donation = donationDoc.data();
+      if (donation.status === 'cancelled') throw new ApiError(409, 'Người tặng đã huỷ đơn', 'DONATION_CANCELLED');
       if (!warehouseDoc.exists) throw new ApiError(404, 'Warehouse not found');
       if (warehouseDoc.data().status !== 'active') {
         throw new ApiError(400, 'Warehouse is not active');
@@ -144,6 +145,7 @@ function createDonationReviewApi({ db, auth, verifyToken, serverTimestamp }) {
       await assertCurrentStaffAccess(transaction, db, staff.uid, { warehouseId: assignedWarehouse });
 
       // Concurrency and state check
+      if (data.status === 'cancelled') throw new ApiError(409, 'Người tặng đã huỷ đơn', 'DONATION_CANCELLED');
       if (data.status !== 'pending') {
         throw new ApiError(409, `Donation is already in ${data.status} state.`);
       }
@@ -234,6 +236,7 @@ function createDonationReviewApi({ db, auth, verifyToken, serverTimestamp }) {
         throw new ApiError(403, 'Forbidden: not your assigned warehouse');
       }
       await assertCurrentStaffAccess(transaction, db, staff.uid, { warehouseId: donation.warehouseId });
+      if (donation.status === 'cancelled') throw new ApiError(409, 'Người tặng đã huỷ đơn', 'DONATION_CANCELLED');
       const reviewDoc = await transaction.get(reviewRef);
       const review = reviewDoc.exists ? reviewDoc.data() : {};
       const currentVersion = review.staffConfirmationVersion || 0;
@@ -342,6 +345,7 @@ function createDonationReviewApi({ db, auth, verifyToken, serverTimestamp }) {
         id: doc.id,
         ...data,
         createdAt: data.createdAt?.toDate?.().toISOString() || data.createdAt,
+        cancelledAt: data.cancelledAt?.toDate?.().toISOString() || data.cancelledAt || null,
         donor: donationSender(data, donor),
         internalNote: review.internalNote || null,
         reviewedBy: review.reviewedBy || null,

@@ -10,7 +10,15 @@ import {
   matchesQueueFilters,
 } from '../src/admin/donations/donation.service.js';
 import { donationSender } from '../src/admin/donations/donation-sender.js';
-import { DONATION_STATUS, DONATION_PAGE_SIZE, DONATION_SORT } from '../src/admin/donations/donation.constants.js';
+import { DONATION_STATUS, DONATION_STATUS_LABEL, DONATION_PAGE_SIZE, DONATION_SORT } from '../src/admin/donations/donation.constants.js';
+
+test('Queue labels cancelled donations and filters them separately from pending', () => {
+  const cancelled = DONATION_STATUS.cancelled;
+  assert.equal(DONATION_STATUS_LABEL[cancelled], 'Người tặng đã huỷ');
+  const access = { isAllWarehouses: true };
+  assert.equal(matchesQueueFilters({ status: cancelled }, access, { status: cancelled }), true);
+  assert.equal(matchesQueueFilters({ status: DONATION_STATUS.pending }, access, { status: cancelled }), false);
+});
 
 test('Sender display prefers real names, handles missing data and keeps UID out of name labels', () => {
   assert.deepEqual(donationSender({ donorId: 'uid', donor: { name: ' Nguyễn An ', email: ' an@example.invalid ' }, donorName: 'Old name' }), { name: 'Nguyễn An', email: 'an@example.invalid' });

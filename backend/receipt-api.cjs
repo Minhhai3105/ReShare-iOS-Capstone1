@@ -101,6 +101,7 @@ function createReceiptApi({ db, verifyToken, serverTimestamp }) {
         assertWarehouseAccess(staff, donationData.warehouseId);
         // Đứng trước nhánh gửi lại: người vừa bị thu hồi quyền không được thực nhận, kể cả replay.
         await assertCurrentStaffAccess(transaction, db, staff.uid, { warehouseId: donationData.warehouseId });
+        if (donationData.status === 'cancelled') throw new ApiError(409, 'Người tặng đã huỷ đơn', 'DONATION_CANCELLED');
 
         // Idempotency check: if receipt document already exists
         const existingReceipt = await transaction.get(receiptRef);
