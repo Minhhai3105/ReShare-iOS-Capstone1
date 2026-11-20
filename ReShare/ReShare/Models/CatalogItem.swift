@@ -227,6 +227,18 @@ extension CatalogItem {
 }
 
 extension CatalogItem {
+    @MainActor private static let postedTimeFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = Locale(identifier: "vi_VN")
+        formatter.dateTimeStyle = .numeric
+        formatter.unitsStyle = .full
+        return formatter
+    }()
+
+    @MainActor var relativePostedTime: String {
+        Self.postedTimeFormatter.localizedString(for: createdAt, relativeTo: .now)
+    }
+
     /// Bài cũ chỉ có imageUrl hoặc imageBase64 vẫn đọc được.
     var photoURLs: [String] {
         let urls = images?.filter { !$0.isEmpty } ?? []

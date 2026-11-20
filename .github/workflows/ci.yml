@@ -18,6 +18,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  ios:
+    name: iOS build (Simulator)
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Kiểm tra phiên bản Xcode
+        run: xcodebuild -version
+      # Build cho Simulator để không cần thiết bị hay chứng chỉ ký.
+      - name: Build ReShare iOS Debug
+        run: |
+          xcodebuild -project ReShare/ReShare.xcodeproj \
+            -scheme ReShare -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/reshare-ios-derived-data" \
+            -onlyUsePackageVersionsFromResolvedFile \
+            ARCHS=arm64 CODE_SIGNING_ALLOWED=NO build
+
   backend-unit:
     name: Backend unit (không cần emulator)
     runs-on: ubuntu-latest

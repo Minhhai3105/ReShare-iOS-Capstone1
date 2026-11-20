@@ -28,6 +28,7 @@ struct CatalogItemPublishView: View {
     @State private var itemDocumentId: String = "cat_\(UUID().uuidString.lowercased())"
     @FocusState private var isInputFocused: Bool
     private let publishLogger = Logger(subsystem: "ReShare", category: "CatalogPublish")
+    private let missingTitleMessage = "Vui lòng nhập tên món đồ"
 
     // Màu sắc ReShare
     private let primaryGreen = Color(red: 0.11, green: 0.35, blue: 0.20)
@@ -244,6 +245,12 @@ struct CatalogItemPublishView: View {
 
                     TextField("vd: Áo khoác phao ấm, Bộ sách...", text: $itemTitle)
                         .focused($isInputFocused)
+                        .onChange(of: itemTitle) { _, title in
+                            if errorMessage == missingTitleMessage,
+                               !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                errorMessage = nil
+                            }
+                        }
                         .foregroundColor(textDark)
                         .padding(.horizontal, 14)
                         .frame(height: 48)
@@ -390,7 +397,7 @@ struct CatalogItemPublishView: View {
     private func handlePublish() {
         guard !isPublishing else { return }
         guard !itemTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            errorMessage = "Vui lòng nhập tên món đồ"
+            errorMessage = missingTitleMessage
             return
         }
         guard hasValidImageCount else {

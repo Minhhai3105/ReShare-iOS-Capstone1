@@ -271,7 +271,7 @@ struct CatalogItemDetailView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "clock")
                         .scaledFont(size: 11)
-                    Text("Đăng \(item.timeAgo)")
+                    Text("Đăng \(item.relativePostedTime)")
                         .scaledFont(size: 12)
                 }
                 .foregroundColor(.secondary)
@@ -296,31 +296,17 @@ struct CatalogItemDetailView: View {
                 .foregroundColor(.primary.opacity(0.9))
                 .lineSpacing(4)
 
-            HStack(spacing: 8) {
-                HStack(spacing: 4) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .scaledFont(size: 11)
-                        .foregroundColor(mintGreen)
-                    Text("Đồ dùng sạch sẽ")
-                        .scaledFont(size: 11, weight: .medium)
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(Color(red: 0.95, green: 0.97, blue: 0.94))
-                .cornerRadius(8)
-
-                HStack(spacing: 4) {
-                    Image(systemName: "house.fill")
-                        .scaledFont(size: 11)
-                        .foregroundColor(primaryGreen)
-                    Text("Nhận tại nhà người cho")
-                        .scaledFont(size: 11, weight: .medium)
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(Color(red: 0.95, green: 0.97, blue: 0.94))
-                .cornerRadius(8)
+            HStack(spacing: 4) {
+                Image(systemName: "house.fill")
+                    .scaledFont(size: 11)
+                    .foregroundColor(primaryGreen)
+                Text("Nhận tại nhà người cho")
+                    .scaledFont(size: 11, weight: .medium)
             }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Color(red: 0.95, green: 0.97, blue: 0.94))
+            .cornerRadius(8)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -340,32 +326,14 @@ struct CatalogItemDetailView: View {
             }
 
             VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
-                    Text(isMyItem ? "Bạn (Người đăng tặng)" : item.donorName)
-                        .scaledFont(size: 14, weight: .bold)
-                    Image(systemName: "checkmark.seal.fill")
-                        .scaledFont(size: 11)
-                        .foregroundColor(mintGreen)
-                }
-                Text(isMyItem ? "Món đồ đang chia sẻ tại \(item.district), Đà Nẵng" : "Cư dân tại \(item.district), Đà Nẵng")
+                Text(isMyItem ? "Bạn (Người đăng tặng)" : item.donorName)
+                    .scaledFont(size: 14, weight: .bold)
+                Text("Đăng tại \(item.district), Đà Nẵng")
                     .scaledFont(size: 11)
                     .foregroundColor(.secondary)
             }
 
             Spacer()
-
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(isMyItem ? "Chủ món đồ" : "Người cho uy tín")
-                    .scaledFont(size: 11, weight: .bold)
-                    .foregroundColor(primaryGreen)
-                Text(isMyItem ? "100% 0đ" : "Đã tặng 3 lần")
-                    .scaledFont(size: 10)
-                    .foregroundColor(.secondary)
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(softMint)
-            .cornerRadius(8)
         }
         .padding(12)
         .background(Color.white)
