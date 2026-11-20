@@ -16,6 +16,13 @@ const ACTIONS = Object.freeze({
 });
 const REMOVED_MESSAGE = 'Tin nhắn đã bị gỡ do vi phạm Điều khoản sử dụng.';
 const MAX_LIST = 200;
+const MAX_SUSPENDED_USERS = 100;
+const UNSUSPEND_LEASE_MS = 5 * 60 * 1000;
+const UNSUSPEND_INCOMPLETE = 'Account unsuspension is incomplete; retry to finish';
+
+function moderationInProgress() {
+  return new ApiError(409, 'Another account moderation action is in progress', 'MODERATION_IN_PROGRESS');
+}
 
 function dateString(value) {
   return value?.toDate?.().toISOString() || (value instanceof Date ? value.toISOString() : value || null);
@@ -34,7 +41,7 @@ function createModerationApi({ db, auth, verifyToken, serverTimestamp }) {
     if (!claims?.uid) throw new ApiError(401, 'Invalid session');
     const assignment = await db.collection('staff_assignments').doc(claims.uid).get();
     if (!assignment.exists || assignment.data().active !== true || assignment.data().role !== 'system_admin') {
-      throw new ApiError(403, 'System Admin access required');
+      throw new ApiError(403, 'System Admin access required', 'SYSTEM_ADMIN_REQUIRED');
     }
     return { uid: claims.uid };
   }
@@ -74,7 +81,7 @@ function createModerationApi({ db, auth, verifyToken, serverTimestamp }) {
     const docs = unique.length ? await db.getAll(...unique.map(uid => db.collection('users').doc(uid))) : [];
     return new Map(docs.map(doc => [doc.id, {
       name: doc.exists ? (doc.data().displayName || 'Chưa có tên') : 'Người dùng đã xoá',
-      suspended: doc.exists && doc.data().suspended === true,
+      suspended: doc.exists && (doc.data().suspended === true || doc.data().unsuspendPending === true),
     }]));
   }
 
@@ -105,6 +112,83 @@ function createModerationApi({ db, auth, verifyToken, serverTimestamp }) {
       };
     });
     return { status: 200, body: { reports, truncated: snapshot.size > MAX_LIST } };
+  }
+
+  async function listSuspendedUsers() {
+    const users = db.collection('users');
+    const [suspended, pending] = await Promise.all([
+      users.where('suspended', '==', true).limit(MAX_SUSPENDED_USERS).get(),
+      users.where('unsuspendPending', '==', true).limit(MAX_SUSPENDED_USERS).get(),
+    ]);
+    // Ưu tiên các ca mở khoá dở để quản trị viên vẫn tìm được sau khi tải lại trang.
+    const docs = [...new Map([...pending.docs, ...suspended.docs].map(doc => [doc.id, doc])).values()]
+      .slice(0, MAX_SUSPENDED_USERS);
+    const accounts = docs.length ? await auth.getUsers(docs.map(doc => ({ uid: doc.id }))) : { users: [] };
+    const byUid = new Map(accounts.users.map(account => [account.uid, account]));
+    return { status: 200, body: { users: docs.map(doc => {
+      const data = doc.data();
+      const account = byUid.get(doc.id);
+      return {
+        uid: doc.id,
+        displayName: data.displayName || account?.displayName || '',
+        email: account?.email || null,
+        suspendedAt: dateString(data.suspendedAt),
+        unsuspendPending: data.unsuspendPending === true,
+      };
+    }) } };
+  }
+
+  async function finishUnsuspend(ref, leaseUntil, success) {
+    return runTransaction(db, async tx => {
+      const doc = await tx.get(ref);
+      if (doc.data()?.unsuspendLeaseUntil !== leaseUntil) return false;
+      tx.update(ref, { unsuspendPending: !success, unsuspendLeaseUntil: null });
+      return true;
+    });
+  }
+
+  async function unsuspend(staff, uid, body) {
+    if (!VALID_ID.test(uid)) throw new ApiError(400, 'Invalid target user', 'VALIDATION');
+    const reason = typeof body?.reason === 'string' ? body.reason.trim() : '';
+    if (!reason || reason.length > 500 || Object.keys(body).some(key => key !== 'reason')) {
+      throw new ApiError(400, 'A reason between 1 and 500 characters is required', 'VALIDATION');
+    }
+    const ref = db.collection('users').doc(uid);
+    const auditRef = db.collection('moderation_audit').doc();
+    const leaseUntil = await runTransaction(db, async tx => {
+      await assertCurrentStaffAccess(tx, db, staff.uid, { systemOnly: true });
+      const doc = await tx.get(ref);
+      if (!doc.exists) throw new ApiError(404, 'User not found', 'USER_NOT_FOUND');
+      const profile = doc.data();
+      const retry = profile.unsuspendPending === true;
+      if (profile.suspended !== true && !retry) throw new ApiError(409, 'Account is not suspended', 'NOT_SUSPENDED');
+      const startedAt = Date.now();
+      if (profile.unsuspendLeaseUntil > startedAt) throw moderationInProgress();
+      const until = startedAt + UNSUSPEND_LEASE_MS;
+      const update = { unsuspendPending: true, unsuspendLeaseUntil: until };
+      if (!retry) {
+        // Chờ hoàn tất khoá (kể cả thu hồi phiên lỗi) trước khi cho thao tác ngược lại.
+        const reports = await tx.get(db.collection('reports').where('actionTargetUid', '==', uid));
+        if (reports.docs.some(report => report.data().pendingAction === 'suspend_user')) throw moderationInProgress();
+        const timestamp = now();
+        Object.assign(update, { suspended: false, unsuspendedAt: timestamp, unsuspendedBy: staff.uid, unsuspendReason: reason });
+        tx.create(auditRef, { action: 'unsuspend_user', targetUid: uid, actorUid: staff.uid, reason, createdAt: timestamp });
+      }
+      // Giữ chặn ghi đến khi Auth xong. Lease hết hạn cho phép phục hồi nếu tiến trình bị dừng.
+      tx.update(ref, update);
+      return until;
+    });
+
+    try {
+      await auth.updateUser(uid, { disabled: false });
+    } catch {
+      await finishUnsuspend(ref, leaseUntil, false).catch(() => {});
+      throw new ApiError(502, UNSUSPEND_INCOMPLETE, 'UNSUSPEND_INCOMPLETE');
+    }
+    if (!(await finishUnsuspend(ref, leaseUntil, true).catch(() => false))) {
+      throw new ApiError(502, UNSUSPEND_INCOMPLETE, 'UNSUSPEND_INCOMPLETE');
+    }
+    return { status: 200, body: { uid, suspended: false } };
   }
 
   // Khoá đăng nhập + thu hồi phiên. Gọi lại an toàn: tài khoản đã khoá/đã xoá thì coi như xong bước đó.
@@ -168,6 +252,9 @@ function createModerationApi({ db, auth, verifyToken, serverTimestamp }) {
         const { owner } = await inspectTarget(report, ref => tx.get(ref));
         if (owner !== report.targetUserId) throw new ApiError(409, 'Reported user does not own the content', 'ATTRIBUTION_MISMATCH');
         if (typeof owner !== 'string' || !VALID_ID.test(owner)) throw new ApiError(400, 'Invalid target user');
+        const userRef = db.collection('users').doc(owner);
+        const userDoc = await tx.get(userRef);
+        if (userDoc.data()?.unsuspendPending === true) throw moderationInProgress();
         const assignment = await tx.get(db.collection('staff_assignments').doc(owner));
         if (assignment.exists && assignment.data().active === true) {
           throw new ApiError(409, 'Staff accounts cannot be suspended here; revoke staff access first');
@@ -176,7 +263,7 @@ function createModerationApi({ db, auth, verifyToken, serverTimestamp }) {
         // Một điều kiện bằng rồi lọc trạng thái trong bộ nhớ: không phụ thuộc composite index.
         const listings = await tx.get(db.collection('catalog_items').where('donorId', '==', owner).limit(200));
         // Cờ suspended do server quản lý: Rules chặn ghi nội dung ngay, kể cả khi ID token cũ còn hạn.
-        writes.push(() => tx.set(db.collection('users').doc(owner), { suspended: true, suspendedAt: timestamp }, { merge: true }));
+        writes.push(() => tx.set(userRef, { suspended: true, suspendedAt: timestamp }, { merge: true }));
         for (const doc of listings.docs.filter(item => item.data().status === 'available')) {
           writes.push(() => tx.update(doc.ref, { status: 'removed', moderation }));
         }
@@ -209,11 +296,15 @@ function createModerationApi({ db, auth, verifyToken, serverTimestamp }) {
 
   async function handle(method, path, headers, body, requestUrl = '') {
     const listPath = path === '/v1/admin/moderation/reports';
+    const suspendedPath = path === '/v1/admin/moderation/suspended-users';
     const resolveMatch = /^\/v1\/admin\/moderation\/reports\/([^/]+)\/resolve$/.exec(path);
-    if (!listPath && !resolveMatch) throw new ApiError(404, 'Not found');
+    const unsuspendMatch = /^\/v1\/admin\/moderation\/users\/([^/]+)\/unsuspend$/.exec(path);
+    if (!listPath && !suspendedPath && !resolveMatch && !unsuspendMatch) throw new ApiError(404, 'Not found');
     const staff = await systemAdminFrom(headers);
     if (listPath && method === 'GET') return list(new URL(requestUrl || path, 'http://localhost'));
+    if (suspendedPath && method === 'GET') return listSuspendedUsers();
     if (resolveMatch && method === 'POST') return resolve(staff, resolveMatch[1], body);
+    if (unsuspendMatch && method === 'POST') return unsuspend(staff, unsuspendMatch[1], body);
     throw new ApiError(404, 'Not found');
   }
 

@@ -146,6 +146,9 @@ test('Kho đồ 0đ: phạm vi theo quận, gỡ bài tự đóng báo cáo, kh�
     await api.handle('POST', `${base}/p2ptest-banned/remove`, SA, { expectedStatus: 'available' });
     await assert.rejects(api.handle('POST', `${base}/p2ptest-banned/restore`, SA, { expectedStatus: 'removed' }),
       error => error.code === 'RESTORE_BLOCKED' && error.details.reason === 'OWNER_SUSPENDED');
+    await db.doc('users/p2ptest-banned').update({ suspended: false, unsuspendPending: true });
+    await assert.rejects(api.handle('POST', `${base}/p2ptest-banned/restore`, SA, { expectedStatus: 'removed' }),
+      error => error.code === 'RESTORE_BLOCKED' && error.details.reason === 'OWNER_SUSPENDED');
 
     // Bài System Admin gỡ qua báo cáo: Warehouse Admin không đảo lại được, System Admin thì được.
     await assert.rejects(api.handle('POST', `${base}/p2ptest-viareport/restore`, WA_HC, { expectedStatus: 'removed' }),

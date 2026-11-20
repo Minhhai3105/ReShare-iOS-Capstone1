@@ -169,7 +169,7 @@ function createP2pListingsApi({ db, verifyToken, serverTimestamp, aiChecks = nul
     return new Map(docs.map(doc => [doc.id, {
       exists: doc.exists,
       name: doc.exists ? (doc.data().displayName || 'Chưa có tên') : 'Người dùng đã xoá',
-      suspended: doc.exists && doc.data().suspended === true,
+      suspended: doc.exists && (doc.data().suspended === true || doc.data().unsuspendPending === true),
     }]));
   }
 
@@ -318,7 +318,10 @@ function createP2pListingsApi({ db, verifyToken, serverTimestamp, aiChecks = nul
         ? await tx.get(db.collection('users').doc(data.donorId)) : null;
       const scope = await assertScopeInTransaction(tx, staff, data.district);
       if (normalizeStatus(data.status) !== 'removed') throw new ApiError(409, 'Listing changed; reload first');
-      const owner = ownerDoc?.exists ? { exists: true, suspended: ownerDoc.data().suspended === true } : { exists: false };
+      const ownerData = ownerDoc?.data();
+      const owner = ownerData ? {
+        exists: true, suspended: ownerData.suspended === true || ownerData.unsuspendPending === true,
+      } : { exists: false };
       const blocker = restoreBlocker(data, owner, scope.role);
       if (blocker) throw new ApiError(409, 'Listing cannot be restored', 'RESTORE_BLOCKED', { reason: blocker });
       const timestamp = now();

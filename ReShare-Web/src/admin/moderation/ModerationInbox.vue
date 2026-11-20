@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import AuthIcon from '../auth/components/AuthIcon.vue'
 import InlineConfirm from '../shared/InlineConfirm.vue'
+import SuspendedUsers from './SuspendedUsers.vue'
 import { ADMIN_ROUTE, USER_ROLE } from '../auth/auth.constants'
 import { staffAssignment } from '../auth/auth.store'
 import { moderationRepository } from './moderation.repository'
@@ -39,7 +40,7 @@ async function load() {
 
 watch([status, canManage], ([, allowed]) => {
   confirming.value = null
-  if (allowed) load()
+  if (allowed && status.value !== 'suspended') load()
 }, { immediate: true })
 
 function startResolve(report, option) {
@@ -87,19 +88,20 @@ async function resolve(report) {
         <h1 id="mod-title">Báo cáo vi phạm</h1>
         <p>Báo cáo từ người dùng app về bài Kho đồ 0đ, tin nhắn hoặc tài khoản. Điều khoản cam kết xử lý trong vòng 24 giờ.</p>
       </div>
-      <button type="button" class="auth-btn auth-btn--soft" :disabled="isLoading || Boolean(pending)" @click="load">
+      <button v-if="status !== 'suspended'" type="button" class="auth-btn auth-btn--soft" :disabled="isLoading || Boolean(pending)" @click="load">
         <AuthIcon name="refresh" :size="18" />Tải lại
       </button>
     </header>
 
-    <div class="mod-tabs" role="tablist" aria-label="Trạng thái báo cáo">
-      <button v-for="tab in [{ id: 'open', label: 'Chờ xử lý' }, { id: 'resolved', label: 'Đã xử lý' }]" :key="tab.id"
+    <div class="mod-tabs" role="tablist" aria-label="Nội dung quản lý vi phạm">
+      <button v-for="tab in [{ id: 'open', label: 'Chờ xử lý' }, { id: 'resolved', label: 'Đã xử lý' }, { id: 'suspended', label: 'Tài khoản đang bị khoá' }]" :key="tab.id"
         type="button" role="tab" :aria-selected="status === tab.id" :disabled="Boolean(pending)" :class="{ 'is-active': status === tab.id }" @click="status = tab.id">
         {{ tab.label }}
       </button>
     </div>
 
-    <div v-if="isLoading" class="mod-state mod-state--inline">
+    <SuspendedUsers v-if="status === 'suspended'" />
+    <div v-else-if="isLoading" class="mod-state mod-state--inline">
       <AuthIcon name="loader" :size="24" class="auth-spin" /><p>Đang tải báo cáo… Máy chủ miễn phí có thể mất 30–50 giây để khởi động.</p>
     </div>
     <div v-else-if="loadError" class="mod-state mod-state--inline" role="alert">
@@ -158,7 +160,7 @@ async function resolve(report) {
         </template>
       </li>
     </ul>
-    <p v-if="truncated" class="mod-muted">Chỉ hiện 200 báo cáo đầu tiên.</p>
+    <p v-if="status !== 'suspended' && truncated" class="mod-muted">Chỉ hiện 200 báo cáo đầu tiên.</p>
   </section>
 </template>
 
@@ -167,7 +169,7 @@ async function resolve(report) {
 .mod-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
 .mod-header h1 { font-size: clamp(26px, 3vw, 34px); font-weight: 700; color: #182a31; }
 .mod-header p { margin-top: 6px; color: #617081; max-width: 640px; }
-.mod-tabs { display: flex; gap: 8px; }
+.mod-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
 .mod-tabs button { border: 1px solid #dfe6f1; background: #fff; border-radius: 999px; padding: 7px 16px; font-size: 13px; color: #264455; cursor: pointer; }
 .mod-tabs button.is-active { background: #246632; border-color: #246632; color: #fff; }
 .mod-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }

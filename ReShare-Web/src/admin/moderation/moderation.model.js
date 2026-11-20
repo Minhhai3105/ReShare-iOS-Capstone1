@@ -67,8 +67,19 @@ const ERROR_MESSAGES = Object.freeze({
 
 export function moderationErrorMessage(error) {
   if (error?.code === 'UNCERTAIN') return 'Chưa rõ thao tác đã lưu hay chưa. Tải lại danh sách để kiểm tra.'
+  if (error?.code === 'MODERATION_IN_PROGRESS') return 'Tài khoản đang có thao tác khoá hoặc mở khoá chưa hoàn tất. Tải lại để kiểm tra.'
   if (error?.status === 0) return 'Không kết nối được máy chủ. Thử lại sau giây lát.'
   return ERROR_MESSAGES[error?.message] || 'Không thực hiện được thao tác. Thử lại sau.'
+}
+
+export function unsuspendErrorMessage(error) {
+  if (error?.code === 'UNSUSPEND_INCOMPLETE') return 'Chưa hoàn tất mở khoá đăng nhập. Bấm “Hoàn tất mở khoá” để thử lại.'
+  if (error?.code === 'NOT_SUSPENDED') return 'Tài khoản này không còn bị khoá. Tải lại danh sách để kiểm tra.'
+  if (error?.code === 'USER_NOT_FOUND') return 'Không tìm thấy tài khoản. Tải lại danh sách để kiểm tra.'
+  if (error?.code === 'VALIDATION') return 'Vui lòng nhập lý do từ 1 đến 500 ký tự.'
+  if (error?.status === 403 && error?.code !== 'STAFF_ACCESS_CHANGED') return 'Chỉ Quản trị hệ thống mới được mở khoá tài khoản.'
+  if (error?.status === 401) return 'Phiên đã hết hạn. Vui lòng đăng nhập lại.'
+  return moderationErrorMessage(error)
 }
 
 export function formatDateTime(value) {
