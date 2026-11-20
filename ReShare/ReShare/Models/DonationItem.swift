@@ -51,6 +51,18 @@ struct DonationItem: Identifiable, Codable {
     var aiConfidence: Double? = nil
     var aiModelVersion: String? = nil
     var donorConfirmedCategory: DonationCategory? = nil
+    var reviewedAt: Date? = nil
+    var resubmittedAt: Date? = nil
+    var receivedAt: Date? = nil
+    var stockedAt: Date? = nil
+    var distributedAt: Date? = nil
+    var cancelledAt: Date? = nil
+
+    var declaredQuantityLabel: String {
+        guard let quantity, let unitId else { return "Chưa khai báo số lượng" }
+        let unit = DonationUnit(rawValue: unitId)?.title ?? unitId
+        return "\(quantity.formatted()) \(unit)"
+    }
 
     /// Helper lấy URL ảnh: ưu tiên ảnh đầu tiên trong mảng images, fallback về imageUrl
     var primaryImageUrl: String? {

@@ -236,7 +236,9 @@ extension CatalogItem {
     }()
 
     @MainActor var relativePostedTime: String {
-        Self.postedTimeFormatter.localizedString(for: createdAt, relativeTo: .now)
+        let now = Date.now
+        guard now.timeIntervalSince(createdAt) >= 60 else { return "Vừa xong" }
+        return Self.postedTimeFormatter.localizedString(for: createdAt, relativeTo: now)
     }
 
     /// Bài cũ chỉ có imageUrl hoặc imageBase64 vẫn đọc được.

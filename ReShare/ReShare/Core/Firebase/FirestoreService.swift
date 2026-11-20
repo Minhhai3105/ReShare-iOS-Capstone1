@@ -100,6 +100,8 @@ protocol FirestoreServiceProtocol {
 final class FirestoreService: FirestoreServiceProtocol {
     static let shared = FirestoreService()
 
+    @MainActor private(set) var knownCampaignTitles: [String: String] = [:]
+
     private init() {}
 
     private var db: Firestore {
@@ -246,6 +248,9 @@ final class FirestoreService: FirestoreServiceProtocol {
             .getDocuments()
         let records = snapshot.documents.compactMap { document in
             CampaignRecord(id: document.documentID, data: Self.plainValues(document.data()))
+        }
+        await MainActor.run {
+            for record in records { knownCampaignTitles[record.id] = record.title }
         }
         return CampaignRecord.openForDisplay(records).map(DonationCampaign.init(record:))
     }
