@@ -50,6 +50,49 @@ final class AuthService: AuthServiceProtocol {
     var currentEmail: String? {
         Auth.auth().currentUser?.email
     }
+
+    enum PasswordChangeError: LocalizedError {
+        case sessionUnavailable
+        case firebase(AuthErrorCode?)
+
+        var errorDescription: String? {
+            switch self {
+            case .sessionUnavailable, .firebase(.invalidUserToken), .firebase(.userTokenExpired), .firebase(.requiresRecentLogin):
+                return "Phiên đăng nhập không còn hợp lệ. Vui lòng đăng nhập lại."
+            case .firebase(.wrongPassword), .firebase(.invalidCredential):
+                return "Mật khẩu hiện tại không đúng."
+            case .firebase(.weakPassword):
+                return "Mật khẩu mới chưa đủ mạnh. Vui lòng chọn mật khẩu mạnh hơn."
+            case .firebase(.tooManyRequests):
+                return "Bạn đã thử quá nhiều lần. Vui lòng chờ rồi thử lại."
+            case .firebase(.networkError):
+                return "Mất kết nối mạng. Vui lòng kiểm tra mạng rồi thử lại."
+            default:
+                return "Chưa đổi được mật khẩu. Vui lòng thử lại sau."
+            }
+        }
+    }
+
+    var canChangePassword: Bool {
+        guard let user = Auth.auth().currentUser, user.email != nil else { return false }
+        return user.providerData.contains { $0.providerID == EmailAuthProviderID }
+    }
+
+    @MainActor
+    func changePassword(currentPassword: String, newPassword: String) async throws {
+        let auth = Auth.auth()
+        guard canChangePassword, let user = auth.currentUser, let email = user.email else {
+            throw PasswordChangeError.sessionUnavailable
+        }
+        do {
+            let credential = EmailAuthProvider.credential(withEmail: email, password: currentPassword)
+            _ = try await user.reauthenticate(with: credential)
+            guard auth.currentUser?.uid == user.uid else { throw PasswordChangeError.sessionUnavailable }
+            try await user.updatePassword(to: newPassword)
+        } catch let error as NSError where error.domain == AuthErrorDomain {
+            throw PasswordChangeError.firebase(AuthErrorCode(rawValue: error.code))
+        }
+    }
     
     func signUp(email: String, password: String) async throws -> String {
         let result = try await Auth.auth().createUser(withEmail: email, password: password)

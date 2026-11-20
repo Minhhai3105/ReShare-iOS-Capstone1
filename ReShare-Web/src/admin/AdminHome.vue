@@ -566,6 +566,9 @@ onBeforeUnmount(() => {
               >
                 <AuthIcon name="eye" />Xem trước donation (DEV)
               </RouterLink>
+              <RouterLink v-if="!inShell" :to="{ name: ADMIN_ROUTE.changePassword }" class="auth-btn auth-btn--soft">
+                <AuthIcon name="key" />Đổi mật khẩu
+              </RouterLink>
               <button v-if="!inShell" type="button" class="auth-btn auth-btn--soft" @click="onSignOutClick">
                 <AuthIcon name="log-out" />Đăng xuất
               </button>

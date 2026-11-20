@@ -35,7 +35,7 @@ test('Mọi route con trong khung quản trị đều có tiêu đề, mục và
     if (literal) return literal
     return constants.match(new RegExp(`\\b${key}: '([^']+)'`))[1]
   })
-  assert.equal(names.length, 26)
+  assert.equal(names.length, 27)
   for (const name of names) {
     const page = pageFor(name)
     assert.ok(page?.title && page.section, `thiếu khai báo cho ${name}`)

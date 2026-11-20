@@ -27,6 +27,7 @@ export const ADMIN_ROUTE = Object.freeze({
   contacts: 'admin-contacts',
   login: 'admin-login',
   forgotPassword: 'admin-forgot-password',
+  changePassword: 'admin-change-password',
   forbidden: 'admin-forbidden',
   donationQueue: 'admin-donation-queue',
 

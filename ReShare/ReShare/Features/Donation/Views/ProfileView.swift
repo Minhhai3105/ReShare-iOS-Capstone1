@@ -46,6 +46,7 @@ struct ProfileView: View {
     @State private var showProfileEditor: Bool = false
     @State private var showSignOutAlert: Bool = false
     @State private var showDeleteAccount: Bool = false
+    @State private var showChangePassword: Bool = false
 
     var body: some View {
         NavigationStack {
@@ -171,6 +172,25 @@ struct ProfileView: View {
                                 .stroke(Color.black.opacity(0.08), lineWidth: 1)
                         )
                         .padding(.horizontal, 20)
+
+                        if AuthService.shared.canChangePassword {
+                            Button { showChangePassword = true } label: {
+                                HStack {
+                                    MenuActionRow(icon: "key.fill", title: "Đổi mật khẩu")
+                                    Image(systemName: "chevron.right")
+                                        .scaledFont(size: 13, weight: .semibold)
+                                        .foregroundColor(Color(uiColor: .tertiaryLabel))
+                                }
+                                .padding(.horizontal, 14)
+                                .background(RoundedRectangle(cornerRadius: 18).fill(Color.white))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 18)
+                                        .stroke(Color.black.opacity(0.08), lineWidth: 1)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.horizontal, 20)
+                        }
                     }
 
                     // MARK: 3b. QUYỀN RIÊNG TƯ & HỖ TRỢ (App Store 1.5, 5.1.1(i))
@@ -280,6 +300,9 @@ struct ProfileView: View {
             }
             .sheet(isPresented: $showProfileEditor) {
                 UserProfileView()
+            }
+            .sheet(isPresented: $showChangePassword) {
+                ChangePasswordView()
             }
             .sheet(isPresented: $showDeleteAccount) {
                 DeleteAccountView(onDeleted: {

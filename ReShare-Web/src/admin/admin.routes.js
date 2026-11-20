@@ -15,6 +15,7 @@ const SYSTEM_ADMIN_META = Object.freeze({ requiresAuth: true, roles: ['system_ad
 // Các trang vận hành thật nằm trong một khung chung (AdminLayout): sidebar và thanh trên cùng không đổi khi chuyển trang.
 const adminPageRoutes = [
   { path: '', name: ADMIN_ROUTE.home, component: () => import('./AdminHome.vue'), meta: ADMIN_PAGE_META },
+  { path: 'account/password', name: ADMIN_ROUTE.changePassword, component: () => import('./auth/views/AdminChangePassword.vue'), meta: ADMIN_PAGE_META },
   { path: 'staff', name: ADMIN_ROUTE.staff, component: () => import('./staff/StaffManagement.vue'), meta: SYSTEM_ADMIN_META },
   { path: 'contacts', name: ADMIN_ROUTE.contacts, component: () => import('./contacts/ContactInbox.vue'), meta: SYSTEM_ADMIN_META },
   { path: 'moderation', name: ADMIN_ROUTE.moderation, component: () => import('./moderation/ModerationInbox.vue'), meta: SYSTEM_ADMIN_META },

@@ -22,6 +22,7 @@ const toDonation = (route) => ({ name: 'admin-donation-detail', params: { donati
 // Mỗi route trong khung: thuộc mục nào trên sidebar, tiêu đề hiển thị, và trang cha khi bấm Quay lại.
 export const ADMIN_PAGES = Object.freeze({
   [ADMIN_ROUTE.home]: { section: 'home', title: 'Tổng quan' },
+  [ADMIN_ROUTE.changePassword]: { section: 'home', title: 'Đổi mật khẩu', parent: toHome },
   [ADMIN_ROUTE.donationQueue]: { section: 'donations', title: 'Tiếp nhận quyên góp', parent: toHome },
   'admin-donation-detail': { section: 'donations', title: 'Chi tiết đơn quyên góp', parent: () => ({ name: ADMIN_ROUTE.donationQueue }) },
   'admin-donation-receipt': { section: 'donations', title: 'Ghi nhận hàng thực nhận', parent: toDonation },
