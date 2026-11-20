@@ -207,6 +207,7 @@ service cloud.firestore {
       allow create: if request.auth != null
         && request.resource.data.donorId == request.auth.uid
         && request.resource.data.status == 'available'
+        && !exists(/databases/$(database)/documents/p2p_listing_audit/$('owner_delete_' + itemId))
         && !request.resource.data.keys().hasAny(['aiModeration', 'moderation'])
         && !isSuspended()
         // Địa chỉ và giờ hẹn chính xác không được nằm trên bài mọi người đều đọc được.
@@ -222,7 +223,8 @@ service cloud.firestore {
       allow update: if request.auth != null &&
         (canReserve() || canCancel() || canConfirmHandover());
 
-      allow delete: if request.auth != null && resource.data.donorId == request.auth.uid;
+      // Xoá qua backend để kiểm lịch hẹn, ghi audit và đưa ảnh vào hàng đợi cùng transaction.
+      allow delete: if false;
 
       // Địa chỉ nhận đồ chính xác: chỉ người đăng và người đang được giữ đồ đọc được.
       match /private/{docId} {

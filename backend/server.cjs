@@ -25,6 +25,7 @@ const { cloudinaryCatalogImageDeleter, createImageCleanupJobs } = require('./ima
 const { createModerationApi } = require('./moderation-api.cjs');
 const { createUsersAdminApi } = require('./users-admin-api.cjs');
 const { createP2pListingsApi } = require('./p2p-listings-api.cjs');
+const { DELETE_PATH, createP2pOwnerDeleteApi } = require('./p2p-owner-delete-api.cjs');
 const { createAiModerator, readAiAutoRemoveConfig } = require('./ai-moderation.cjs');
 const { createAiModerationJobs, readAiModerationConfig } = require('./ai-moderation-jobs.cjs');
 const { errorBody } = require('./error-body.cjs');
@@ -57,6 +58,7 @@ const contactApi = createContactApi({ db, verifyToken, serverTimestamp: () => Fi
 const donationReviewApi = createDonationReviewApi({ db, auth: getAuth(), verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const donationResubmitApi = createDonationResubmitApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const donationCancelApi = createDonationCancelApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
+const p2pOwnerDeleteApi = createP2pOwnerDeleteApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const receiptApi = createReceiptApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const stockIntakeApi = createStockIntakeApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const inventoryApi = createInventoryApi({ db, auth: getAuth(), verifyToken });
@@ -181,6 +183,7 @@ const server = http.createServer(async (request, response) => {
     const handler = isContactPath ? contactApi
       : isDonationResubmitPath ? donationResubmitApi
       : CANCEL_PATH.test(pathname) ? donationCancelApi
+      : DELETE_PATH.test(pathname) ? p2pOwnerDeleteApi
       : isAccountPath ? accountApi
       : isReceiptPath ? receiptApi
       : isStockIntakePath ? stockIntakeApi

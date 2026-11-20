@@ -5,6 +5,7 @@ import MapKit
 struct CatalogItemDetailView: View {
     @Environment(\.dismiss) private var dismiss
     let item: CatalogItem
+    var onDeleted: (String) -> Void = { _ in }
     @State private var selectedPhotoIndex = 0
     // Địa chỉ chính xác chỉ người đăng và người đang được giữ đồ đọc được; người khác chỉ thấy quận.
     @State private var privatePickupAddress: String? = nil
@@ -12,6 +13,9 @@ struct CatalogItemDetailView: View {
     @State private var reportTarget: ContentReport? = nil
     @State private var showBlockConfirm = false
     @State private var safetyErrorMessage: String? = nil
+    @State private var showDeleteConfirmation = false
+    @State private var isDeleting = false
+    @State private var deletionMessage: String?
 
 
     // Màu sắc nhận diện ReShare
@@ -30,6 +34,14 @@ struct CatalogItemDetailView: View {
 
     private var canSeePickupAddress: Bool {
         isMyItem || (!currentUserId.isEmpty && item.reservedRequesterId == currentUserId)
+    }
+
+    private var deletionBlocker: String? {
+        if item.status == .reserved || item.reservedChatId != nil || item.reservedRequesterId != nil ||
+            item.donorHandoverConfirmed || item.requesterHandoverConfirmed {
+            return "Món đồ đã có hẹn hoặc có xác nhận bàn giao nên không thể xoá."
+        }
+        return item.status == .available ? nil : "Chỉ xoá được món còn ở trạng thái Sẵn sàng nhận đồ."
     }
 
     var body: some View {
@@ -82,7 +94,20 @@ struct CatalogItemDetailView: View {
                     ShareLink(item: "Món đồ 0đ trên ReShare: \(item.title) — \(item.district), Đà Nẵng") {
                         Image(systemName: "square.and.arrow.up")
                     }
-                    if !isMyItem && !currentUserId.isEmpty {
+                    if isMyItem {
+                        Menu {
+                            Button(role: .destructive) {
+                                if let deletionBlocker { deletionMessage = deletionBlocker }
+                                else { showDeleteConfirmation = true }
+                            } label: {
+                                Label("Xoá bài", systemImage: "trash")
+                            }
+                            .disabled(isDeleting)
+                        } label: {
+                            Image(systemName: "ellipsis.circle").frame(width: 44, height: 44)
+                        }
+                        .accessibilityLabel("Tuỳ chọn bài đăng")
+                    } else if !currentUserId.isEmpty {
                         Menu {
                             Button {
                                 reportTarget = ContentReport(targetType: .listing, targetId: item.id, targetUserId: item.donorId)
@@ -122,6 +147,31 @@ struct CatalogItemDetailView: View {
             Button("Đóng", role: .cancel) {}
         } message: {
             Text(safetyErrorMessage ?? "")
+        }
+        .confirmationDialog("Xoá bài đăng này?", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
+            Button("Xoá bài", role: .destructive) { Task { await deleteListing() } }
+            Button("Giữ bài", role: .cancel) { }
+        } message: {
+            Text("Món đồ sẽ biến mất khỏi Kho đồ 0đ.")
+        }
+        .alert("Chưa xoá được bài", isPresented: Binding(get: { deletionMessage != nil }, set: { if !$0 { deletionMessage = nil } })) {
+            Button("Đóng", role: .cancel) { }
+        } message: {
+            Text(deletionMessage ?? "")
+        }
+    }
+
+    @MainActor
+    private func deleteListing() async {
+        guard isMyItem, deletionBlocker == nil, !isDeleting else { return }
+        isDeleting = true
+        defer { isDeleting = false }
+        do {
+            try await CatalogListingDeletionService.delete(listingId: item.id, ownerId: item.donorId)
+            onDeleted(item.id)
+            dismiss()
+        } catch {
+            deletionMessage = error is URLError ? "Không kết nối được để xoá bài. Vui lòng thử lại." : error.localizedDescription
         }
     }
 
