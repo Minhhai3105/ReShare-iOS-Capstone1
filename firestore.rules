@@ -57,7 +57,8 @@ service cloud.firestore {
     // còn hạn tới 1 giờ sau khi thu hồi phiên, nên Rules chặn ghi nội dung ngay thay vì chờ token hết hạn.
     function isSuspended() {
       let profile = /databases/$(database)/documents/users/$(request.auth.uid);
-      return exists(profile) && get(profile).data.get('suspended', false) == true;
+      return exists(profile) && (get(profile).data.get('suspended', false) == true
+        || get(profile).data.get('unsuspendPending', false) == true);
     }
 
     // Một trong hai người đã chặn người kia thì không được mở hội thoại hay nhắn tin cho nhau.

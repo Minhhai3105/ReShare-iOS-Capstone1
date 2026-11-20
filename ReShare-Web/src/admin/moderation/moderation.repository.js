@@ -41,6 +41,14 @@ export function createModerationRepository({ apiBase = defaultBase, authInstance
     resolve: (reportId, action, note = '') => request(`/v1/admin/moderation/reports/${encodeURIComponent(reportId)}/resolve`, {
       method: 'POST', body: JSON.stringify(note.trim() ? { action, note: note.trim() } : { action }),
     }),
+    async listSuspendedUsers() {
+      const data = await request('/v1/admin/moderation/suspended-users')
+      if (!Array.isArray(data.users)) throw Object.assign(new Error('Danh sách không hợp lệ.'), { status: 0 })
+      return data.users
+    },
+    unsuspend: (uid, reason) => request(`/v1/admin/moderation/users/${encodeURIComponent(uid)}/unsuspend`, {
+      method: 'POST', body: JSON.stringify({ reason: reason.trim() }),
+    }),
   }
 }
 

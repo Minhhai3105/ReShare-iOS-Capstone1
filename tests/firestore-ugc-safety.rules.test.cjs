@@ -169,10 +169,39 @@ test('Tài khoản bị khoá: Rules chặn ghi nội dung ngay dù ID token cũ
     await assertFails(asker.doc('users/asker').update({ suspended: false }), 'không tự gỡ khoá');
     await assertSucceeds(donor.doc('conversations/chat_ugc/messages/s2').set(message('donor', 'Người còn lại vẫn nhắn được')));
 
+    await env.withSecurityRulesDisabled(context => context.firestore().doc('users/asker').update({
+      suspended: false, unsuspendPending: true,
+    }));
+    await assertFails(asker.doc('conversations/chat_ugc/messages/s3').set(message('asker', 'Xin chào')), 'chưa mở khoá Auth');
+    await assertFails(asker.doc(`catalog_items/${itemId}`).set(listing));
+    await assertFails(asker.doc('users/asker').update({ unsuspendPending: false }), 'không tự đánh dấu hoàn tất');
+
     // Đối chứng: cùng thao tác, gỡ cờ khoá thì qua — tức là bị từ chối đúng vì cờ khoá.
-    await env.withSecurityRulesDisabled(context => context.firestore().doc('users/asker').update({ suspended: false }));
+    await env.withSecurityRulesDisabled(context => context.firestore().doc('users/asker').update({ unsuspendPending: false }));
     await assertSucceeds(asker.doc('conversations/chat_ugc/messages/s3').set(message('asker', 'Xin chào')));
     await assertSucceeds(asker.doc(`catalog_items/${itemId}`).set(listing));
+  } finally {
+    await env.clearFirestore();
+    await env.cleanup();
+  }
+});
+
+test('Nhật ký mở khoá chỉ Admin SDK đọc và ghi được', async () => {
+  const env = await initializeTestEnvironment({ projectId: 'demo-reshare', firestore: { rules: rules() } });
+  try {
+    const audit = { action: 'unsuspend_user', targetUid: 'donor', actorUid: 'admin', reason: 'Đã xác minh' };
+    await env.withSecurityRulesDisabled(async context => {
+      const db = context.firestore();
+      await db.doc('staff_assignments/admin').set({ role: 'system_admin', active: true });
+      await db.doc('moderation_audit/entry').set(audit);
+    });
+    for (const uid of ['donor', 'admin']) {
+      const db = env.authenticatedContext(uid).firestore();
+      await assertFails(db.doc('moderation_audit/entry').get());
+      await assertFails(db.collection('moderation_audit').get());
+      await assertFails(db.doc('moderation_audit/entry').update({ reason: 'Sửa nhật ký' }));
+      await assertFails(db.doc('moderation_audit/new-entry').set(audit));
+    }
   } finally {
     await env.clearFirestore();
     await env.cleanup();

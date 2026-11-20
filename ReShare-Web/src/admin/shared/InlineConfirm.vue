@@ -9,6 +9,7 @@ const props = defineProps({
   confirmLabel: { type: String, default: '' },
   cancelLabel: { type: String, default: 'Không' },
   busy: { type: Boolean, default: false },
+  confirmDisabled: { type: Boolean, default: false },
   tone: { type: String, default: 'warning' },
 })
 defineEmits(['confirm', 'cancel'])
@@ -27,7 +28,7 @@ onMounted(async () => {
       <button ref="firstButton" type="button" class="auth-btn auth-btn--soft" :disabled="props.busy" @click="$emit('cancel')">
         {{ props.confirmLabel ? props.cancelLabel : 'Đã hiểu' }}
       </button>
-      <button v-if="props.confirmLabel" type="button" class="auth-btn auth-btn--primary" :disabled="props.busy" @click="$emit('confirm')">
+      <button v-if="props.confirmLabel" type="button" class="auth-btn auth-btn--primary" :disabled="props.busy || props.confirmDisabled" @click="$emit('confirm')">
         {{ props.busy ? 'Đang xử lý…' : props.confirmLabel }}
       </button>
     </div>

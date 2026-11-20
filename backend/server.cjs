@@ -114,7 +114,9 @@ const server = http.createServer(async (request, response) => {
   const isDashboardPath = pathname === '/v1/admin/dashboard/metrics';
   // Neo chính xác như beneficiaries để route có tiền tố trùng sau này không bị nuốt.
   const isModerationPath = pathname === '/v1/admin/moderation/reports' ||
-    /^\/v1\/admin\/moderation\/reports\/[^/]+\/resolve$/.test(pathname);
+    pathname === '/v1/admin/moderation/suspended-users' ||
+    /^\/v1\/admin\/moderation\/reports\/[^/]+\/resolve$/.test(pathname) ||
+    /^\/v1\/admin\/moderation\/users\/[^/]+\/unsuspend$/.test(pathname);
   const isCampaignPath = pathname === '/v1/admin/campaigns' ||
     /^\/v1\/admin\/campaigns\/[^/]+(\/(update|status))?$/.test(pathname);
   const isHubPath = pathname === '/v1/admin/hubs' || /^\/v1\/admin\/hubs\/[^/]+\/(update|status|delete)$/.test(pathname);

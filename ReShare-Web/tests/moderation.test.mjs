@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { actionsFor, moderationErrorMessage, targetSummary } from '../src/admin/moderation/moderation.model.js'
+import { actionsFor, moderationErrorMessage, targetSummary, unsuspendErrorMessage } from '../src/admin/moderation/moderation.model.js'
 import { createModerationRepository } from '../src/admin/moderation/moderation.repository.js'
 
 test('chỉ hiện nút xử lý hợp với loại báo cáo và chỉ khi báo cáo còn mở', () => {
@@ -39,4 +39,29 @@ test('repository gọi đúng đường dẫn và chỉ gửi ghi chú khi có',
   assert.equal(calls[1].url, 'https://api.test/v1/admin/moderation/reports/r1/resolve')
   assert.deepEqual(JSON.parse(calls[1].options.body), { action: 'dismiss' })
   assert.deepEqual(JSON.parse(calls[2].options.body), { action: 'remove_listing', note: 'Bài rao bán' })
+})
+
+test('danh sách mở khoá dùng API thật và gửi lý do đã cắt khoảng trắng', async () => {
+  const calls = []
+  const user = { uid: 'u1', displayName: 'Tài khoản thử', unsuspendPending: true }
+  const repository = createModerationRepository({
+    apiBase: 'https://api.test', authInstance: { currentUser: { getIdToken: async () => 'tok' } },
+    fetchImpl: async (url, options) => {
+      calls.push([new URL(url).pathname, options])
+      return { ok: true, json: async () => ({ users: [user] }) }
+    },
+  })
+  assert.deepEqual(await repository.listSuspendedUsers(), [user])
+  await repository.unsuspend(user.uid, '  Đã xác minh  ')
+  assert.equal(calls[0][0], '/v1/admin/moderation/suspended-users')
+  assert.equal(calls[1][0], '/v1/admin/moderation/users/u1/unsuspend')
+  assert.equal(calls[1][1].method, 'POST')
+  assert.deepEqual(JSON.parse(calls[1][1].body), { reason: 'Đã xác minh' })
+})
+
+test('lỗi mở khoá hướng dẫn thử lại và giải thích khi thiếu quyền', () => {
+  assert.match(unsuspendErrorMessage({ code: 'UNSUSPEND_INCOMPLETE' }), /Hoàn tất mở khoá/)
+  assert.match(unsuspendErrorMessage({ code: 'NOT_SUSPENDED' }), /không còn bị khoá/)
+  assert.match(unsuspendErrorMessage({ status: 403 }), /Chỉ Quản trị hệ thống/)
+  assert.match(unsuspendErrorMessage({ status: 401 }), /đăng nhập lại/)
 })
