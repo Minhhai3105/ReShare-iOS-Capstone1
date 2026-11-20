@@ -448,7 +448,7 @@ struct CommunityCatalogView: View {
                         .lineLimit(1)
                 }
 
-                Text(item.timeAgo)
+                Text(item.relativePostedTime)
                     .scaledFont(size: 10)
                     .foregroundColor(.secondary.opacity(0.8))
                     .lineLimit(1)
