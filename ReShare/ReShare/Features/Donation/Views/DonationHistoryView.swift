@@ -172,12 +172,71 @@ struct HistoryItemCard: View {
     @State private var showCancelConfirmation = false
     @State private var isCancelling = false
     @State private var cancellationError: String?
+    @State private var showDetail = false
 
     private var canCancel: Bool {
         item.status == .pending && item.reviewState != "needs_information"
     }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button { showDetail = true } label: {
+                summary.contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Mở chi tiết đơn quyên góp")
+
+            if item.status == .pending && item.reviewState == "needs_information" {
+                Button("Bổ sung và gửi duyệt lại") { showResubmit = true }
+                    .scaledFont(size: 12, weight: .semibold)
+                    .padding(.leading, 82)
+            }
+            if canCancel {
+                Button(isCancelling ? "Đang huỷ đơn…" : "Huỷ đơn", role: .destructive) {
+                    showCancelConfirmation = true
+                }
+                .scaledFont(size: 12, weight: .semibold)
+                .disabled(isCancelling)
+                .padding(.leading, 82)
+            }
+            if let cancellationError {
+                Text(cancellationError)
+                    .scaledFont(size: 12)
+                    .foregroundStyle(.red)
+                    .padding(.leading, 82)
+            }
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 18)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.03), radius: 6, x: 0, y: 2)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(Color.black.opacity(0.08), lineWidth: 1)
+        )
+        .sheet(isPresented: $showDetail) {
+            DonationHistoryDetailView(
+                item: item, hubName: hubDisplayName,
+                campaignTitle: item.campaignId.flatMap { FirestoreService.shared.knownCampaignTitles[$0] }
+            )
+        }
+        .sheet(isPresented: $showResubmit, onDismiss: {
+            if didResubmit {
+                didResubmit = false
+                onResubmitted()
+            }
+        }) { DonationResubmitView(item: item, onResubmitted: { didResubmit = true }) }
+        .confirmationDialog("Huỷ đơn quyên góp này?", isPresented: $showCancelConfirmation, titleVisibility: .visible) {
+            Button("Huỷ đơn", role: .destructive) { Task { await cancelDonation() } }
+            Button("Giữ đơn", role: .cancel) { }
+        } message: {
+            Text("Kho sẽ không xử lý đơn nữa.")
+        }
+    }
+
+    private var summary: some View {
         HStack(alignment: .top, spacing: 14) {
             // MARK: CỘT 1: THUMBNAIL ẢNH MÓN ĐỒ (CÓ CHẤM TRẠNG THÁI GÓC DƯỚI)
             ZStack(alignment: .bottomTrailing) {
@@ -230,7 +289,7 @@ struct HistoryItemCard: View {
             VStack(alignment: .leading, spacing: 5) {
                 // Hàng 1: Danh mục + Badge trạng thái
                 HStack {
-                    Text("\(item.category.title.uppercased()) • \(declaredQuantityLabel)")
+                    Text("\(item.category.title.uppercased()) • \(item.declaredQuantityLabel)")
                         .scaledFont(size: 10, weight: .bold)
                         .foregroundColor(Color(red: 0.35, green: 0.45, blue: 0.35))
 
@@ -285,22 +344,6 @@ struct HistoryItemCard: View {
                 }
 
                 // Hàng 4: Thời gian gửi & Trạm tiếp nhận
-                if item.status == .pending && item.reviewState == "needs_information" {
-                    Button("Bổ sung và gửi duyệt lại") { showResubmit = true }
-                        .scaledFont(size: 12, weight: .semibold)
-                }
-                if canCancel {
-                    Button(isCancelling ? "Đang huỷ đơn…" : "Huỷ đơn", role: .destructive) {
-                        showCancelConfirmation = true
-                    }
-                    .scaledFont(size: 12, weight: .semibold)
-                    .disabled(isCancelling)
-                }
-                if let cancellationError {
-                    Text(cancellationError)
-                        .scaledFont(size: 12)
-                        .foregroundStyle(.red)
-                }
                 HStack {
                     HStack(spacing: 4) {
                         Image(systemName: "clock")
@@ -318,28 +361,6 @@ struct HistoryItemCard: View {
                 }
                 .padding(.top, 2)
             }
-        }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 18)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.03), radius: 6, x: 0, y: 2)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 18)
-                .stroke(Color.black.opacity(0.08), lineWidth: 1)
-        )
-        .sheet(isPresented: $showResubmit, onDismiss: {
-            if didResubmit {
-                didResubmit = false
-                onResubmitted()
-            }
-        }) { DonationResubmitView(item: item, onResubmitted: { didResubmit = true }) }
-        .confirmationDialog("Huỷ đơn quyên góp này?", isPresented: $showCancelConfirmation, titleVisibility: .visible) {
-            Button("Huỷ đơn", role: .destructive) { Task { await cancelDonation() } }
-            Button("Giữ đơn", role: .cancel) { }
-        } message: {
-            Text("Kho sẽ không xử lý đơn nữa.")
         }
     }
 
@@ -360,13 +381,6 @@ struct HistoryItemCard: View {
     // Tên lưu kèm đơn lúc gửi đứng trước; đơn cũ lấy tên điểm đang hoạt động; còn lại nhãn chung.
     private var hubDisplayName: String {
         HubDisplayName.label(hubId: item.hubId, savedName: item.hubName, currentName: hub?.name, currentIsDemo: hub?.isDemo)
-    }
-
-    private var declaredQuantityLabel: String {
-        guard let quantity = item.quantity,
-              let unitId = item.unitId else { return "Chưa khai báo số lượng" }
-        let unit = DonationUnit(rawValue: unitId)?.title ?? unitId
-        return "\(quantity.formatted()) \(unit)"
     }
 
     // Icon placeholder khi chưa có ảnh mạng
