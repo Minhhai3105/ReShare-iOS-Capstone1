@@ -93,6 +93,11 @@ struct CatalogItemPublishView: View {
                 }
 
                 // 7. Nút Đăng đồ
+                if !hasValidImageCount {
+                    Text("Vui lòng chụp hoặc chọn từ 3 đến 6 ảnh thật của món đồ.")
+                        .scaledFont(size: 13, weight: .medium)
+                        .foregroundColor(textMuted)
+                }
                 publishButton
                     .padding(.top, 10)
                     .padding(.bottom, 30)
@@ -356,6 +361,8 @@ struct CatalogItemPublishView: View {
     }
 
     // MARK: - 6. Publish Button
+    private var hasValidImageCount: Bool { (3...6).contains(capturedImages.count) }
+
     private var publishButton: some View {
         Button(action: handlePublish) {
             HStack(spacing: 8) {
@@ -372,12 +379,12 @@ struct CatalogItemPublishView: View {
             }
             .frame(maxWidth: .infinity)
             .frame(height: 52)
-            .background(primaryGreen)
-            .foregroundColor(.white)
+            .background(hasValidImageCount ? primaryGreen : Color.gray.opacity(0.16))
+            .foregroundColor(hasValidImageCount ? .white : textMuted)
             .cornerRadius(16)
-            .shadow(color: primaryGreen.opacity(0.3), radius: 8, y: 4)
+            .shadow(color: primaryGreen.opacity(hasValidImageCount ? 0.3 : 0), radius: 8, y: 4)
         }
-        .disabled(isPublishing || itemTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !(3...6).contains(capturedImages.count))
+        .disabled(isPublishing || !hasValidImageCount)
     }
 
     private func handlePublish() {
@@ -386,7 +393,7 @@ struct CatalogItemPublishView: View {
             errorMessage = "Vui lòng nhập tên món đồ"
             return
         }
-        guard (3...6).contains(capturedImages.count) else {
+        guard hasValidImageCount else {
             errorMessage = "Vui lòng chụp hoặc chọn từ 3 đến 6 ảnh thật của món đồ."
             return
         }
