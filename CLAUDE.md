@@ -67,7 +67,13 @@ Vai trò: `donor` (iOS) · `warehouse_admin` (chỉ đơn thuộc kho được g
 | `contact-api` | `POST` + `GET /v1/contact` |
 | `campaigns-api` | `GET` + `POST /v1/admin/campaigns` · `GET …/options`, `…/:id` · `POST …/:id/update`, `…/:id/status` (chỉ System Admin) |
 | `hubs-api` | `GET /v1/admin/hubs` (System Admin + Warehouse Admin xem) · `POST /v1/admin/hubs`, `…/:id/update`, `…/:id/status`, `…/:id/delete` (chỉ System Admin) |
-| `p2p-listings-api` | `GET /v1/admin/p2p/listings`, `…/:id` · `POST …/:id/remove`, `…/:id/restore` (System Admin mọi quận; Warehouse Admin chỉ quận trong `warehouses/{id}.districts`) |
+| `p2p-listings-api` | `GET /v1/admin/p2p/listings`, `…/:id` · `POST …/:id/remove`, `…/:id/restore`, `…/:id/ai-check` (System Admin mọi quận; Warehouse Admin chỉ quận trong `warehouses/{id}.districts`) |
+| `moderation-api` | `GET /v1/admin/moderation/reports`, `…/suspended-users` · `POST …/reports/:id/resolve`, `…/users/:uid/unsuspend` (chỉ System Admin) |
+| `users-admin-api` | `GET /v1/admin/users`, `…/:uid/summary` · `POST …/:uid/suspend` (chỉ System Admin; không khoá được tài khoản nhân sự) |
+| `donation-cancel-api` | `POST /v1/donations/:id/cancel` (người tặng huỷ đơn `pending` của mình, kèm `expectedVersion`) |
+| `p2p-owner-delete-api` | `POST /v1/p2p/listings/:id/delete` (người đăng xoá bài đang sẵn sàng; ghi `p2p_listing_audit`, tạo job dọn ảnh) |
+
+Bảng trên chưa liệt kê hết: `server.cjs` còn route `donation-resubmit`, `stock-intake`, `inventory`, `distribution-history`, `beneficiaries`, `dashboard`, `account` — đọc `server.cjs` khi cần.
 
 `server.cjs` route theo prefix path, có allowlist origin (`ADMIN_WEB_ORIGINS`) và chặn body > 8KB (32KB cho `/v1/contact`).
 
