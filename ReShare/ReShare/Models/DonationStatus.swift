@@ -31,6 +31,14 @@ extension DonationStatus {
         }
     }
 
+    /// Đơn chưa kết thúc (chưa trao tặng, chưa bị từ chối, chưa huỷ). Dùng cho nhãn "N đơn đang xử lý" ở Trang chủ.
+    var isInProgress: Bool {
+        switch self {
+        case .pending, .approved, .received, .inStock: return true
+        case .distributed, .rejected, .cancelled: return false
+        }
+    }
+
     /// Nhãn trạng thái người tặng thấy. Khi kho yêu cầu bổ sung, backend vẫn giữ `status = pending`
     /// và đánh dấu bằng `reviewState = "needs_information"`, nên cần nhãn riêng thay cho "Chờ tiếp nhận".
     func donorTitle(reviewState: String?) -> String {

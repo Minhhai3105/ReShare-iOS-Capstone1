@@ -9,6 +9,11 @@ final class DonationStatusTests: XCTestCase {
         XCTAssertEqual(status.title, "Đã huỷ")
     }
 
+    func testInProgressExcludesFinishedStatuses() {
+        let inProgress = DonationStatus.allCases.filter(\.isInProgress)
+        XCTAssertEqual(Set(inProgress), [.pending, .approved, .received, .inStock])
+    }
+
     func testPendingNeedsInformationShowsCanBoSung() {
         XCTAssertEqual(DonationStatus.pending.donorTitle(reviewState: "needs_information"), "Cần bổ sung")
         XCTAssertEqual(DonationStatus.pending.donorIconName(reviewState: "needs_information"), "exclamationmark.bubble")
