@@ -301,7 +301,7 @@ struct HistoryItemCard: View {
                             .fill(item.status.color)
                             .frame(width: 5, height: 5)
 
-                        Text(item.status.title)
+                        Text(item.status.donorTitle(reviewState: item.reviewState))
                             .scaledFont(size: 11, weight: .bold)
                             .foregroundColor(item.status.color)
                     }
@@ -348,7 +348,7 @@ struct HistoryItemCard: View {
                     HStack(spacing: 4) {
                         Image(systemName: "clock")
                             .scaledFont(size: 10)
-                        Text(item.createdAt.formatted(date: .abbreviated, time: .shortened))
+                        Text(VietnameseDateText.dateTime(item.createdAt))
                             .scaledFont(size: 11)
                     }
                     .foregroundColor(Color(red: 0.40, green: 0.46, blue: 0.42))

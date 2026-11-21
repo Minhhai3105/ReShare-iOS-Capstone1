@@ -51,7 +51,7 @@ struct BlockedUsersView: View {
                 Text(user.displayName)
                     .scaledFont(size: 15, weight: .semibold)
                 if let date = user.blockedAt {
-                    Text("Đã chặn ngày \(date.formatted(date: .abbreviated, time: .omitted))")
+                    Text("Đã chặn ngày \(VietnameseDateText.date(date))")
                         .scaledFont(size: 12)
                         .foregroundColor(.secondary)
                 }
