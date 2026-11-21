@@ -3,11 +3,14 @@ import SwiftUI
 /// Khung chứa toàn bộ danh sách Recent Donations trên màn hình Home
 struct RecentDonationsSection: View {
     let items: [DonationItem]
+    /// Số đơn đang xử lý trên TOÀN BỘ đơn của người tặng. `items` chỉ là vài đơn gần nhất để hiển thị,
+    /// đếm trên `items` sẽ thiếu đơn cũ còn đang xử lý. Nil thì mới đếm tạm trên `items` (Preview).
+    var processingCount: Int? = nil
     var onSeeAll: () -> Void = {}
     var onSelectItem: ((DonationItem) -> Void)? = nil
 
     var body: some View {
-        let processingCount = items.filter { [.pending, .approved, .received, .inStock].contains($0.status) }.count
+        let processingCount = processingCount ?? items.filter { $0.status.isInProgress }.count
 
         VStack(alignment: .leading, spacing: 12) {
             // Tiêu đề Section + Badge đếm số lượng + Nút See All

@@ -4,6 +4,7 @@ import SwiftUI
 struct HomeView: View {
     @EnvironmentObject private var appState: AppState
     @State private var recentItems: [DonationItem] = []
+    @State private var processingCount: Int? = nil
 
     // State quản lý việc mở Camera và nhận ảnh chụp
     @State private var showCamera: Bool = false
@@ -69,6 +70,7 @@ struct HomeView: View {
                 // 5. Danh sách Quyên góp gần đây & Kích hoạt Theo dõi đơn #DON-2026
                 RecentDonationsSection(
                     items: recentItems,
+                    processingCount: processingCount,
                     onSeeAll: {
                         showHistorySheet = true
                     },
@@ -145,13 +147,15 @@ struct HomeView: View {
         urgentCampaign = campaigns.first(where: { $0.urgentLevel == .urgent })
     }
 
-    // Tải các đơn quyên góp thực tế mới nhất của người dùng từ Cloud Firestore
+    // Tải đơn quyên góp của người dùng từ Cloud Firestore: hiện 5 đơn mới nhất,
+    // nhưng đếm "đang xử lý" trên toàn bộ đơn (cùng truy vấn với màn Lịch sử) để không bỏ sót đơn cũ.
     private func loadRecentDonations() async {
         guard let uid = AuthService.shared.currentUserId, !uid.isEmpty else { return }
         do {
-            let liveDonations = try await FirestoreService.shared.fetchRecentDonations(donorId: uid, limit: 5)
+            let allDonations = try await FirestoreService.shared.fetchMyDonations(donorId: uid)
             await MainActor.run {
-                self.recentItems = liveDonations
+                self.recentItems = Array(allDonations.prefix(5))
+                self.processingCount = allDonations.filter { $0.status.isInProgress }.count
             }
         } catch {
             print("⚠️ [HomeView] Không thể tải danh sách quyên góp gần đây: \(error.localizedDescription)")
