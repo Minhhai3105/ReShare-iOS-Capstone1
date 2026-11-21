@@ -31,6 +31,20 @@ extension DonationStatus {
         }
     }
 
+    /// Nhãn trạng thái người tặng thấy. Khi kho yêu cầu bổ sung, backend vẫn giữ `status = pending`
+    /// và đánh dấu bằng `reviewState = "needs_information"`, nên cần nhãn riêng thay cho "Chờ tiếp nhận".
+    func donorTitle(reviewState: String?) -> String {
+        Self.needsInformation(self, reviewState: reviewState) ? "Cần bổ sung" : title
+    }
+
+    func donorIconName(reviewState: String?) -> String {
+        Self.needsInformation(self, reviewState: reviewState) ? "exclamationmark.bubble" : iconName
+    }
+
+    private static func needsInformation(_ status: DonationStatus, reviewState: String?) -> Bool {
+        status == .pending && reviewState == "needs_information"
+    }
+
     var iconName: String {
         switch self {
         case .pending:

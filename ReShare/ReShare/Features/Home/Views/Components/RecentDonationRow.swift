@@ -47,7 +47,7 @@ struct RecentDonationRow: View {
                         .fill(item.status.color)
                         .frame(width: 6, height: 6)
 
-                    Text(item.status.title)
+                    Text(item.status.donorTitle(reviewState: item.reviewState))
                         .scaledFont(size: 11, weight: .bold)
                         .foregroundColor(item.status.color)
                 }

@@ -51,7 +51,7 @@ struct DonationHistoryDetailView: View {
     private var information: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(item.title).font(.title2.bold()).foregroundStyle(AppColors.textPrimary)
-            Label(item.status.title, systemImage: item.status.iconName)
+            Label(item.status.donorTitle(reviewState: item.reviewState), systemImage: item.status.donorIconName(reviewState: item.reviewState))
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(item.status.color)
             if !item.description.isEmpty { Text(item.description).foregroundStyle(AppColors.textSecondary) }
@@ -116,7 +116,7 @@ struct DonationHistoryDetailView: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).foregroundStyle(completed ? AppColors.textPrimary : AppColors.textSecondary)
-                if completed, let date { Text(date.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(AppColors.textSecondary) }
+                if completed, let date { Text(VietnameseDateText.dateTime(date)).font(.caption).foregroundStyle(AppColors.textSecondary) }
             }
             .font(.subheadline)
         }

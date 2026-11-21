@@ -95,18 +95,22 @@ struct CatalogItemDetailView: View {
                         Image(systemName: "square.and.arrow.up")
                     }
                     if isMyItem {
-                        Menu {
-                            Button(role: .destructive) {
-                                if let deletionBlocker { deletionMessage = deletionBlocker }
-                                else { showDeleteConfirmation = true }
+                        // Bài đã trao tặng không bao giờ xoá được nên ẩn hẳn menu, tránh mục bấm vào chỉ để báo lỗi.
+                        // Bài đang hẹn vẫn hiện mục để nhắc người đăng phải huỷ hẹn trước.
+                        if item.status != .completed {
+                            Menu {
+                                Button(role: .destructive) {
+                                    if let deletionBlocker { deletionMessage = deletionBlocker }
+                                    else { showDeleteConfirmation = true }
+                                } label: {
+                                    Label("Xoá bài", systemImage: "trash")
+                                }
+                                .disabled(isDeleting)
                             } label: {
-                                Label("Xoá bài", systemImage: "trash")
+                                Image(systemName: "ellipsis.circle").frame(width: 44, height: 44)
                             }
-                            .disabled(isDeleting)
-                        } label: {
-                            Image(systemName: "ellipsis.circle").frame(width: 44, height: 44)
+                            .accessibilityLabel("Tuỳ chọn bài đăng")
                         }
-                        .accessibilityLabel("Tuỳ chọn bài đăng")
                     } else if !currentUserId.isEmpty {
                         Menu {
                             Button {
