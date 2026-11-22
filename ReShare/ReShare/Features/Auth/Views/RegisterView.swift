@@ -27,6 +27,12 @@ struct RegisterView: View {
                         .padding(.top, 4)
                     
                     formFieldsView
+                        // Lỗi từ lần bấm trước (vd: email sai định dạng, email đã dùng) không còn đúng khi người dùng đã sửa ô.
+                        .onChange(of: viewModel.fullName) { viewModel.errorMessage = nil }
+                        .onChange(of: viewModel.email) { viewModel.errorMessage = nil }
+                        .onChange(of: viewModel.phoneNumber) { viewModel.errorMessage = nil }
+                        .onChange(of: viewModel.password) { viewModel.errorMessage = nil }
+                        .onChange(of: confirmPassword) { viewModel.errorMessage = nil }
                     
                     termsCheckboxView
                     
@@ -197,6 +203,13 @@ struct RegisterView: View {
                 }
             }
             
+            if isPasswordTooShort {
+                Text("Mật khẩu cần ít nhất 8 ký tự.")
+                    .scaledFont(size: 12)
+                    .foregroundColor(AppColors.rejected)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            
             // Confirm Password
             inputSection(title: "Nhập lại mật khẩu") {
                 HStack(spacing: 12) {
@@ -342,6 +355,11 @@ struct RegisterView: View {
     }
     
     // MARK:
+    
+    /// Đã gõ mật khẩu nhưng chưa đủ 8 ký tự: nút Tạo tài khoản bị khoá nên phải nói rõ lý do.
+    private var isPasswordTooShort: Bool {
+        !viewModel.password.isEmpty && viewModel.password.count < 8
+    }
     
     private var isFormValid: Bool {
         !viewModel.fullName.trimmingCharacters(in: .whitespaces).isEmpty &&
