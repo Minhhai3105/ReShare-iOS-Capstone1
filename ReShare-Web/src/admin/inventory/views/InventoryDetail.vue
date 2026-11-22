@@ -13,7 +13,6 @@ import { resolveQueueAccess } from '../../donations/donation.service'
 import { createInventorySyncState } from '../inventory.sync.js'
 import {
   CONDITION_LABEL,
-  DONATION_DETAIL_ROUTE,
   INVENTORY_ERROR,
   INVENTORY_IS_MOCK,
   MOVEMENT_TYPE_LABEL,
@@ -22,6 +21,7 @@ import {
   formatDateTime,
   getAccessibleWarehouses,
   getItemSources,
+  getMovementLinks,
   subscribeInventory,
 } from '../inventory.service'
 
@@ -98,7 +98,6 @@ const accessLabel = computed(() => {
   const scope = isSystemAdmin.value ? 'toàn hệ thống' : scopeName.value.replace(/Kho /g, '')
   return `${USER_ROLE_LABEL[role]} (${scope})`
 })
-const donationParams = computed(() => ({ donationId: item.value?.donationId }))
 const sources = computed(() => getItemSources(item.value))
 const unitLabel = computed(() => (item.value ? UNIT_LABEL[item.value.unitId] || item.value.unitId || '—' : '—'))
 
@@ -226,8 +225,9 @@ onBeforeUnmount(() => { latestRequestId += 1; syncGeneration += 1; stopSync(); d
                   <td>{{ movement.actor }}</td>
                   <td class="detail-nowrap">
                     <span class="mono">{{ formatCode(movement.voucherId) }}</span>
-                    <RouterLink v-if="movement.type === 'stock_in'" :to="{ name: DONATION_DETAIL_ROUTE, params: donationParams }" class="detail-voucher-link">Xem đơn nguồn</RouterLink>
-                    <RouterLink v-else-if="movement.type === 'distribution'" :to="{ name: ADMIN_ROUTE.distributionDetail, params: { voucherId: movement.voucherId } }" class="detail-voucher-link">Xem phiếu xuất</RouterLink>
+                    <template v-if="getMovementLinks(movement, item?.donationId).length">
+                      <RouterLink v-for="link in getMovementLinks(movement, item?.donationId)" :key="link.label" :to="link.to" class="detail-voucher-link">{{ link.label }}</RouterLink>
+                    </template>
                     <small v-else class="detail-voucher-note">Chưa hỗ trợ xem phiếu</small>
                   </td>
                   <td>{{ movement.note }}</td>

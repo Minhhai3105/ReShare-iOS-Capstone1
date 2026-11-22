@@ -85,6 +85,24 @@ describe('US14 – tồn kho', () => {
     assert.equal(service.getItemSources({ ...item, stockEntryId: '' }, true)[2].to, null, 'chưa có phiếu thì không gắn liên kết')
   })
 
+  test('TC_INV_006: dòng nhập kho mở được phiếu nhập và đơn nguồn; dòng xuất mở phiếu xuất', () => {
+    const stockIn = { type: 'stock_in', voucherId: 'ste_rcp_don-1', stockEntryId: 'ste_rcp_don-1' }
+    assert.deepEqual(service.getMovementLinks(stockIn, 'don-1', true), [
+      { label: 'Xem phiếu nhập', to: { name: 'admin-stock-entry-detail', params: { entryId: 'ste_rcp_don-1' } } },
+      { label: 'Xem đơn nguồn', to: { name: 'admin-donation-detail', params: { donationId: 'don-1' } } },
+    ])
+    // Bản ghi cũ chỉ có voucherId (đã được live source điền bằng mã phiếu nhập) vẫn mở được phiếu nhập.
+    assert.equal(service.getMovementLinks({ type: 'stock_in', voucherId: 'ste_x' }, 'don-1', true)[0].to.params.entryId, 'ste_x')
+    assert.deepEqual(service.getMovementLinks({ type: 'distribution', voucherId: 'px-1' }, 'don-1', true),
+      [{ label: 'Xem phiếu xuất', to: { name: 'admin-distribution-detail', params: { voucherId: 'px-1' } } }])
+  })
+
+  test('TC_INV_006: dữ liệu mẫu không mở phiếu nhập; điều chỉnh không có liên kết', () => {
+    const labels = service.getMovementLinks({ type: 'stock_in', voucherId: 'ste_mau' }, 'don-1', false).map(({ label }) => label)
+    assert.deepEqual(labels, ['Xem đơn nguồn'])
+    assert.deepEqual(service.getMovementLinks({ type: 'adjustment', voucherId: 'adj-1' }, 'don-1', true), [])
+  })
+
   test('Tình trạng dùng đúng 3 giá trị của biên bản thực nhận (receipt-api), mọi vật phẩm đều có nhãn', async () => {
     assert.deepEqual(Object.keys(service.CONDITION_LABEL), ['good', 'minor-wear', 'damaged'])
     const { items } = await service.fetchInventory(SYSTEM_ADMIN, query())
