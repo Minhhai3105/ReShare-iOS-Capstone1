@@ -63,6 +63,22 @@ export function getItemSources(item, live = !IS_MOCK) {
   ]
 }
 
+// Liên kết ở cột "Chứng từ" của lịch sử biến động. Phiếu nhập: mở phiếu nhập kho (mã chứng từ chính là mã phiếu nhập)
+// và đơn nguồn; phiếu xuất: mở phiếu xuất. Dữ liệu mẫu không có phiếu nhập trên máy chủ nên chỉ giữ link đơn nguồn.
+export function getMovementLinks(movement, donationId, live = !IS_MOCK) {
+  if (movement?.type === 'stock_in') {
+    const entryId = movement.stockEntryId || movement.voucherId
+    return [
+      ...(live && entryId ? [{ label: 'Xem phiếu nhập', to: { name: STOCK_ENTRY_DETAIL_ROUTE, params: { entryId } } }] : []),
+      ...(donationId ? [{ label: 'Xem đơn nguồn', to: { name: DONATION_DETAIL_ROUTE, params: { donationId } } }] : []),
+    ]
+  }
+  if (movement?.type === 'distribution' && movement.voucherId) {
+    return [{ label: 'Xem phiếu xuất', to: { name: 'admin-distribution-detail', params: { voucherId: movement.voucherId } } }]
+  }
+  return []
+}
+
 // Mock chỉ dùng khi dev bật VITE_INVENTORY_SOURCE=mock; build có guard riêng trong Vite.
 export const INVENTORY_IS_MOCK = inventoryMode(import.meta.env) === 'mock'
 const IS_MOCK = INVENTORY_IS_MOCK
