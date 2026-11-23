@@ -26,4 +26,17 @@ final class DonationStatusTests: XCTestCase {
         XCTAssertEqual(DonationStatus.rejected.donorTitle(reviewState: "needs_information"), "Từ chối")
         XCTAssertEqual(DonationStatus.approved.donorIconName(reviewState: nil), DonationStatus.approved.iconName)
     }
+
+    func testDonorMessageKindCoversApprovalMessages() {
+        XCTAssertEqual(DonationStatus.rejected.donorMessageKind(reviewState: nil), .rejection)
+        XCTAssertEqual(DonationStatus.pending.donorMessageKind(reviewState: "needs_information"), .informationRequest)
+        XCTAssertEqual(DonationStatus.approved.donorMessageKind(reviewState: nil), .update)
+        XCTAssertEqual(DonationStatus.approved.donorMessagePrefix(reviewState: nil), "Lời nhắn từ kho: ")
+        XCTAssertEqual(DonationStatus.rejected.donorMessagePrefix(reviewState: "needs_information"), "Lý do từ chối: ")
+    }
+
+    func testUpdateMessageShownOnlyAfterReview() {
+        let shown = DonationStatus.allCases.filter(\.showsUpdateMessage)
+        XCTAssertEqual(Set(shown), [.approved, .received, .inStock, .distributed])
+    }
 }

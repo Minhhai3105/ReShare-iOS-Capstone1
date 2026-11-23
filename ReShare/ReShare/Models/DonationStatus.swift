@@ -49,6 +49,35 @@ extension DonationStatus {
         Self.needsInformation(self, reviewState: reviewState) ? "exclamationmark.bubble" : iconName
     }
 
+    /// Loại lời nhắn công khai (`statusNote`) kho gửi người tặng. Duyệt cũng có thể kèm lời nhắn,
+    /// nên ngoài "từ chối" và "yêu cầu bổ sung" còn loại cập nhật thông thường.
+    enum DonorMessageKind: Equatable {
+        case rejection, informationRequest, update
+    }
+
+    func donorMessageKind(reviewState: String?) -> DonorMessageKind {
+        if self == .rejected { return .rejection }
+        if Self.needsInformation(self, reviewState: reviewState) { return .informationRequest }
+        return .update
+    }
+
+    func donorMessagePrefix(reviewState: String?) -> String {
+        switch donorMessageKind(reviewState: reviewState) {
+        case .rejection: return "Lý do từ chối: "
+        case .informationRequest: return "Yêu cầu bổ sung: "
+        case .update: return "Lời nhắn từ kho: "
+        }
+    }
+
+    /// Lời nhắn cập nhật (không phải từ chối / yêu cầu bổ sung) chỉ hiện khi đơn đã qua bước duyệt; đơn đang chờ hoặc đã huỷ
+    /// chỉ mang câu mặc định của app/hệ thống, không phải lời nhắn của kho. Dùng cho thẻ Lịch sử và màn chi tiết.
+    var showsUpdateMessage: Bool {
+        switch self {
+        case .approved, .received, .inStock, .distributed: return true
+        case .pending, .rejected, .cancelled: return false
+        }
+    }
+
     private static func needsInformation(_ status: DonationStatus, reviewState: String?) -> Bool {
         status == .pending && reviewState == "needs_information"
     }

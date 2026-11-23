@@ -341,6 +341,20 @@ struct HistoryItemCard: View {
                     .padding(6)
                     .background(RoundedRectangle(cornerRadius: 6).fill(Color.orange.opacity(0.08)))
                     .padding(.top, 2)
+                } else if item.status.showsUpdateMessage,
+                          let message = item.statusNote?.trimmingCharacters(in: .whitespacesAndNewlines), !message.isEmpty {
+                    // Lời nhắn công khai kho gửi khi duyệt / tiếp nhận (không phải ghi chú nội bộ).
+                    HStack(alignment: .top, spacing: 4) {
+                        Image(systemName: "info.circle.fill")
+                            .scaledFont(size: 10)
+                        Text(message)
+                            .scaledFont(size: 11)
+                            .lineLimit(2)
+                    }
+                    .foregroundColor(Color(red: 0.11, green: 0.27, blue: 0.16).opacity(0.85))
+                    .padding(6)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.green.opacity(0.06)))
+                    .padding(.top, 2)
                 }
 
                 // Hàng 4: Thời gian gửi & Trạm tiếp nhận
