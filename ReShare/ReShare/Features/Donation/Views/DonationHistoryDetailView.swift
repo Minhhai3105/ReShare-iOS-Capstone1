@@ -72,11 +72,14 @@ struct DonationHistoryDetailView: View {
                     .font(.footnote)
                     .foregroundStyle(AppColors.textSecondary)
             }
-            if let note = item.statusNote, item.status == .rejected || item.reviewState == "needs_information" {
-                Label(item.status == .rejected ? "Lý do từ chối: \(note)" : "Yêu cầu bổ sung: \(note)",
-                      systemImage: "exclamationmark.circle")
+            if let note = item.statusNote?.trimmingCharacters(in: .whitespacesAndNewlines), !note.isEmpty,
+               item.status.donorMessageKind(reviewState: item.reviewState) != .update || item.status.showsUpdateMessage {
+                let kind = item.status.donorMessageKind(reviewState: item.reviewState)
+                Label(item.status.donorMessagePrefix(reviewState: item.reviewState) + note,
+                      systemImage: kind == .update ? "info.circle" : "exclamationmark.circle")
                     .font(.subheadline)
-                    .foregroundStyle(item.status == .rejected ? AppColors.rejected : AppColors.pending)
+                    .foregroundStyle(kind == .rejection ? AppColors.rejected
+                                     : kind == .informationRequest ? AppColors.pending : AppColors.textSecondary)
             }
         }
         .padding(16)
