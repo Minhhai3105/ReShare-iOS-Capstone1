@@ -21,6 +21,9 @@ import {
   subscribeInventory,
 } from '../inventory.service'
 
+// Lô cũ hoặc dữ liệu thiếu mã (phiếu nhập / đơn nguồn) không được làm vỡ cả bảng: hiện “—” thay vì lỗi.
+const formatCode = (code) => (code ? String(code).toUpperCase() : '—')
+
 const DEFAULT_FILTERS = { search: '', category: '', condition: '', stock: STOCK_FILTER.all }
 const STOCK_TABS = [
   { value: STOCK_FILTER.all, label: 'Tất cả' },
@@ -246,7 +249,7 @@ onMounted(() => { startSync(); document.addEventListener('visibilitychange', sta
               <td class="mono inventory-qty" :class="{ 'is-out': item.quantityAvailable === 0 }">{{ item.quantityAvailable }}</td>
               <td>{{ UNIT_LABEL[item.unitId] ?? item.unitId }}</td>
               <td><span class="mono">{{ item.location }}</span><small>{{ item.warehouse.name }}</small></td>
-              <td><span class="mono">{{ item.stockEntryId.toUpperCase() }}</span><small class="mono">{{ item.donationId.toUpperCase() }}</small></td>
+              <td><span class="mono">{{ formatCode(item.stockEntryId) }}</span><small class="mono">{{ formatCode(item.donationId) }}</small></td>
               <td class="inventory-nowrap">{{ formatDateTime(item.updatedAt) }}</td>
               <td><RouterLink :to="{ name: ADMIN_ROUTE.inventoryDetail, params: { itemId: item.id } }" class="inventory-link">Xem chi tiết</RouterLink></td>
             </tr>
