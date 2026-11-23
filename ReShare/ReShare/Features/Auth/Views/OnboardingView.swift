@@ -39,7 +39,7 @@ struct OnboardingView: View {
             badgeText: "1 Chạm",
             badgeIcon: "camera.fill",
             imageName: "Onboarding1",
-            footerText: "Hơn 12.000 món đồ đã được tái sinh vòng đời",
+            footerText: "Mỗi món đồ trao đi là thêm một vòng đời mới",
             footerIcon: "clock.arrow.circlepath"
         ),
         OnboardingItem(
