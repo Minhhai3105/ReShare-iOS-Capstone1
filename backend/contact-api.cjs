@@ -12,9 +12,10 @@ const MAX_SUBMISSIONS_PER_WINDOW = 3;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 class ApiError extends Error {
-  constructor(status, message) {
+  constructor(status, message, retryAfterSeconds = null) {
     super(message);
     this.status = status;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 }
 
@@ -38,13 +39,37 @@ function validateContact(body) {
   return { name: name.trim(), email: email.trim(), message: message.trim() };
 }
 
-function createContactApi({ db, verifyToken, serverTimestamp, now = Date.now }) {
+function createContactApi({
+  db, verifyToken, serverTimestamp, verifyTurnstile, enabled = false, now = Date.now,
+}) {
   if (!db || !verifyToken || !serverTimestamp) {
     throw new Error('Contact API configuration is incomplete');
   }
 
   async function submit(body) {
+    if (!enabled) throw new ApiError(503, 'Contact form is temporarily unavailable');
+
     const contact = validateContact(body);
+    const turnstileToken = typeof body.turnstileToken === 'string' ? body.turnstileToken.trim() : '';
+    if (!turnstileToken || turnstileToken.length > 2048) {
+      throw new ApiError(400, 'Invalid verification token');
+    }
+
+    if (typeof verifyTurnstile !== 'function') {
+      throw new ApiError(503, 'Contact verification is unavailable');
+    }
+    try {
+      const verified = await verifyTurnstile(turnstileToken);
+      if (verified !== true) throw new ApiError(400, 'Invalid verification token');
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      const status = error?.status === 400 ? 400 : 503;
+      throw new ApiError(
+        status,
+        status === 400 ? 'Invalid verification token' : 'Contact verification is unavailable',
+      );
+    }
+
     const currentTime = now();
     const rateKey = createHash('sha256').update(contact.email.toLowerCase()).digest('hex');
     const rateRef = db.collection('contact_rate_limits').doc(rateKey);
@@ -61,7 +86,7 @@ function createContactApi({ db, verifyToken, serverTimestamp, now = Date.now }) 
           1,
           Math.ceil((recentSubmissions[0] + RATE_LIMIT_WINDOW_MS - currentTime) / 1000),
         );
-        throw new ApiError(429, `Too many requests. Retry after ${retryAfterSeconds} seconds.`);
+        throw new ApiError(429, `Too many requests. Retry after ${retryAfterSeconds} seconds.`, retryAfterSeconds);
       }
 
       transaction.set(contactRef, {
