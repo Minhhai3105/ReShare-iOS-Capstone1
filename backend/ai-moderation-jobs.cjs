@@ -98,9 +98,14 @@ function createAiModerationJobs({ db, moderator, clock = () => new Date(),
     });
     if (!input) return { enabled: true, skipped: true };
     try {
+      const trigger = onlyUnseen ? 'background' : 'manual';
       let result;
-      try { result = await moderator.check(input.data); }
-      catch { result = { status: 'error', categories: [], reason: ERROR_REASON, model: null }; }
+      try { result = await moderator.check(input.data, { listingId: id, trigger }); }
+      catch (error) {
+        const errorName = typeof error?.name === 'string' && /^[A-Za-z0-9_]{1,40}$/.test(error.name) ? error.name : 'Error';
+        console.error('[ai-moderation]', JSON.stringify({ listingId: id, trigger, status: 'error', stage: 'worker_exception', errorName }));
+        result = { status: 'error', categories: [], reason: ERROR_REASON, model: null };
+      }
       const aiModeration = {
         status: result.status, categories: result.categories, reason: result.reason, model: result.model,
         confidence: normalizeConfidence(result.confidence), checkedAt: clock(),

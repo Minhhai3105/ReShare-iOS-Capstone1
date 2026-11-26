@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createAiModerator, moderationInput, readAiAutoRemoveConfig } = require('../ai-moderation.cjs');
-const config = { baseUrl: 'https://ai.example/v1/', apiKey: 'test-only-key', model: 'test-vision' };
+const { createAiModerator, moderationInput, readAiAutoRemoveConfig, defaultDiagnosticLogger } = require('../ai-moderation.cjs');
+const config = { baseUrl: 'https://ai.example/v1/', apiKey: 'test-only-key', model: 'test-vision', onDiagnostic: () => {} };
 const response = content => ({ ok: true, json: async () => ({ choices: [{ message: { content } }] }) });
 const verdict = (value = 'safe') => JSON.stringify({ verdict: value, categories: value === 'safe' ? [] : ['scam_or_sale'], reason: 'Kiểm tra nội dung' });
 
@@ -219,4 +219,135 @@ test('AI kiểm duyệt: tải được một phần ảnh thì chỉ gửi các
   const result = await moderator.check({ imageUrls: [cloudinaryImage, cloudinaryImage.replace('/a.jpg', '/missing.jpg')] });
   assert.equal(result.status, 'flagged');
   assert.equal(sent.messages[1].content.filter(part => part.type === 'image_url').length, 1);
+});
+
+test('Chẩn đoán AI: ghi rõ stage, mã HTTP, số ảnh, thời gian từng bước và không lộ key/URL/nội dung', async () => {
+  const secretTitle = '[TEST] Nồi cơm điện nội địa bí mật';
+  const secretNote = 'Số điện thoại bí mật 0905123456';
+  const secretBody = 'RAW_PROVIDER_BODY_SECRET_TOKEN';
+  const events = [];
+  let tick = 1000;
+  const now = () => tick;
+
+  const failImage = createAiModerator({
+    ...config, now, onDiagnostic: event => events.push(event),
+    fetchImpl: async url => {
+      tick += 40;
+      if (url.endsWith('/b.jpg')) return new Response('nope', { status: 404, headers: { 'content-type': 'image/jpeg' } });
+      throw new TypeError('network down');
+    },
+  });
+  await failImage.check({ title: secretTitle, donorNote: secretNote, imageUrls: [cloudinaryImage, cloudinaryImage.replace('/a.jpg', '/b.jpg')] }, { listingId: 'cat_test1', trigger: 'manual' });
+  const imgDiag = events.at(-1);
+  assert.equal(imgDiag.stage, 'image_download');
+  assert.equal(imgDiag.httpStatus, null);
+  assert.equal(imgDiag.imagesTotal, 2);
+  assert.equal(imgDiag.imagesLoaded, 0);
+  assert.deepEqual(imgDiag.imageFailures, ['network_error', 'http_404']);
+  assert.ok(imgDiag.imageMs >= 0);
+  assert.equal(imgDiag.modelMs, 0);
+
+  const failHttp = createAiModerator({
+    ...config, now, onDiagnostic: event => events.push(event),
+    fetchImpl: async url => {
+      if (url.startsWith('https://res.cloudinary.com/')) {
+        tick += 25;
+        return new Response(Buffer.from('ok'), { headers: { 'content-type': 'image/jpeg' } });
+      }
+      tick += 120;
+      return { ok: false, status: 429, text: async () => secretBody, json: () => { assert.fail('không đọc body lỗi'); } };
+    },
+  });
+  await failHttp.check({ title: secretTitle, donorNote: secretNote, imageUrls: [cloudinaryImage] }, { listingId: 'cat_test2', trigger: 'background' });
+  const httpDiag = events.at(-1);
+  assert.equal(httpDiag.stage, 'model_http');
+  assert.equal(httpDiag.httpStatus, 429);
+  assert.equal(httpDiag.imagesTotal, 1);
+  assert.equal(httpDiag.imagesLoaded, 1);
+  assert.equal(httpDiag.modelHeadersMs, 120);
+  assert.ok(httpDiag.totalMs >= 145);
+
+  const failJson = createAiModerator({
+    ...config, now, onDiagnostic: event => events.push(event),
+    fetchImpl: async () => {
+      tick += 50;
+      return { ok: true, status: 200, json: async () => ({ choices: [{ finish_reason: 'length', message: { content: 'not json ' + secretBody } }] }) };
+    },
+  });
+  await failJson.check({ title: secretTitle, donorNote: secretNote }, { listingId: 'cat_test3', trigger: 'manual' });
+  const jsonDiag = events.at(-1);
+  assert.equal(jsonDiag.stage, 'response_json');
+  assert.equal(jsonDiag.detail, 'invalid_content_json');
+  assert.equal(jsonDiag.httpStatus, 200);
+  assert.equal(jsonDiag.finishReason, 'length');
+
+  const failTimeout = createAiModerator({
+    ...config, timeoutMs: 15, onDiagnostic: event => events.push(event),
+    fetchImpl: async () => new Promise(() => {}),
+  });
+  await failTimeout.check({ title: secretTitle }, { listingId: 'cat_test4', trigger: 'manual' });
+  const timeoutDiag = events.at(-1);
+  assert.equal(timeoutDiag.stage, 'model_timeout');
+  assert.equal(timeoutDiag.detail, 'fetch_timeout');
+  assert.equal(timeoutDiag.httpStatus, null);
+
+  const okCheck = createAiModerator({
+    ...config, now, onDiagnostic: event => events.push(event),
+    fetchImpl: async () => { tick += 30; return { ...response(verdict('flagged')), status: 200 }; },
+  });
+  await okCheck.check({ title: secretTitle, donorNote: secretNote }, { listingId: 'cat_test5', trigger: 'manual' });
+  const okDiag = events.at(-1);
+  assert.equal(okDiag.stage, 'ok');
+  assert.equal(okDiag.status, 'flagged');
+  assert.equal(okDiag.httpStatus, 200);
+
+  const serialized = JSON.stringify(events);
+  for (const sensitive of [config.apiKey, 'https://ai.example', cloudinaryImage, 'res.cloudinary.com', secretTitle, secretNote, secretBody, 'Kiểm tra nội dung']) {
+    assert.equal(serialized.includes(sensitive), false, `Không được rò ${sensitive} vào log`);
+  }
+  // [P2-A] Trường model không được xuất hiện trong bất kỳ event log chẩn đoán nào.
+  for (const event of events) {
+    assert.ok(!('model' in event), `Event log không được có trường model (rò rỉ key): ${JSON.stringify(event)}`);
+  }
+});
+
+test('Logger mặc định chỉ in console.error khi lỗi và console.info khi quét tay thành công', t => {
+  const errors = [];
+  const infos = [];
+  t.mock.method(console, 'error', (...args) => errors.push(args.join(' ')));
+  t.mock.method(console, 'info', (...args) => infos.push(args.join(' ')));
+  defaultDiagnosticLogger({ listingId: 'a', trigger: 'background', status: 'safe', stage: 'ok' });
+  defaultDiagnosticLogger({ listingId: 'b', trigger: 'manual', status: 'safe', stage: 'ok' });
+  defaultDiagnosticLogger({ listingId: 'c', trigger: 'background', status: 'error', stage: 'model_http', httpStatus: 403 });
+  assert.equal(infos.length, 1);
+  assert.match(infos[0], /^\[ai-moderation\] \{.*"listingId":"b"/);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /^\[ai-moderation\] \{.*"httpStatus":403/);
+});
+
+// [P2-B] Ghi log ngay lúc khởi động khi cấu hình sai, không cần gọi check().
+test('Chẩn đoán AI: ghi log cấu hình sai ngay lúc khởi động, không cần gọi check', () => {
+  const cases = [
+    { overrides: { baseUrl: '' },     expectedDetail: 'invalid_base_url' },
+    { overrides: { apiKey: '' },      expectedDetail: 'missing_api_key' },
+    { overrides: { model: '' },       expectedDetail: 'missing_model' },
+  ];
+  for (const { overrides, expectedDetail } of cases) {
+    const startupEvents = [];
+    createAiModerator({ ...config, ...overrides, onDiagnostic: event => startupEvents.push(event) });
+    assert.equal(startupEvents.length, 1, `Phải ghi đúng 1 event startup khi ${expectedDetail}`);
+    const [event] = startupEvents;
+    assert.equal(event.status, 'error');
+    assert.equal(event.stage, 'config');
+    assert.equal(event.detail, expectedDetail);
+    assert.equal(event.trigger, 'startup');
+    assert.ok(!('model' in event), 'Event startup không được có trường model');
+  }
+});
+
+// [P2-B] Không ghi log startup khi cấu hình hợp lệ.
+test('Chẩn đoán AI: không ghi log startup khi cấu hình hợp lệ', () => {
+  const startupEvents = [];
+  createAiModerator({ ...config, onDiagnostic: event => startupEvents.push(event) });
+  assert.equal(startupEvents.length, 0, 'Không được ghi event startup khi cấu hình đầy đủ');
 });
