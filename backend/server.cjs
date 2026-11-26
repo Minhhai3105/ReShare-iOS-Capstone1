@@ -103,7 +103,7 @@ const server = http.createServer(async (request, response) => {
   try {
     pathname = new URL(request.url, 'http://localhost').pathname;
   } catch {
-    response.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    response.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     response.end(JSON.stringify({ message: 'Invalid request URL' }));
     return;
   }
@@ -154,7 +154,7 @@ const server = http.createServer(async (request, response) => {
   // /v1/contact phục vụ cả form landing (POST) lẫn hộp thư của System Admin trên Web Admin (GET),
   // nên nhận origin của landing và các origin quản trị. Đọc hộp thư vẫn bắt buộc token System Admin.
   const contactOriginAllowed = Boolean(origin) && (origin === allowedContactOrigin || allowedAdminOrigin);
-  const responseHeaders = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' };
+  const responseHeaders = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' };
   if (((isAdminApi || isAdminImageRead) && allowedAdminOrigin) || (isContactPath && contactOriginAllowed)) {
     responseHeaders['Access-Control-Allow-Origin'] = origin;
     responseHeaders['Access-Control-Allow-Headers'] = 'Authorization, Content-Type';

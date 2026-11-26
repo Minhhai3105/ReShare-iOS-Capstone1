@@ -185,3 +185,8 @@ test('Dữ liệu công khai: chỉ đúng 2 đường dẫn vào handler công 
     assert.equal((await send(handler, other)).body.api, undefined);
   }
 });
+
+test('Phản hồi JSON khai báo charset=utf-8 để trình duyệt nhúng (Messenger, Zalo) không hiện sai tiếng Việt', async () => {
+  const result = await send(loadHandler(), '/v1/public/hubs', 'GET', undefined);
+  assert.equal(result.headers['Content-Type'], 'application/json; charset=utf-8');
+});
