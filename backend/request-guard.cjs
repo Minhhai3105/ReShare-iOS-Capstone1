@@ -71,7 +71,7 @@ const READ_ONLY_POST_PATHS = new Set(['/v1/admin/donations/senders', '/v1/images
 /** Endpoint ghi/tốn tài nguyên: POST còn lại (quyết định đơn, nhập kho, xuất kho, upload ảnh, form liên hệ…). */
 const isWriteRequest = (method, pathname) => method === 'POST' && !READ_ONLY_POST_PATHS.has(pathname);
 
-function createRequestGuard(env = {}, { now = Date.now } = {}) {
+function createRequestGuard(env = {}, { now = Date.now, log } = {}) {
   const windowMs = readPositiveInt(env.RATE_LIMIT_WINDOW_MS, 60000);
   const general = createRateLimiter({ limit: readPositiveInt(env.RATE_LIMIT_GENERAL_PER_MINUTE, 120), windowMs, now });
   const write = createRateLimiter({ limit: readPositiveInt(env.RATE_LIMIT_WRITE_PER_MINUTE, 20), windowMs, now });
@@ -79,6 +79,10 @@ function createRequestGuard(env = {}, { now = Date.now } = {}) {
   const proxyHops = Number.isSafeInteger(Number(env.TRUSTED_PROXY_HOPS)) && Number(env.TRUSTED_PROXY_HOPS) >= 0
     ? Number(env.TRUSTED_PROXY_HOPS) : 1;
   const enabled = env.RATE_LIMIT_ENABLED !== 'off';
+  // CLIENT_IP_DEBUG=on (tạm thời): ghi log header IP của tối đa 40 request có header X-ReShare-IP-Probe,
+  // để xem hạ tầng Render thật sự gửi gì. Chỉ request thăm dò của nhóm mới bị ghi, không ghi IP người dùng khác.
+  let probesLeft = env.CLIENT_IP_DEBUG === 'on' ? 40 : 0;
+  const logProbe = typeof log === 'function' ? log : (line) => console.info(line);
   const rawIpHeader = typeof env.CLIENT_IP_HEADER === 'string' ? env.CLIENT_IP_HEADER.trim().toLowerCase() : '';
   const ipHeader = /^[a-z0-9-]{1,64}$/.test(rawIpHeader) ? rawIpHeader : '';
 
@@ -92,6 +96,16 @@ function createRequestGuard(env = {}, { now = Date.now } = {}) {
     const edgeVerified = Boolean(edgeSecret) && safeEqual(request.headers?.['x-edge-secret'] || '', edgeSecret);
     // Chỉ bật khi đặt EDGE_SECRET: lúc đó backend chỉ nhận request đi qua Cloudflare.
     if (edgeSecret && !edgeVerified) return { status: 403, message: 'Direct access is not allowed' };
+    const probe = request.headers?.['x-reshare-ip-probe'];
+    if (probesLeft > 0 && typeof probe === 'string') {
+      probesLeft -= 1;
+      const h = request.headers;
+      logProbe(`[client-ip] ${JSON.stringify({
+        probe: probe.slice(0, 40), xff: h['x-forwarded-for'] || null, trueClientIp: h['true-client-ip'] || null,
+        cfConnectingIp: h['cf-connecting-ip'] || null, xRealIp: h['x-real-ip'] || null,
+        remote: request.socket?.remoteAddress || null, chosen: clientIp(request, { edgeVerified, proxyHops, ipHeader }),
+      })}`);
+    }
     if (!enabled || request.method === 'OPTIONS') return null;
     const ip = clientIp(request, { edgeVerified, proxyHops, ipHeader });
     const generalResult = general.take(ip);

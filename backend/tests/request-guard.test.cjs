@@ -103,3 +103,16 @@ test('CLIENT_IP_HEADER: lấy IP thật từ header hạ tầng đặt (Render: 
   const bad = createRequestGuard({ CLIENT_IP_HEADER: 'x y', RATE_LIMIT_GENERAL_PER_MINUTE: '1' }, { now: () => 0 });
   assert.equal(bad.check(request('GET', { 'x y': 'a' }, '10.0.0.5'), '/v1/public/hubs'), null);
 });
+
+test('CLIENT_IP_DEBUG=on: chỉ ghi log request thăm dò (có X-ReShare-IP-Probe), tối đa 40 dòng; tắt thì không ghi', () => {
+  const lines = [];
+  const guard = createRequestGuard({ CLIENT_IP_DEBUG: 'on', RATE_LIMIT_ENABLED: 'off' }, { log: line => lines.push(line) });
+  guard.check(request('GET', { 'x-forwarded-for': '1.1.1.1, 2.2.2.2' }), '/v1/public/hubs');
+  assert.equal(lines.length, 0, 'request thường không bị ghi');
+  for (let i = 0; i < 45; i += 1) guard.check(request('GET', { 'x-reshare-ip-probe': 'v4', 'x-forwarded-for': '1.1.1.1, 2.2.2.2' }), '/v1/public/hubs');
+  assert.equal(lines.length, 40);
+  assert.deepEqual(JSON.parse(lines[0].replace('[client-ip] ', '')).xff, '1.1.1.1, 2.2.2.2');
+  const off = [];
+  createRequestGuard({}, { log: line => off.push(line) }).check(request('GET', { 'x-reshare-ip-probe': 'v4' }), '/v1/public/hubs');
+  assert.equal(off.length, 0);
+});
