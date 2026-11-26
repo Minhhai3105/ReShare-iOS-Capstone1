@@ -5,6 +5,7 @@ const { join } = require('node:path');
 const { Readable } = require('node:stream');
 const vm = require('node:vm');
 const { ApiError } = require('../image-api.cjs');
+const { ApiError: ContactApiError } = require('../contact-api.cjs');
 const { errorBody } = require('../error-body.cjs');
 const { CANCEL_PATH } = require('../donation-cancel-api.cjs');
 const { DELETE_PATH } = require('../p2p-owner-delete-api.cjs');
@@ -12,7 +13,7 @@ const { readAiModerationConfig } = require('../ai-moderation-jobs.cjs');
 const { readAiAutoRemoveConfig } = require('../ai-moderation.cjs');
 
 // Load the real entry point with external services replaced; no credentials or port needed.
-function loadHandler(extraEnv = {}, aiOptions = {}) {
+function loadHandler(extraEnv = {}, aiOptions = {}, contactHandler = null) {
   let handler;
   const api = { handle: async (_method, path) => ({ status: 200, body: { path } }) };
   const factories = new Proxy({ ApiError }, { get: (target, key) => target[key] || (() => api) });
@@ -26,6 +27,15 @@ function loadHandler(extraEnv = {}, aiOptions = {}) {
       if (name === 'firebase-admin/firestore') return { FieldValue: {}, getFirestore: () => ({}) };
       if (name === 'cloudinary') return { v2: { config() {} } };
       if (name === './error-body.cjs') return { errorBody };
+      if (name === './contact-api.cjs') {
+        return {
+          ApiError: ContactApiError,
+          createContactApi: () => contactHandler || api,
+        };
+      }
+      if (name === './turnstile-verifier.cjs') {
+        return { createTurnstileVerifier: () => async () => true };
+      }
       if (name === './donation-cancel-api.cjs') return { CANCEL_PATH, createDonationCancelApi: () => ({
         handle: async (_method, path) => ({ status: 200, body: { path, api: 'cancel' } }),
       }) };
@@ -131,6 +141,18 @@ test('Contact inbox: admin origins and the landing origin pass CORS; other origi
   assert.equal(refused.headers['Access-Control-Allow-Origin'], undefined);
   const refusedRead = await send(handler, '/v1/contact', 'GET', 'https://evil.example');
   assert.equal(refusedRead.status, 403);
+});
+
+test('Contact rate limits expose Retry-After to the landing origin', async () => {
+  const handler = loadHandler(
+    { CONTACT_ALLOWED_ORIGIN: 'https://reshare.pages.dev' },
+    {},
+    { handle: async () => { throw new ContactApiError(429, 'Too many requests', 47); } },
+  );
+  const response = await send(handler, '/v1/contact', 'POST', 'https://reshare.pages.dev');
+  assert.equal(response.status, 429);
+  assert.equal(response.headers['Retry-After'], '47');
+  assert.equal(response.headers['Access-Control-Expose-Headers'], 'Retry-After');
 });
 
 // Route thật phải tới P2P handler, không rơi sang image-api mặc định.

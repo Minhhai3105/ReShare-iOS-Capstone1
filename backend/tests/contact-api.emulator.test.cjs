@@ -26,6 +26,8 @@ test('contact submission writes to real Firestore and is verifiable by System Ad
     const api = createContactApi({
       db,
       verifyToken,
+      verifyTurnstile: async () => true,
+      enabled: true,
       serverTimestamp: () => FieldValue.serverTimestamp(),
     });
 
@@ -33,6 +35,7 @@ test('contact submission writes to real Firestore and is verifiable by System Ad
       name: 'Nguyen Van A',
       email: 'nguyenvana@example.com',
       message: 'Toi muon quyen gop quan ao va do dung gia dinh cho chuong trinh ReShare.',
+      turnstileToken: 'emulator-token-1',
     };
 
     // 1. Gửi liên hệ thật qua POST /v1/contact
@@ -54,12 +57,12 @@ test('contact submission writes to real Firestore and is verifiable by System Ad
     assert.ok(storedData.createdAt, 'Phải có trường createdAt');
 
     // 3. Kiểm tra rate-limit qua Firestore transaction
-    await api.handle('POST', '/v1/contact', {}, { ...contactPayload, message: 'Gui lan 2' });
-    await api.handle('POST', '/v1/contact', {}, { ...contactPayload, message: 'Gui lan 3' });
+    await api.handle('POST', '/v1/contact', {}, { ...contactPayload, turnstileToken: 'emulator-token-2', message: 'Gui lan 2' });
+    await api.handle('POST', '/v1/contact', {}, { ...contactPayload, turnstileToken: 'emulator-token-3', message: 'Gui lan 3' });
 
     // Lần thứ 4 trong vòng 10 phút phải bị chặn bởi HTTP 429
     await assert.rejects(
-      api.handle('POST', '/v1/contact', {}, { ...contactPayload, message: 'Gui lan 4 spam' }),
+      api.handle('POST', '/v1/contact', {}, { ...contactPayload, turnstileToken: 'emulator-token-4', message: 'Gui lan 4 spam' }),
       err => err.status === 429 && /Too many requests/.test(err.message),
     );
 

@@ -30,12 +30,14 @@ const { createAiModerator, readAiAutoRemoveConfig } = require('./ai-moderation.c
 const { createAiModerationJobs, readAiModerationConfig } = require('./ai-moderation-jobs.cjs');
 const { errorBody } = require('./error-body.cjs');
 const { createReservationExpiry } = require('./p2p-reservation-expiry.cjs');
+const { createTurnstileVerifier } = require('./turnstile-verifier.cjs');
 
 const {
   CLOUDINARY_CLOUD_NAME,
   CLOUDINARY_API_KEY,
   CLOUDINARY_API_SECRET,
   CONTACT_ALLOWED_ORIGIN,
+  CONTACT_FORM_ENABLED,
   FIREBASE_PROJECT_ID,
 } = process.env;
 if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_API_KEY || !CLOUDINARY_API_SECRET || !FIREBASE_PROJECT_ID) {
@@ -54,7 +56,17 @@ const api = createImageApi({
   apiSecret: CLOUDINARY_API_SECRET,
 });
 const staffApi = createStaffApi({ db, auth: getAuth(), verifyToken });
-const contactApi = createContactApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
+const verifyTurnstile = createTurnstileVerifier({
+  secretKey: process.env.TURNSTILE_SECRET_KEY,
+  expectedHostname: process.env.TURNSTILE_EXPECTED_HOSTNAME,
+});
+const contactApi = createContactApi({
+  db,
+  verifyToken,
+  verifyTurnstile,
+  enabled: CONTACT_FORM_ENABLED === 'true',
+  serverTimestamp: () => FieldValue.serverTimestamp(),
+});
 const donationReviewApi = createDonationReviewApi({ db, auth: getAuth(), verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const donationResubmitApi = createDonationResubmitApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const donationCancelApi = createDonationCancelApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
@@ -145,6 +157,7 @@ const server = http.createServer(async (request, response) => {
     responseHeaders['Access-Control-Allow-Origin'] = origin;
     responseHeaders['Access-Control-Allow-Headers'] = 'Authorization, Content-Type';
     responseHeaders['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS';
+    responseHeaders['Access-Control-Expose-Headers'] = 'Retry-After';
     responseHeaders.Vary = 'Origin';
   }
 
@@ -207,7 +220,12 @@ const server = http.createServer(async (request, response) => {
   } catch (error) {
     const status = error instanceof ApiError || error instanceof ContactApiError ? error.status : 500;
     if (status === 500) console.error('ReShare API failure:', error);
-    response.writeHead(status, responseHeaders);
+    const errorHeaders = { ...responseHeaders };
+    if (error instanceof ContactApiError && Number.isSafeInteger(error.retryAfterSeconds) &&
+        error.retryAfterSeconds > 0) {
+      errorHeaders['Retry-After'] = String(error.retryAfterSeconds);
+    }
+    response.writeHead(status, errorHeaders);
     response.end(JSON.stringify(errorBody(error, status)));
   }
 });

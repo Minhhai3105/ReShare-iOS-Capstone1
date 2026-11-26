@@ -1,11 +1,47 @@
 <script setup>
-import { reactive, ref } from 'vue'
-import { ContactRequestError, isContactConfigured, submitContact } from '../contactService'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import {
+  ContactRequestError,
+  contactTurnstileSiteKey,
+  isContactConfigured,
+  submitContact,
+} from '../contactService'
 
 const MAX_NAME_LENGTH = 100
 const MAX_EMAIL_LENGTH = 254
 const MAX_MESSAGE_LENGTH = 5000
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const TURNSTILE_SCRIPT_URL = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
+
+let turnstileScriptPromise
+let turnstileApi
+let turnstileWidgetId = null
+let componentMounted = false
+
+function loadTurnstileScript() {
+  if (window.turnstile) return Promise.resolve(window.turnstile)
+  if (!turnstileScriptPromise) {
+    turnstileScriptPromise = new Promise((resolve, reject) => {
+      const script = document.createElement('script')
+      script.src = TURNSTILE_SCRIPT_URL
+      script.async = true
+      script.defer = true
+      script.onload = () => {
+        if (window.turnstile) resolve(window.turnstile)
+        else {
+          turnstileScriptPromise = null
+          reject(new Error('Turnstile did not initialize'))
+        }
+      }
+      script.onerror = () => {
+        turnstileScriptPromise = null
+        reject(new Error('Turnstile failed to load'))
+      }
+      document.head.appendChild(script)
+    })
+  }
+  return turnstileScriptPromise
+}
 
 const form = reactive({
   name: '',
@@ -16,6 +52,68 @@ const errors = reactive({})
 const touched = reactive({})
 const isSubmitting = ref(false)
 const submitState = ref('idle')
+const turnstileContainer = ref(null)
+const turnstileToken = ref('')
+const turnstileState = ref('loading')
+const retryAfterSeconds = ref(null)
+
+const rateLimitMessage = computed(() => {
+  const seconds = retryAfterSeconds.value
+  if (!seconds) return 'Vui lòng thử lại sau.'
+  const minutes = Math.floor(seconds / 60)
+  const remainingSeconds = seconds % 60
+  if (minutes && remainingSeconds) return `Vui lòng thử lại sau ${minutes} phút ${remainingSeconds} giây.`
+  if (minutes) return `Vui lòng thử lại sau ${minutes} phút.`
+  return `Vui lòng thử lại sau ${seconds} giây.`
+})
+
+async function mountTurnstile() {
+  if (!isContactConfigured) {
+    turnstileState.value = 'unavailable'
+    return
+  }
+  try {
+    const api = await loadTurnstileScript()
+    if (!componentMounted || !turnstileContainer.value) return
+    turnstileApi = api
+    turnstileState.value = 'waiting'
+    turnstileWidgetId = api.render(turnstileContainer.value, {
+      sitekey: contactTurnstileSiteKey,
+      action: 'contact',
+      callback(token) {
+        turnstileToken.value = token
+        turnstileState.value = 'ready'
+        if (submitState.value === 'verification-required') submitState.value = 'idle'
+      },
+      'expired-callback'() {
+        turnstileToken.value = ''
+        turnstileState.value = 'expired'
+      },
+      'error-callback'() {
+        turnstileToken.value = ''
+        turnstileState.value = 'unavailable'
+      },
+    })
+  } catch {
+    turnstileState.value = 'unavailable'
+  }
+}
+
+function resetTurnstile() {
+  turnstileToken.value = ''
+  if (turnstileApi && turnstileWidgetId !== null) turnstileApi.reset(turnstileWidgetId)
+}
+
+onMounted(() => {
+  componentMounted = true
+  void mountTurnstile()
+})
+
+onBeforeUnmount(() => {
+  componentMounted = false
+  if (turnstileApi && turnstileWidgetId !== null) turnstileApi.remove(turnstileWidgetId)
+  turnstileWidgetId = null
+})
 
 function validateField(field) {
   const value = form[field].trim()
@@ -42,6 +140,7 @@ function validateForm() {
 
 function onInput(field) {
   submitState.value = 'idle'
+  retryAfterSeconds.value = null
   if (touched[field]) validateField(field)
 }
 
@@ -53,14 +152,20 @@ async function onSubmit() {
     submitState.value = 'validation-error'
     return
   }
+  if (!turnstileToken.value) {
+    submitState.value = 'verification-required'
+    return
+  }
 
   isSubmitting.value = true
   submitState.value = 'loading'
+  retryAfterSeconds.value = null
   try {
     await submitContact({
       name: form.name.trim(),
       email: form.email.trim(),
       message: form.message.trim(),
+      turnstileToken: turnstileToken.value,
     })
     submitState.value = 'success'
     form.name = ''
@@ -70,6 +175,7 @@ async function onSubmit() {
   } catch (error) {
     if (error instanceof ContactRequestError && error.status === 429) {
       submitState.value = 'rate-limited'
+      retryAfterSeconds.value = error.retryAfterSeconds
     } else if (error instanceof ContactRequestError && error.status === 503) {
       submitState.value = 'unavailable'
     } else {
@@ -77,6 +183,7 @@ async function onSubmit() {
     }
   } finally {
     isSubmitting.value = false
+    resetTurnstile()
   }
 }
 </script>
@@ -141,6 +248,16 @@ async function onSubmit() {
           <small v-if="touched.message && errors.message" id="contact-message-error" class="contact-error">{{ errors.message }}</small>
         </div>
 
+        <div ref="turnstileContainer" class="contact-turnstile"></div>
+        <p v-if="isContactConfigured && turnstileState === 'loading'" class="contact-status" role="status">
+          Đang tải xác minh chống spam…
+        </p>
+        <p v-else-if="isContactConfigured && turnstileState === 'unavailable'" class="contact-status contact-status--error" role="alert">
+          Không tải được xác minh chống spam. Vui lòng tải lại trang.
+        </p>
+        <p v-else-if="isContactConfigured && turnstileState === 'expired'" class="contact-status contact-status--error" role="alert">
+          Xác minh đã hết hạn. Vui lòng xác minh lại.
+        </p>
         <button class="button contact-submit" type="submit" :disabled="isSubmitting || !isContactConfigured">
           {{ isSubmitting ? 'Đang gửi…' : 'Gửi liên hệ' }}
         </button>
@@ -150,12 +267,15 @@ async function onSubmit() {
         <p v-if="submitState === 'validation-error'" class="contact-status contact-status--error" role="alert">
           Vui lòng kiểm tra và hoàn thành các thông tin bắt buộc.
         </p>
+        <p v-else-if="submitState === 'verification-required'" class="contact-status contact-status--error" role="alert">
+          Vui lòng hoàn thành xác minh chống spam trước khi gửi.
+        </p>
         <p v-else-if="submitState === 'loading'" class="contact-status" role="status">Đang gửi yêu cầu…</p>
         <p v-else-if="submitState === 'success'" class="contact-status contact-status--success" role="status">
           Đã tiếp nhận liên hệ của bạn.
         </p>
         <p v-else-if="submitState === 'rate-limited'" class="contact-status contact-status--error" role="alert">
-          Bạn đã gửi nhiều yêu cầu trong thời gian ngắn. Vui lòng thử lại sau.
+          Bạn đã gửi nhiều yêu cầu trong thời gian ngắn. {{ rateLimitMessage }}
         </p>
         <p v-else-if="submitState === 'unavailable'" class="contact-status contact-status--error" role="alert">
           Kênh liên hệ chưa sẵn sàng. Vui lòng thử lại sau.
