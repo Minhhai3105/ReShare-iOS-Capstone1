@@ -8,6 +8,7 @@ const { ApiError } = require('../image-api.cjs');
 const { errorBody } = require('../error-body.cjs');
 const { CANCEL_PATH } = require('../donation-cancel-api.cjs');
 const { DELETE_PATH } = require('../p2p-owner-delete-api.cjs');
+const { PUBLIC_DATA_PATH } = require('../public-data-api.cjs');
 const { readAiModerationConfig } = require('../ai-moderation-jobs.cjs');
 const { readAiAutoRemoveConfig } = require('../ai-moderation.cjs');
 
@@ -32,6 +33,9 @@ function loadHandler(extraEnv = {}, aiOptions = {}) {
       }) };
       if (name === './p2p-owner-delete-api.cjs') return { DELETE_PATH, createP2pOwnerDeleteApi: () => ({
         handle: async (_method, path) => ({ status: 200, body: { path, api: 'owner-delete' } }),
+      }) };
+      if (name === './public-data-api.cjs') return { PUBLIC_DATA_PATH, createPublicDataApi: () => ({
+        handle: async (_method, path) => ({ status: 200, body: { path, api: 'public' } }), invalidate() {},
       }) };
       if (name === './p2p-reservation-expiry.cjs') return { createReservationExpiry: () => ({ start() {}, stop() {} }) };
       if (name === './ai-moderation.cjs') return { readAiAutoRemoveConfig, createAiModerator(options) {
@@ -165,4 +169,19 @@ test('RC1D-144: đặt EDGE_SECRET thì request không qua Cloudflare bị 403 t
   assert.equal(direct.status, 403);
   assert.deepEqual(direct.body, { message: 'Direct access is not allowed' });
   assert.equal((await send(handler, '/health')).status, 200);
+});
+
+test('Dữ liệu công khai: chỉ đúng 2 đường dẫn vào handler công khai, không gửi CORS, client không được cache', async () => {
+  const handler = loadHandler();
+  for (const path of ['/v1/public/campaigns', '/v1/public/hubs']) {
+    const result = await send(handler, path, 'GET', undefined);
+    assert.deepEqual(result.body, { path, api: 'public' });
+    assert.equal(result.headers['Cache-Control'], 'no-store');
+    assert.equal(result.headers['Access-Control-Allow-Origin'], undefined);
+    const fromWeb = await send(handler, path, 'GET', 'http://localhost:5173');
+    assert.equal(fromWeb.headers['Access-Control-Allow-Origin'], undefined, 'trình duyệt không đọc được qua CORS');
+  }
+  for (const other of ['/v1/public/campaigns/x', '/v1/public/campaignsx', '/v1/public/users']) {
+    assert.equal((await send(handler, other)).body.api, undefined);
+  }
 });

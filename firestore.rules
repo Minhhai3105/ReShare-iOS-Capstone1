@@ -503,6 +503,7 @@ service cloud.firestore {
           && data.hubId.matches('^[A-Za-z0-9_-]{1,128}$')
           && data.hubName is string
           && exists(hubPath)
+          && get(hubPath).data.get('status', '') == 'active'
           && get(hubPath).data.name == data.hubName;
       }
 
@@ -629,6 +630,8 @@ service cloud.firestore {
     // 5. Campaigns & Hubs (Chiến dịch & Trạm tiếp nhận - Công khai để xem)
     // Chỉ chiến dịch đã công khai (đang mở hoặc đã đóng) được đọc; bản nháp không lộ ra app.
     // Mọi thao tác ghi đi qua backend (campaigns-api.cjs) bằng Admin SDK, kể cả System Admin.
+    // TODO: khoá đọc trực tiếp (read: if false) khi mọi client đã đọc qua GET /v1/public/campaigns
+    // và /v1/public/hubs (public-data-api.cjs) — doc còn chứa createdByUid/updatedByUid.
     match /campaigns/{campaignId} {
       allow read: if resource.data.status in ['active', 'closed'];
       allow write: if false;

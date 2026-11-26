@@ -142,8 +142,10 @@ function campaignFrom(doc) {
   };
 }
 
-function createCampaignsApi({ db, verifyToken, serverTimestamp, clock }) {
+function createCampaignsApi({ db, verifyToken, serverTimestamp, clock, onChanged }) {
   if (!db || !verifyToken) throw new Error('Campaigns API configuration is incomplete');
+  // Gọi sau mỗi lần ghi thành công để xoá cache dữ liệu công khai (public-data-api).
+  const notifyChanged = typeof onChanged === 'function' ? onChanged : () => {};
   const now = serverTimestamp || (() => new Date());
   const currentTime = clock || (() => new Date());
 
@@ -324,13 +326,21 @@ function createCampaignsApi({ db, verifyToken, serverTimestamp, clock }) {
     if (!listPath && !optionsPath && !idMatch && !actionMatch) throw new ApiError(404, 'Not found');
     const staff = await systemAdminFrom(headers);
     if (listPath && method === 'GET') return list();
-    if (listPath && method === 'POST') return create(staff, body);
+    if (listPath && method === 'POST') return changed(await create(staff, body));
     if (optionsPath && method === 'GET') return options();
     if (idMatch && method === 'GET') return detail(idMatch[1]);
     if (actionMatch && method === 'POST') {
-      return actionMatch[2] === 'update' ? update(staff, actionMatch[1], body) : changeStatus(staff, actionMatch[1], body);
+      return changed(actionMatch[2] === 'update'
+        ? await update(staff, actionMatch[1], body)
+        : await changeStatus(staff, actionMatch[1], body));
     }
     throw new ApiError(404, 'Not found');
+  }
+
+  // Chỉ chạy khi thao tác ghi không ném lỗi (đã commit); 4xx/409 không xoá cache.
+  function changed(result) {
+    try { notifyChanged('campaigns'); } catch (error) { console.error('Public cache invalidation failed:', error); }
+    return result;
   }
 
   return { handle };
