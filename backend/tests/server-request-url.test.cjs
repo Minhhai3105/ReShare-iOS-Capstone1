@@ -9,6 +9,7 @@ const { ApiError: ContactApiError } = require('../contact-api.cjs');
 const { errorBody } = require('../error-body.cjs');
 const { CANCEL_PATH } = require('../donation-cancel-api.cjs');
 const { DELETE_PATH } = require('../p2p-owner-delete-api.cjs');
+const { PUBLIC_DATA_PATH } = require('../public-data-api.cjs');
 const { readAiModerationConfig } = require('../ai-moderation-jobs.cjs');
 const { readAiAutoRemoveConfig } = require('../ai-moderation.cjs');
 
@@ -36,11 +37,15 @@ function loadHandler(extraEnv = {}, aiOptions = {}, contactHandler = null) {
       if (name === './turnstile-verifier.cjs') {
         return { createTurnstileVerifier: () => async () => true };
       }
+      if (name === './request-guard.cjs') return require('../request-guard.cjs');
       if (name === './donation-cancel-api.cjs') return { CANCEL_PATH, createDonationCancelApi: () => ({
         handle: async (_method, path) => ({ status: 200, body: { path, api: 'cancel' } }),
       }) };
       if (name === './p2p-owner-delete-api.cjs') return { DELETE_PATH, createP2pOwnerDeleteApi: () => ({
         handle: async (_method, path) => ({ status: 200, body: { path, api: 'owner-delete' } }),
+      }) };
+      if (name === './public-data-api.cjs') return { PUBLIC_DATA_PATH, createPublicDataApi: () => ({
+        handle: async (_method, path) => ({ status: 200, body: { path, api: 'public' } }), invalidate() {},
       }) };
       if (name === './p2p-reservation-expiry.cjs') return { createReservationExpiry: () => ({ start() {}, stop() {} }) };
       if (name === './ai-moderation.cjs') return { readAiAutoRemoveConfig, createAiModerator(options) {
@@ -161,4 +166,44 @@ test('Kho đồ 0đ: route kiểm AI đi tới đúng handler và giữ CORS adm
   assert.equal(response.status, 200);
   assert.equal(response.body.api, 'p2p');
   assert.equal(response.headers['Access-Control-Allow-Origin'], 'http://localhost:5173');
+});
+
+test('RC1D-144: vượt ngưỡng nhận 429 kèm Retry-After đọc được qua CORS; /health không bị giới hạn', async () => {
+  const handler = loadHandler({ RATE_LIMIT_GENERAL_PER_MINUTE: '2' });
+  assert.equal((await send(handler, '/v1/admin/hubs')).status, 200);
+  assert.equal((await send(handler, '/v1/admin/hubs')).status, 200);
+  const limited = await send(handler, '/v1/admin/hubs');
+  assert.equal(limited.status, 429);
+  assert.deepEqual(limited.body, { message: 'Too many requests' });
+  assert.ok(Number(limited.headers['Retry-After']) >= 1);
+  assert.equal(limited.headers['Access-Control-Expose-Headers'], 'Retry-After');
+  for (let i = 0; i < 5; i += 1) assert.equal((await send(handler, '/health')).status, 200);
+});
+
+test('RC1D-144: không đặt env mới thì request bình thường vẫn chạy như cũ', async () => {
+  const handler = loadHandler();
+  for (let i = 0; i < 30; i += 1) assert.equal((await send(handler, '/v1/admin/hubs')).status, 200);
+});
+
+test('RC1D-144: đặt EDGE_SECRET thì request không qua Cloudflare bị 403 trước khi tới handler', async () => {
+  const handler = loadHandler({ EDGE_SECRET: 'edge-secret-value' });
+  const direct = await send(handler, '/v1/admin/hubs');
+  assert.equal(direct.status, 403);
+  assert.deepEqual(direct.body, { message: 'Direct access is not allowed' });
+  assert.equal((await send(handler, '/health')).status, 200);
+});
+
+test('Dữ liệu công khai: chỉ đúng 2 đường dẫn vào handler công khai, không gửi CORS, client không được cache', async () => {
+  const handler = loadHandler();
+  for (const path of ['/v1/public/campaigns', '/v1/public/hubs']) {
+    const result = await send(handler, path, 'GET', undefined);
+    assert.deepEqual(result.body, { path, api: 'public' });
+    assert.equal(result.headers['Cache-Control'], 'no-store');
+    assert.equal(result.headers['Access-Control-Allow-Origin'], undefined);
+    const fromWeb = await send(handler, path, 'GET', 'http://localhost:5173');
+    assert.equal(fromWeb.headers['Access-Control-Allow-Origin'], undefined, 'trình duyệt không đọc được qua CORS');
+  }
+  for (const other of ['/v1/public/campaigns/x', '/v1/public/campaignsx', '/v1/public/users']) {
+    assert.equal((await send(handler, other)).body.api, undefined);
+  }
 });

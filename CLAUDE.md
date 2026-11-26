@@ -72,6 +72,7 @@ Vai trò: `donor` (iOS) · `warehouse_admin` (chỉ đơn thuộc kho được g
 | `users-admin-api` | `GET /v1/admin/users`, `…/:uid/summary` · `POST …/:uid/suspend` (chỉ System Admin; không khoá được tài khoản nhân sự) |
 | `donation-cancel-api` | `POST /v1/donations/:id/cancel` (người tặng huỷ đơn `pending` của mình, kèm `expectedVersion`) |
 | `p2p-owner-delete-api` | `POST /v1/p2p/listings/:id/delete` (người đăng xoá bài đang sẵn sàng; ghi `p2p_listing_audit`, tạo job dọn ảnh) |
+| `public-data-api` | `GET /v1/public/campaigns`, `/v1/public/hubs` (không token, chỉ field công khai; cache bộ nhớ TTL 60s, bị xoá ngay khi `campaigns-api`/`hubs-api` ghi thành công). |
 
 Bảng trên chưa liệt kê hết: `server.cjs` còn route `donation-resubmit`, `stock-intake`, `inventory`, `distribution-history`, `beneficiaries`, `dashboard`, `account` — đọc `server.cjs` khi cần.
 

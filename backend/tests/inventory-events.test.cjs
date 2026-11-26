@@ -4,7 +4,7 @@ const { EventEmitter } = require('node:events');
 const { createInventoryEvents } = require('../inventory-events.cjs');
 const { inventoryRevision } = require('../inventory-revision.cjs');
 
-function setup() {
+function setup(options = {}) {
   const values = new Map([['staff_assignments/staff', { active: true, role: 'warehouse_admin', warehouseIds: ['a'] }]]);
   const listeners = new Map();
   const snapshot = key => ({ exists: values.has(key), data: () => values.get(key) });
@@ -16,7 +16,7 @@ function setup() {
       return () => set.delete(next);
     } };
   } }) };
-  const api = createInventoryEvents({ db, verifyToken: async token => { if (token !== 'valid') throw new Error('invalid'); return { uid: 'staff' }; } });
+  const api = createInventoryEvents({ db, verifyToken: async token => { if (token !== 'valid') throw new Error('invalid'); return { uid: 'staff' }; }, ...options });
   function response() {
     const result = new EventEmitter();
     result.messages = []; result.writableLength = 0;
@@ -65,4 +65,42 @@ test('Revoking assignment closes the stream immediately and emits no inventory c
     assert.ok(response.messages.every(message => !message.includes('quantityAvailable')));
     assert.equal(s.listeners.get('warehouse_inventory_updates/wh_a').size, 0);
   } finally { response.end(); }
+});
+
+test('RC1D-144: mỗi tài khoản giữ tối đa N luồng cùng lúc; đóng một luồng thì mở lại được', async () => {
+  const s = setup({ maxConnectionsPerUser: 2 });
+  const first = s.response(), second = s.response(), third = s.response(), fourth = s.response();
+  try {
+    await s.api.open(s.request('a'), first);
+    await s.api.open(s.request('a'), second);
+    await assert.rejects(s.api.open(s.request('a'), third), error => error.status === 429 && error.retryAfterSeconds > 0);
+    assert.equal(third.status, undefined, 'luồng bị từ chối không được mở header SSE');
+    first.end();
+    await s.api.open(s.request('a'), fourth);
+    assert.equal(fourth.status, 200);
+  } finally { first.end(); second.end(); third.end(); fourth.end(); }
+});
+
+test('RC1D-144: hai lần mở đồng thời của cùng tài khoản không cùng lọt qua giới hạn', async () => {
+  const s = setup({ maxConnectionsPerUser: 1 });
+  const first = s.response(), second = s.response();
+  try {
+    const results = await Promise.allSettled([s.api.open(s.request('a'), first), s.api.open(s.request('a'), second)]);
+    assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
+    assert.equal(results.find(result => result.status === 'rejected').reason.status, 429);
+  } finally { first.end(); second.end(); }
+});
+
+test('RC1D-144: mở lại quá nhanh bị 429 kèm thời gian chờ, sang phút sau mở lại được', async () => {
+  let time = 0;
+  const s = setup({ reconnectsPerMinute: 2, now: () => time });
+  const responses = [s.response(), s.response(), s.response(), s.response()];
+  try {
+    await s.api.open(s.request('a'), responses[0]); responses[0].end();
+    await s.api.open(s.request('a'), responses[1]); responses[1].end();
+    await assert.rejects(s.api.open(s.request('a'), responses[2]), error => error.status === 429 && error.retryAfterSeconds === 60);
+    time = 60000;
+    await s.api.open(s.request('a'), responses[3]);
+    assert.equal(responses[3].status, 200);
+  } finally { responses.forEach(response => response.end()); }
 });

@@ -21,7 +21,13 @@ export function watchInventoryEvents({ apiBase, warehouseId, getToken, onChange,
         headers: { Authorization: `Bearer ${token}` }, signal: controller.signal,
       })
       reader = response.body?.getReader()
-      if (!response.ok || !response.body) throw Object.assign(new Error('Không kết nối được đồng bộ kho'), { status: response.status })
+      if (!response.ok || !response.body) {
+        // 429: máy chủ báo đang mở quá nhiều luồng; Retry-After (giây) là thời gian tối thiểu phải chờ.
+        const retryAfter = Number(response.headers?.get?.('retry-after'))
+        throw Object.assign(new Error('Không kết nối được đồng bộ kho'), {
+          status: response.status, retryAfterMs: Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 0,
+        })
+      }
       connectedAt = Date.now()
       const decoder = new TextDecoder()
       let pending = ''
@@ -55,7 +61,8 @@ export function watchInventoryEvents({ apiBase, warehouseId, getToken, onChange,
       if (controller.signal.aborted) return
       // Chỉ reset sau 30 giây ổn định để kết nối chập chờn không lặp lại mức 1 giây.
       if (connectedAt !== undefined && Date.now() - connectedAt >= 30000) retryDelay = 1000
-      const delay = Math.min(30000, Math.round(retryDelay * (0.8 + Math.random() * 0.4)))
+      const backoff = Math.min(30000, Math.round(retryDelay * (0.8 + Math.random() * 0.4)))
+      const delay = failure?.status === 429 ? Math.max(backoff, Math.min(failure.retryAfterMs || 0, 120000)) : backoff
       retryDelay = Math.min(retryDelay * 2, 30000)
       timer = setTimeout(connect, delay)
     } finally {
