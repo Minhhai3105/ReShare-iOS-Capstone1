@@ -30,6 +30,15 @@ const { DELETE_PATH, createP2pOwnerDeleteApi } = require('./p2p-owner-delete-api
 const { createAiModerator, readAiAutoRemoveConfig } = require('./ai-moderation.cjs');
 const { createAiModerationJobs, readAiModerationConfig } = require('./ai-moderation-jobs.cjs');
 const { errorBody } = require('./error-body.cjs');
+
+// Header bảo mật cho mọi phản hồi API (tầng 2 trong kế hoạch bảo mật): không cho trình duyệt đoán kiểu nội dung,
+// không cho nhúng API vào iframe, không gửi Referer đi nơi khác, và chỉ dùng HTTPS (Render luôn có HTTPS).
+const SECURITY_HEADERS = Object.freeze({
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'no-referrer',
+  'Strict-Transport-Security': 'max-age=31536000',
+});
 const { createReservationExpiry } = require('./p2p-reservation-expiry.cjs');
 const { createTurnstileVerifier } = require('./turnstile-verifier.cjs');
 const { createRequestGuard, readPositiveInt, readServerTimeouts } = require('./request-guard.cjs');
@@ -115,7 +124,7 @@ const server = http.createServer(async (request, response) => {
   try {
     pathname = new URL(request.url, 'http://localhost').pathname;
   } catch {
-    response.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    response.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...SECURITY_HEADERS });
     response.end(JSON.stringify({ message: 'Invalid request URL' }));
     return;
   }
@@ -166,7 +175,7 @@ const server = http.createServer(async (request, response) => {
   // /v1/contact phục vụ cả form landing (POST) lẫn hộp thư của System Admin trên Web Admin (GET),
   // nên nhận origin của landing và các origin quản trị. Đọc hộp thư vẫn bắt buộc token System Admin.
   const contactOriginAllowed = Boolean(origin) && (origin === allowedContactOrigin || allowedAdminOrigin);
-  const responseHeaders = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' };
+  const responseHeaders = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...SECURITY_HEADERS };
   if (((isAdminApi || isAdminImageRead) && allowedAdminOrigin) || (isContactPath && contactOriginAllowed)) {
     responseHeaders['Access-Control-Allow-Origin'] = origin;
     responseHeaders['Access-Control-Allow-Headers'] = 'Authorization, Content-Type';

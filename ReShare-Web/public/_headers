@@ -1,0 +1,8 @@
+# Header bảo mật cho Cloudflare Pages (Landing + Web Admin). Cloudflare đọc file này khi deploy.
+# Không đặt CSP ở đây: Turnstile, Firebase và Cloudinary cần nhiều nguồn, đặt sai sẽ làm hỏng trang.
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
+  Strict-Transport-Security: max-age=31536000

@@ -212,3 +212,14 @@ test('Phản hồi JSON khai báo charset=utf-8 để trình duyệt nhúng (Mes
   const result = await send(loadHandler(), '/v1/public/hubs', 'GET', undefined);
   assert.equal(result.headers['Content-Type'], 'application/json; charset=utf-8');
 });
+
+test('Mọi phản hồi API kèm header bảo mật (nosniff, chặn iframe, không Referer, HSTS)', async () => {
+  const handler = loadHandler();
+  for (const path of ['/v1/public/hubs', '/v1/admin/hubs']) {
+    const { headers } = await send(handler, path);
+    assert.equal(headers['X-Content-Type-Options'], 'nosniff');
+    assert.equal(headers['X-Frame-Options'], 'DENY');
+    assert.equal(headers['Referrer-Policy'], 'no-referrer');
+    assert.equal(headers['Strict-Transport-Security'], 'max-age=31536000');
+  }
+});
