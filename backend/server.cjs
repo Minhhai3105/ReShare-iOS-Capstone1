@@ -20,6 +20,7 @@ const { createBeneficiariesApi } = require('./beneficiaries-api.cjs');
 const { createDashboardApi } = require('./dashboard-api.cjs');
 const { createCampaignsApi } = require('./campaigns-api.cjs');
 const { createHubsApi } = require('./hubs-api.cjs');
+const { PUBLIC_DATA_PATH, createPublicDataApi } = require('./public-data-api.cjs');
 const { createAccountApi } = require('./account-api.cjs');
 const { cloudinaryCatalogImageDeleter, createImageCleanupJobs } = require('./image-cleanup-jobs.cjs');
 const { createModerationApi } = require('./moderation-api.cjs');
@@ -68,8 +69,12 @@ const distributionApi = createDistributionApi({ db, verifyToken, serverTimestamp
 const reportsApi = createReportsApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const beneficiariesApi = createBeneficiariesApi({ db, auth: getAuth(), verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const dashboardApi = createDashboardApi({ db, verifyToken });
-const campaignsApi = createCampaignsApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
-const hubsApi = createHubsApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
+// Cache dữ liệu công khai (chiến dịch đang mở, Hub đang hoạt động); campaigns-api và hubs-api
+// xoá cache ngay sau khi ghi thành công.
+const publicDataApi = createPublicDataApi({ db });
+const onPublicDataChanged = (...kinds) => publicDataApi.invalidate(...kinds);
+const campaignsApi = createCampaignsApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp(), onChanged: onPublicDataChanged });
+const hubsApi = createHubsApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp(), onChanged: onPublicDataChanged });
 const deleteCatalogImage = cloudinaryCatalogImageDeleter(cloudinary);
 const accountApi = createAccountApi({ db, auth: getAuth(), verifyToken, deleteCatalogImage });
 const moderationApi = createModerationApi({ db, auth: getAuth(), verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
@@ -133,6 +138,8 @@ const server = http.createServer(async (request, response) => {
   const isAdminImageRead = pathname === '/v1/images/read-access';
   const isContactPath = pathname === '/v1/contact';
   const isAccountPath = pathname === '/v1/account/delete';
+  // Đọc công khai, không token, không CORS; chỉ GET.
+  const isPublicDataPath = PUBLIC_DATA_PATH.test(pathname);
   const origin = request.headers.origin;
   const allowedAdminOrigin = origin && (adminWebOrigins.has(origin) ||
     /^http:\/\/(localhost|127\.0\.0\.1):\d{2,5}$/.test(origin));
@@ -180,7 +187,8 @@ const server = http.createServer(async (request, response) => {
     }
     // Thứ tự quan trọng: receipt và stock-in là path con của /v1/admin/donations nên
     // phải đứng trước isDonationAdminPath; isAdminApi là nhánh bắt tất cả cuối cùng.
-    const handler = isContactPath ? contactApi
+    const handler = isPublicDataPath ? publicDataApi
+      : isContactPath ? contactApi
       : isDonationResubmitPath ? donationResubmitApi
       : CANCEL_PATH.test(pathname) ? donationCancelApi
       : DELETE_PATH.test(pathname) ? p2pOwnerDeleteApi
