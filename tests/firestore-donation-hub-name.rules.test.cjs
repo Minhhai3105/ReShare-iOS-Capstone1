@@ -38,6 +38,7 @@ test('Tên điểm lưu kèm đơn phải đúng tên trong hubs; đơn không c
     await bad({ hubId: 'hub-khong-co', hubName: 'Hải Châu' }, 'điểm không tồn tại');
     await bad({ hubId: 'hub-haichau', hubName: 42 }, 'tên phải là chuỗi');
     await bad({ hubId: 'hub/../x', hubName: 'Hải Châu' }, 'mã điểm không hợp lệ');
+    await bad({ hubId: 'hub-cu', hubName: 'Điểm cũ' }, 'điểm đã tạm ẩn (cache công khai có thể còn hiện) không nhận đơn mới');
 
     await assertSucceeds(donor.doc('donations/hubname-ok').set(donation('hubname-ok', 0, { hubId: 'hub-haichau', hubName: 'Hải Châu' })));
     await assertSucceeds(donor.doc('donations/hubname-legacy').set(donation('hubname-legacy', 1, { hubId: 'hub-haichau' })),

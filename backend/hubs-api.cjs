@@ -90,8 +90,10 @@ function hubFrom(doc, openCampaigns = []) {
   };
 }
 
-function createHubsApi({ db, verifyToken, serverTimestamp }) {
+function createHubsApi({ db, verifyToken, serverTimestamp, onChanged }) {
   if (!db || !verifyToken) throw new Error('Hubs API configuration is incomplete');
+  // Gọi sau mỗi lần ghi thành công để xoá cache dữ liệu công khai (public-data-api).
+  const notifyChanged = typeof onChanged === 'function' ? onChanged : () => {};
   const now = serverTimestamp || (() => new Date());
 
   // Đọc: System Admin và Warehouse Admin đang hoạt động. Ghi: chỉ System Admin.
@@ -269,9 +271,13 @@ function createHubsApi({ db, verifyToken, serverTimestamp }) {
     }
     if (!(listPath || actionMatch) || method !== 'POST') throw new ApiError(404, 'Not found');
     const staff = await staffFrom(headers, { systemOnly: true });
-    if (listPath) return create(staff, body);
-    if (actionMatch[2] === 'delete') return remove(staff, actionMatch[1], body);
-    return actionMatch[2] === 'update' ? update(staff, actionMatch[1], body) : changeStatus(staff, actionMatch[1], body);
+    const result = listPath ? await create(staff, body)
+      : actionMatch[2] === 'delete' ? await remove(staff, actionMatch[1], body)
+      : actionMatch[2] === 'update' ? await update(staff, actionMatch[1], body)
+      : await changeStatus(staff, actionMatch[1], body);
+    // Chỉ tới đây khi ghi đã commit. Đổi tên Hub cũng đổi bản sao tên trong chiến dịch nên xoá cả hai.
+    try { notifyChanged('hubs', 'campaigns'); } catch (error) { console.error('Public cache invalidation failed:', error); }
+    return result;
   }
 
   return { handle };
