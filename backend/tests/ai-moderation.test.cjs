@@ -305,6 +305,10 @@ test('Chẩn đoán AI: ghi rõ stage, mã HTTP, số ảnh, thời gian từng 
   for (const sensitive of [config.apiKey, 'https://ai.example', cloudinaryImage, 'res.cloudinary.com', secretTitle, secretNote, secretBody, 'Kiểm tra nội dung']) {
     assert.equal(serialized.includes(sensitive), false, `Không được rò ${sensitive} vào log`);
   }
+  // [P2-A] Trường model không được xuất hiện trong bất kỳ event log chẩn đoán nào.
+  for (const event of events) {
+    assert.ok(!('model' in event), `Event log không được có trường model (rò rỉ key): ${JSON.stringify(event)}`);
+  }
 });
 
 test('Logger mặc định chỉ in console.error khi lỗi và console.info khi quét tay thành công', t => {
@@ -319,4 +323,31 @@ test('Logger mặc định chỉ in console.error khi lỗi và console.info khi
   assert.match(infos[0], /^\[ai-moderation\] \{.*"listingId":"b"/);
   assert.equal(errors.length, 1);
   assert.match(errors[0], /^\[ai-moderation\] \{.*"httpStatus":403/);
+});
+
+// [P2-B] Ghi log ngay lúc khởi động khi cấu hình sai, không cần gọi check().
+test('Chẩn đoán AI: ghi log cấu hình sai ngay lúc khởi động, không cần gọi check', () => {
+  const cases = [
+    { overrides: { baseUrl: '' },     expectedDetail: 'invalid_base_url' },
+    { overrides: { apiKey: '' },      expectedDetail: 'missing_api_key' },
+    { overrides: { model: '' },       expectedDetail: 'missing_model' },
+  ];
+  for (const { overrides, expectedDetail } of cases) {
+    const startupEvents = [];
+    createAiModerator({ ...config, ...overrides, onDiagnostic: event => startupEvents.push(event) });
+    assert.equal(startupEvents.length, 1, `Phải ghi đúng 1 event startup khi ${expectedDetail}`);
+    const [event] = startupEvents;
+    assert.equal(event.status, 'error');
+    assert.equal(event.stage, 'config');
+    assert.equal(event.detail, expectedDetail);
+    assert.equal(event.trigger, 'startup');
+    assert.ok(!('model' in event), 'Event startup không được có trường model');
+  }
+});
+
+// [P2-B] Không ghi log startup khi cấu hình hợp lệ.
+test('Chẩn đoán AI: không ghi log startup khi cấu hình hợp lệ', () => {
+  const startupEvents = [];
+  createAiModerator({ ...config, onDiagnostic: event => startupEvents.push(event) });
+  assert.equal(startupEvents.length, 0, 'Không được ghi event startup khi cấu hình đầy đủ');
 });

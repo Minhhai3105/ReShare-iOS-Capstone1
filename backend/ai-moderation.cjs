@@ -146,6 +146,11 @@ function createAiModerator({ baseUrl, apiKey, model, fetchImpl = fetch, timeoutM
     }
   } catch { /* Thiếu hoặc sai cấu hình: tắt tính năng, không gọi dịch vụ. */ }
   const enabled = Boolean(endpoint && key && modelName);
+  if (!enabled) {
+    // Ghi một dòng ngay lúc khởi động để thấy ngay sau deploy khi cấu hình sai.
+    const startupReason = !endpoint ? 'invalid_base_url' : !key ? 'missing_api_key' : 'missing_model';
+    try { onDiagnostic?.({ status: 'error', stage: 'config', detail: startupReason, trigger: 'startup' }); } catch {}
+  }
   const errorResult = () => ({ status: 'error', categories: [], reason: ERROR_REASON, confidence: 0, model: modelName || null, checkedAt: new Date().toISOString() });
 
   async function check(input, meta = {}) {
@@ -159,7 +164,6 @@ function createAiModerator({ baseUrl, apiKey, model, fetchImpl = fetch, timeoutM
       httpStatus: null,
       finishReason: null,
       networkCode: null,
-      model: sanitizeToken(modelName, /^[A-Za-z0-9_.:-]{1,80}$/) || (modelName ? 'configured' : null),
       hasImages: false,
       imagesTotal: 0,
       imagesLoaded: 0,
