@@ -142,3 +142,21 @@ test('A stable stream resets backoff and permission loss cancels and unlocks its
   assert.equal(stream.locked, false)
   stopAccess()
 })
+
+test('RC1D-144: 429 chờ đúng Retry-After của máy chủ rồi mới kết nối lại, vẫn báo lỗi để hiện banner gián đoạn', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 })
+  t.mock.method(Math, 'random', () => 0.5)
+  const calls = [], errors = []
+  const stop = watchInventoryEvents({ apiBase: 'https://example.test', getToken: async () => 'token', onChange() {},
+    onError: error => errors.push(error.status),
+    fetchImpl: async () => { calls.push(Date.now()); return { ok: false, status: 429, headers: new Headers({ 'Retry-After': '20' }) } },
+  })
+  try {
+    await flush()
+    t.mock.timers.tick(19999); await flush()
+    assert.equal(calls.length, 1, 'không nối lại sau 1 giây như lỗi mạng thường')
+    t.mock.timers.tick(1); await flush()
+    assert.equal(calls.length, 2)
+    assert.deepEqual(errors, [429, 429])
+  } finally { stop() }
+})

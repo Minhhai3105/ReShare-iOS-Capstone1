@@ -26,6 +26,7 @@ function loadHandler(extraEnv = {}, aiOptions = {}) {
       if (name === 'firebase-admin/firestore') return { FieldValue: {}, getFirestore: () => ({}) };
       if (name === 'cloudinary') return { v2: { config() {} } };
       if (name === './error-body.cjs') return { errorBody };
+      if (name === './request-guard.cjs') return require('../request-guard.cjs');
       if (name === './donation-cancel-api.cjs') return { CANCEL_PATH, createDonationCancelApi: () => ({
         handle: async (_method, path) => ({ status: 200, body: { path, api: 'cancel' } }),
       }) };
@@ -139,4 +140,29 @@ test('Kho đồ 0đ: route kiểm AI đi tới đúng handler và giữ CORS adm
   assert.equal(response.status, 200);
   assert.equal(response.body.api, 'p2p');
   assert.equal(response.headers['Access-Control-Allow-Origin'], 'http://localhost:5173');
+});
+
+test('RC1D-144: vượt ngưỡng nhận 429 kèm Retry-After đọc được qua CORS; /health không bị giới hạn', async () => {
+  const handler = loadHandler({ RATE_LIMIT_GENERAL_PER_MINUTE: '2' });
+  assert.equal((await send(handler, '/v1/admin/hubs')).status, 200);
+  assert.equal((await send(handler, '/v1/admin/hubs')).status, 200);
+  const limited = await send(handler, '/v1/admin/hubs');
+  assert.equal(limited.status, 429);
+  assert.deepEqual(limited.body, { message: 'Too many requests' });
+  assert.ok(Number(limited.headers['Retry-After']) >= 1);
+  assert.equal(limited.headers['Access-Control-Expose-Headers'], 'Retry-After');
+  for (let i = 0; i < 5; i += 1) assert.equal((await send(handler, '/health')).status, 200);
+});
+
+test('RC1D-144: không đặt env mới thì request bình thường vẫn chạy như cũ', async () => {
+  const handler = loadHandler();
+  for (let i = 0; i < 30; i += 1) assert.equal((await send(handler, '/v1/admin/hubs')).status, 200);
+});
+
+test('RC1D-144: đặt EDGE_SECRET thì request không qua Cloudflare bị 403 trước khi tới handler', async () => {
+  const handler = loadHandler({ EDGE_SECRET: 'edge-secret-value' });
+  const direct = await send(handler, '/v1/admin/hubs');
+  assert.equal(direct.status, 403);
+  assert.deepEqual(direct.body, { message: 'Direct access is not allowed' });
+  assert.equal((await send(handler, '/health')).status, 200);
 });

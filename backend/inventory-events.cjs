@@ -1,9 +1,21 @@
 const { ApiError } = require('./image-api.cjs');
 const { inventoryRevision } = require('./inventory-revision.cjs');
+const { createRateLimiter } = require('./request-guard.cjs');
+
+function tooManyConnections(retryAfterSeconds) {
+  return Object.assign(new ApiError(429, 'Too many inventory stream connections'), { retryAfterSeconds });
+}
 
 // Một listener revision cho mỗi phạm vi đang có người xem, chia sẻ giữa các kết nối.
-function createInventoryEvents({ db, verifyToken, heartbeatMs = 15000, recheckMs = 60000 }) {
+// RC1D-144: mỗi tài khoản giữ tối đa maxConnectionsPerUser luồng cùng lúc và mở lại tối đa
+// reconnectsPerMinute lần/phút, để một tab lỗi hay script không giữ hết kết nối của server.
+function createInventoryEvents({
+  db, verifyToken, heartbeatMs = 15000, recheckMs = 60000,
+  maxConnectionsPerUser = 3, reconnectsPerMinute = 10, now = Date.now,
+}) {
   const sources = new Map();
+  const openByUser = new Map();
+  const reconnects = createRateLimiter({ limit: reconnectsPerMinute, windowMs: 60000, now });
 
   function subscribe(scope, onChange, onError) {
     let source = sources.get(scope);
@@ -36,6 +48,10 @@ function createInventoryEvents({ db, verifyToken, heartbeatMs = 15000, recheckMs
     let claims;
     try { if (token) claims = await verifyToken(token[1]); } catch { /* No session details are exposed. */ }
     if (!claims?.uid) throw new ApiError(401, 'Sign in required');
+    const uid = claims.uid;
+    const attempt = reconnects.take(uid);
+    if (!attempt.allowed) throw tooManyConnections(attempt.retryAfterSeconds);
+    if ((openByUser.get(uid) || 0) >= maxConnectionsPerUser) throw tooManyConnections(30);
     const warehouseId = new URL(request.url, 'http://localhost').searchParams.get('warehouseId') || '';
     if (warehouseId && !/^[A-Za-z0-9_-]{1,64}$/.test(warehouseId)) throw new ApiError(400, 'Invalid warehouse');
     const assignmentRef = db.collection('staff_assignments').doc(claims.uid);
@@ -47,6 +63,9 @@ function createInventoryEvents({ db, verifyToken, heartbeatMs = 15000, recheckMs
         (data.role === 'warehouse_admin' && warehouseId && Array.isArray(data.warehouseIds) && data.warehouseIds.includes(warehouseId)));
     };
     if (!allowed(assignment)) throw new ApiError(403, 'Warehouse access denied');
+    // Kiểm lại sau await: hai lần mở đồng thời của cùng tài khoản không được cùng lọt qua.
+    if ((openByUser.get(uid) || 0) >= maxConnectionsPerUser) throw tooManyConnections(30);
+    openByUser.set(uid, (openByUser.get(uid) || 0) + 1);
     const scope = warehouseId ? `wh_${warehouseId}` : 'all_warehouses';
     response.writeHead(200, { ...responseHeaders, 'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no', Connection: 'keep-alive' });
@@ -55,6 +74,8 @@ function createInventoryEvents({ db, verifyToken, heartbeatMs = 15000, recheckMs
     const close = () => {
       if (stopped) return;
       stopped = true;
+      const remaining = (openByUser.get(uid) || 1) - 1;
+      if (remaining > 0) openByUser.set(uid, remaining); else openByUser.delete(uid);
       unsubscribeSource?.(); unsubscribeAssignment?.();
       clearInterval(heartbeat); clearInterval(recheck);
       response.end();

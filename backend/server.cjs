@@ -30,6 +30,7 @@ const { createAiModerator, readAiAutoRemoveConfig } = require('./ai-moderation.c
 const { createAiModerationJobs, readAiModerationConfig } = require('./ai-moderation-jobs.cjs');
 const { errorBody } = require('./error-body.cjs');
 const { createReservationExpiry } = require('./p2p-reservation-expiry.cjs');
+const { createRequestGuard, readPositiveInt, readServerTimeouts } = require('./request-guard.cjs');
 
 const {
   CLOUDINARY_CLOUD_NAME,
@@ -62,7 +63,13 @@ const p2pOwnerDeleteApi = createP2pOwnerDeleteApi({ db, verifyToken, serverTimes
 const receiptApi = createReceiptApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const stockIntakeApi = createStockIntakeApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const inventoryApi = createInventoryApi({ db, auth: getAuth(), verifyToken });
-const inventoryEvents = createInventoryEvents({ db, verifyToken });
+const inventoryEvents = createInventoryEvents({
+  db, verifyToken,
+  maxConnectionsPerUser: readPositiveInt(process.env.SSE_MAX_CONNECTIONS_PER_USER, 3),
+  reconnectsPerMinute: readPositiveInt(process.env.SSE_RECONNECTS_PER_MINUTE, 10),
+});
+// RC1D-144: giới hạn request theo IP (429) và chặn truy cập trực tiếp khi đã đặt EDGE_SECRET.
+const requestGuard = createRequestGuard(process.env);
 const distributionHistoryApi = createDistributionHistoryApi({ db, auth: getAuth(), verifyToken });
 const distributionApi = createDistributionApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
 const reportsApi = createReportsApi({ db, verifyToken, serverTimestamp: () => FieldValue.serverTimestamp() });
@@ -145,10 +152,18 @@ const server = http.createServer(async (request, response) => {
     responseHeaders['Access-Control-Allow-Origin'] = origin;
     responseHeaders['Access-Control-Allow-Headers'] = 'Authorization, Content-Type';
     responseHeaders['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS';
+    // Để Web Admin đọc được thời gian chờ khi bị 429 (header này không nằm trong nhóm CORS mặc định).
+    responseHeaders['Access-Control-Expose-Headers'] = 'Retry-After';
     responseHeaders.Vary = 'Origin';
   }
 
   try {
+    // Kiểm trước khi đọc body hay mở SSE để request bị chặn không tốn tài nguyên.
+    const rejection = requestGuard.check(request, pathname);
+    if (rejection) {
+      if (rejection.retryAfterSeconds) responseHeaders['Retry-After'] = String(rejection.retryAfterSeconds);
+      throw new ApiError(rejection.status, rejection.message);
+    }
     if ((isAdminApi || isAdminImageRead) && origin && !allowedAdminOrigin) throw new ApiError(403, 'Origin is not allowed');
     if (isContactPath && origin && allowedContactOrigin && !contactOriginAllowed) {
       throw new ContactApiError(403, 'Origin is not allowed');
@@ -207,11 +222,14 @@ const server = http.createServer(async (request, response) => {
   } catch (error) {
     const status = error instanceof ApiError || error instanceof ContactApiError ? error.status : 500;
     if (status === 500) console.error('ReShare API failure:', error);
+    if (status === 429 && error.retryAfterSeconds) responseHeaders['Retry-After'] = String(error.retryAfterSeconds);
     response.writeHead(status, responseHeaders);
     response.end(JSON.stringify(errorBody(error, status)));
   }
 });
 
+// Timeout chỉ áp cho lúc nhận request; luồng SSE đang mở (phản hồi dài) không bị cắt.
+Object.assign(server, readServerTimeouts(process.env));
 server.listen(Number(process.env.PORT || 3000), '0.0.0.0');
 // Chỉ chạy khi backend được vận hành; cold start/sleep phải được kiểm chứng ở môi trường demo.
 const reservationExpiry = createReservationExpiry({ db });
