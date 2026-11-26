@@ -48,11 +48,15 @@ function safeEqual(a, b) {
  * Còn lại lấy phần tử thứ `proxyHops` tính từ cuối X-Forwarded-For: phần tử do proxy tin cậy
  * (Render) thêm vào, client không tự giả được; phần đầu chuỗi thì client gửi gì cũng được.
  */
-function clientIp(request, { edgeVerified = false, proxyHops = 1 } = {}) {
+function clientIp(request, { edgeVerified = false, proxyHops = 1, ipHeader = '' } = {}) {
   const headers = request.headers || {};
   if (edgeVerified && typeof headers['cf-connecting-ip'] === 'string' && headers['cf-connecting-ip'].trim()) {
     return headers['cf-connecting-ip'].trim();
   }
+  // CLIENT_IP_HEADER: header chứa IP thật do hạ tầng đặt (Render có Cloudflare đứng trước nên gửi True-Client-IP).
+  // Đo trên production 26/11: X-Forwarded-For của Render có nhiều proxy đổi theo từng request, đếm hop không ra IP thật.
+  const fromHeader = ipHeader && typeof headers[ipHeader] === 'string' ? headers[ipHeader].split(',')[0].trim() : '';
+  if (fromHeader) return fromHeader;
   const forwarded = typeof headers['x-forwarded-for'] === 'string'
     ? headers['x-forwarded-for'].split(',').map(part => part.trim()).filter(Boolean)
     : [];
@@ -75,6 +79,8 @@ function createRequestGuard(env = {}, { now = Date.now } = {}) {
   const proxyHops = Number.isSafeInteger(Number(env.TRUSTED_PROXY_HOPS)) && Number(env.TRUSTED_PROXY_HOPS) >= 0
     ? Number(env.TRUSTED_PROXY_HOPS) : 1;
   const enabled = env.RATE_LIMIT_ENABLED !== 'off';
+  const rawIpHeader = typeof env.CLIENT_IP_HEADER === 'string' ? env.CLIENT_IP_HEADER.trim().toLowerCase() : '';
+  const ipHeader = /^[a-z0-9-]{1,64}$/.test(rawIpHeader) ? rawIpHeader : '';
 
   /**
    * Kiểm một request trước khi đọc body. Trả null nếu cho qua,
@@ -87,7 +93,7 @@ function createRequestGuard(env = {}, { now = Date.now } = {}) {
     // Chỉ bật khi đặt EDGE_SECRET: lúc đó backend chỉ nhận request đi qua Cloudflare.
     if (edgeSecret && !edgeVerified) return { status: 403, message: 'Direct access is not allowed' };
     if (!enabled || request.method === 'OPTIONS') return null;
-    const ip = clientIp(request, { edgeVerified, proxyHops });
+    const ip = clientIp(request, { edgeVerified, proxyHops, ipHeader });
     const generalResult = general.take(ip);
     if (!generalResult.allowed) return { status: 429, message: 'Too many requests', retryAfterSeconds: generalResult.retryAfterSeconds };
     if (isWriteRequest(request.method, pathname)) {

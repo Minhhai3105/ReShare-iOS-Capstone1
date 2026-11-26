@@ -88,3 +88,18 @@ test('Timeout nhận request có mặc định và đọc được từ env', ()
   assert.deepEqual(readServerTimeouts({}), { headersTimeout: 15000, requestTimeout: 30000 });
   assert.deepEqual(readServerTimeouts({ SERVER_HEADERS_TIMEOUT_MS: '5000', SERVER_REQUEST_TIMEOUT_MS: 'x' }), { headersTimeout: 5000, requestTimeout: 30000 });
 });
+
+test('CLIENT_IP_HEADER: lấy IP thật từ header hạ tầng đặt (Render: True-Client-IP), mỗi IP một hạn mức', () => {
+  const headers = ip => ({ 'true-client-ip': ip, 'x-forwarded-for': `${ip}, 10.0.0.${Math.floor(Math.random() * 200)}` });
+  assert.equal(clientIp(request('GET', headers('203.0.113.7')), { ipHeader: 'true-client-ip' }), '203.0.113.7');
+  // Không đặt header thì quay về X-Forwarded-For như cũ.
+  assert.equal(clientIp(request('GET', { 'x-forwarded-for': '1.1.1.1, 2.2.2.2' }), { ipHeader: 'true-client-ip' }), '2.2.2.2');
+  const guard = createRequestGuard({ CLIENT_IP_HEADER: 'True-Client-IP', RATE_LIMIT_GENERAL_PER_MINUTE: '2' }, { now: () => 0 });
+  assert.equal(guard.check(request('GET', headers('203.0.113.7')), '/v1/public/hubs'), null);
+  assert.equal(guard.check(request('GET', headers('203.0.113.7')), '/v1/public/hubs'), null);
+  assert.equal(guard.check(request('GET', headers('203.0.113.7')), '/v1/public/hubs').status, 429);
+  assert.equal(guard.check(request('GET', headers('198.51.100.9')), '/v1/public/hubs'), null, 'người dùng khác không bị chặn lây');
+  // Tên header không hợp lệ thì bỏ qua, không đọc header lạ.
+  const bad = createRequestGuard({ CLIENT_IP_HEADER: 'x y', RATE_LIMIT_GENERAL_PER_MINUTE: '1' }, { now: () => 0 });
+  assert.equal(bad.check(request('GET', { 'x y': 'a' }, '10.0.0.5'), '/v1/public/hubs'), null);
+});
