@@ -55,36 +55,78 @@ function cloudinaryImageUrl(value) {
   } catch { return null; }
 }
 
-async function imageDataUrl(source, fetchImpl, timeoutMs) {
+function codedError(message, code, extra = {}) {
+  const error = new Error(message);
+  error.code = code;
+  return Object.assign(error, extra);
+}
+
+function sanitizeToken(value, pattern) {
+  return typeof value === 'string' && pattern.test(value) ? value : null;
+}
+
+function elapsedMs(startedAt, now) {
+  return Math.max(0, Math.round(now() - startedAt));
+}
+
+// Chỉ ghi các trường chẩn đoán an toàn: không ghi API key, URL ảnh, nội dung bài hay body từ nhà cung cấp.
+function defaultDiagnosticLogger(event) {
+  if (event.status === 'error') {
+    console.error('[ai-moderation]', JSON.stringify(event));
+    return;
+  }
+  if (event.trigger === 'manual') {
+    console.info('[ai-moderation]', JSON.stringify(event));
+  }
+}
+
+async function imageDataUrl(source, fetchImpl, timeoutMs, now = Date.now) {
+  const startedAt = now();
   const url = cloudinaryImageUrl(source);
-  if (!url) return null;
+  if (!url) return { dataUrl: null, error: 'invalid_url', ms: elapsedMs(startedAt, now) };
   const controller = new AbortController();
   let timer;
   let response;
+  let timedOut = false;
   try {
     const download = (async () => {
       response = await fetchImpl(url, { signal: controller.signal, redirect: 'error' });
-      if (!response.ok || !response.headers.get('content-type')?.toLowerCase().startsWith('image/')
-        || Number(response.headers.get('content-length')) > MAX_IMAGE_BYTES || !response.body) {
-        throw new Error('Invalid image response');
+      if (!response.ok) {
+        const statusCode = Number.isInteger(response.status) ? `http_${response.status}` : 'http_error';
+        throw codedError('Invalid image HTTP status', statusCode);
       }
+      if (!response.headers.get('content-type')?.toLowerCase().startsWith('image/')) {
+        throw codedError('Invalid image content-type', 'invalid_content_type');
+      }
+      if (Number(response.headers.get('content-length')) > MAX_IMAGE_BYTES) {
+        throw codedError('Image header exceeds limit', 'too_large');
+      }
+      if (!response.body) throw codedError('Empty image body', 'empty');
       let size = 0;
       const chunks = [];
       // Đếm byte ngay khi đọc stream; không đợi tải hết rồi mới kiểm kích thước.
       for await (const chunk of response.body) {
         size += chunk.byteLength;
-        if (size > MAX_IMAGE_BYTES) throw new Error('Image is too large');
+        if (size > MAX_IMAGE_BYTES) throw codedError('Image is too large', 'too_large');
         chunks.push(chunk);
       }
-      if (!size) throw new Error('Empty image');
+      if (!size) throw codedError('Empty image', 'empty');
       return `data:image/jpeg;base64,${Buffer.concat(chunks, size).toString('base64')}`;
     })();
     const timeout = new Promise((_, reject) => {
-      timer = setTimeout(() => { controller.abort(); reject(new Error('Image timeout')); }, timeoutMs);
+      timer = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+        reject(codedError('Image timeout', 'timeout'));
+      }, timeoutMs);
     });
-    return await Promise.race([download, timeout]);
-  } catch {
-    return null;
+    const dataUrl = await Promise.race([download, timeout]);
+    return { dataUrl, error: null, ms: elapsedMs(startedAt, now) };
+  } catch (error) {
+    const reason = timedOut || error?.code === 'timeout' || error?.name === 'AbortError'
+      ? 'timeout'
+      : sanitizeToken(error?.code, /^[a-z0-9_]{1,32}$/) || 'network_error';
+    return { dataUrl: null, error: reason, ms: elapsedMs(startedAt, now) };
   } finally {
     clearTimeout(timer);
     controller.abort();
@@ -92,7 +134,7 @@ async function imageDataUrl(source, fetchImpl, timeoutMs) {
   }
 }
 
-function createAiModerator({ baseUrl, apiKey, model, fetchImpl = fetch, timeoutMs = 15000, imageTimeoutMs = 10000 } = {}) {
+function createAiModerator({ baseUrl, apiKey, model, fetchImpl = fetch, timeoutMs = 15000, imageTimeoutMs = 10000, now = Date.now, onDiagnostic = defaultDiagnosticLogger } = {}) {
   const key = typeof apiKey === 'string' ? apiKey.trim() : '';
   const modelName = typeof model === 'string' ? model.trim() : '';
   let endpoint = null;
@@ -106,48 +148,164 @@ function createAiModerator({ baseUrl, apiKey, model, fetchImpl = fetch, timeoutM
   const enabled = Boolean(endpoint && key && modelName);
   const errorResult = () => ({ status: 'error', categories: [], reason: ERROR_REASON, confidence: 0, model: modelName || null, checkedAt: new Date().toISOString() });
 
-  async function check(input) {
-    if (!enabled) return errorResult();
+  async function check(input, meta = {}) {
+    const startedAt = now();
+    const baseDiag = {
+      listingId: sanitizeToken(meta?.listingId, /^[A-Za-z0-9_-]{1,128}$/),
+      trigger: meta?.trigger === 'manual' || meta?.trigger === 'background' ? meta.trigger : null,
+      status: 'error',
+      stage: 'config',
+      detail: null,
+      httpStatus: null,
+      finishReason: null,
+      networkCode: null,
+      model: sanitizeToken(modelName, /^[A-Za-z0-9_.:-]{1,80}$/) || (modelName ? 'configured' : null),
+      hasImages: false,
+      imagesTotal: 0,
+      imagesLoaded: 0,
+      imageFailures: [],
+      payloadBytes: null,
+      imageMs: 0,
+      modelHeadersMs: null,
+      modelMs: 0,
+      totalMs: 0,
+    };
+    const emitDiagnostic = patch => {
+      try {
+        onDiagnostic?.({ ...baseDiag, ...patch, totalMs: elapsedMs(startedAt, now) });
+      } catch { /* Không để lỗi ghi log làm ảnh hưởng luồng kiểm duyệt. */ }
+    };
+
+    if (!enabled) {
+      const detail = !endpoint ? 'invalid_base_url' : !key ? 'missing_api_key' : 'missing_model';
+      emitDiagnostic({ stage: 'config', detail });
+      return errorResult();
+    }
     const controller = new AbortController();
     let timer;
+    let modelStartedAt = null;
+    let timedOut = false;
     try {
       const data = moderationInput(input);
-      const images = (await Promise.all(data.imageUrls.map(url => imageDataUrl(url, fetchImpl, imageTimeoutMs))))
-        .filter(Boolean);
-      if (data.hasImages && !images.length) return errorResult();
+      baseDiag.hasImages = Boolean(data.hasImages);
+      baseDiag.imagesTotal = data.imageUrls.length;
+      const imageStartedAt = now();
+      const imageOutcomes = data.imageUrls.length
+        ? await Promise.all(data.imageUrls.map(url => imageDataUrl(url, fetchImpl, imageTimeoutMs, now)))
+        : [];
+      baseDiag.imageMs = data.imageUrls.length ? elapsedMs(imageStartedAt, now) : 0;
+      const images = imageOutcomes.map(item => item.dataUrl).filter(Boolean);
+      baseDiag.imagesLoaded = images.length;
+      baseDiag.imageFailures = imageOutcomes.map(item => item.error).filter(Boolean);
+      if (data.hasImages && !images.length) {
+        emitDiagnostic({
+          stage: 'image_download',
+          detail: data.imageUrls.length ? 'all_images_failed' : 'no_valid_image_urls',
+        });
+        return errorResult();
+      }
       const content = [
         { type: 'text', text: JSON.stringify({ title: data.title, donorNote: data.donorNote }) },
         ...images.map(url => ({ type: 'image_url', image_url: { url } })),
       ];
+      const payload = JSON.stringify({ model: modelName, messages: [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content }] });
+      baseDiag.payloadBytes = Buffer.byteLength(payload, 'utf8');
+      modelStartedAt = now();
       // Giới hạn cả fetch lẫn đọc body; kể cả fetch giả không xử lý AbortSignal vẫn kết thúc đúng hạn.
       const request = (async () => {
-        const response = await fetchImpl(endpoint, {
-          method: 'POST', redirect: 'error', signal: controller.signal,
-          headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: modelName, messages: [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content }] }),
-        });
-        if (!response.ok) throw new Error('AI request failed');
-        const body = await response.json();
-        const raw = body?.choices?.[0]?.message?.content;
-        if (typeof raw !== 'string' || raw.length > 16000) throw new Error('Invalid AI response');
+        let response;
+        try {
+          response = await fetchImpl(endpoint, {
+            method: 'POST', redirect: 'error', signal: controller.signal,
+            headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+            body: payload,
+          });
+        } catch (error) {
+          if (timedOut || error?.name === 'AbortError' || controller.signal.aborted) {
+            throw codedError('AI timeout', 'model_timeout', { detail: 'fetch_timeout' });
+          }
+          const networkCode = sanitizeToken(error?.cause?.code || error?.code || error?.name, /^[A-Za-z0-9_.-]{1,40}$/) || 'Error';
+          throw codedError('AI network failure', 'model_network', { networkCode, detail: 'fetch_error' });
+        }
+        baseDiag.modelHeadersMs = elapsedMs(modelStartedAt, now);
+        if (Number.isInteger(response?.status)) baseDiag.httpStatus = response.status;
+        if (!response.ok) {
+          throw codedError('AI request failed', 'model_http', { detail: 'non_ok_status' });
+        }
+        let body;
+        try {
+          body = await response.json();
+        } catch (error) {
+          if (timedOut || error?.name === 'AbortError' || controller.signal.aborted) {
+            throw codedError('AI timeout', 'model_timeout', { detail: 'body_timeout' });
+          }
+          throw codedError('Invalid HTTP JSON', 'response_json', { detail: 'invalid_http_json' });
+        }
+        const choice = body?.choices?.[0];
+        baseDiag.finishReason = sanitizeToken(choice?.finish_reason, /^[A-Za-z0-9_-]{1,32}$/);
+        const raw = choice?.message?.content;
+        if (typeof raw !== 'string') {
+          throw codedError('Invalid AI response', 'response_json', { detail: raw === null ? 'null_content' : 'missing_content' });
+        }
+        if (raw.length > 16000) {
+          throw codedError('Invalid AI response', 'response_json', { detail: 'content_too_long' });
+        }
         // Chỉ bỏ một cặp fence bao trọn phản hồi; không nhặt JSON lẫn trong văn bản giải thích.
         const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(raw.trim());
-        const parsed = JSON.parse(fenced ? fenced[1] : raw);
-        if (!parsed || !['safe', 'flagged'].includes(parsed.verdict) || !Array.isArray(parsed.categories)
-          || parsed.categories.some(category => !CATEGORIES.includes(category))
-          || typeof parsed.reason !== 'string' || !parsed.reason.trim()
-          || (parsed.verdict === 'safe' && parsed.categories.length)
-          || (parsed.verdict === 'flagged' && !parsed.categories.length)) throw new Error('Invalid AI verdict');
+        let parsed;
+        try {
+          parsed = JSON.parse(fenced ? fenced[1] : raw);
+        } catch {
+          throw codedError('Invalid verdict JSON', 'response_json', { detail: 'invalid_content_json' });
+        }
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          throw codedError('Invalid AI verdict', 'verdict_schema', { detail: 'non_object_json' });
+        }
+        if (!['safe', 'flagged'].includes(parsed.verdict)) {
+          throw codedError('Invalid AI verdict', 'verdict_schema', { detail: 'invalid_verdict' });
+        }
+        if (!Array.isArray(parsed.categories)) {
+          throw codedError('Invalid AI verdict', 'verdict_schema', { detail: 'invalid_categories_type' });
+        }
+        if (parsed.categories.some(category => !CATEGORIES.includes(category))) {
+          throw codedError('Invalid AI verdict', 'verdict_schema', { detail: 'unknown_category' });
+        }
+        if (typeof parsed.reason !== 'string' || !parsed.reason.trim()) {
+          throw codedError('Invalid AI verdict', 'verdict_schema', { detail: 'empty_reason' });
+        }
+        if (parsed.verdict === 'safe' && parsed.categories.length) {
+          throw codedError('Invalid AI verdict', 'verdict_schema', { detail: 'nonempty_safe_categories' });
+        }
+        if (parsed.verdict === 'flagged' && !parsed.categories.length) {
+          throw codedError('Invalid AI verdict', 'verdict_schema', { detail: 'empty_flagged_categories' });
+        }
         return {
           status: parsed.verdict, categories: [...new Set(parsed.categories)], reason: [...parsed.reason.trim()].slice(0, 200).join(''),
           confidence: normalizeConfidence(parsed.confidence), model: modelName, checkedAt: new Date().toISOString(),
         };
       })();
       const timeout = new Promise((_, reject) => {
-        timer = setTimeout(() => { controller.abort(); reject(new Error('AI timeout')); }, timeoutMs);
+        timer = setTimeout(() => {
+          timedOut = true;
+          controller.abort();
+          reject(codedError('AI timeout', 'model_timeout', { detail: baseDiag.modelHeadersMs === null ? 'fetch_timeout' : 'body_timeout' }));
+        }, timeoutMs);
       });
-      return await Promise.race([request, timeout]);
-    } catch {
+      const result = await Promise.race([request, timeout]);
+      emitDiagnostic({ status: result.status, stage: 'ok', detail: 'ok', modelMs: elapsedMs(modelStartedAt, now) });
+      return result;
+    } catch (error) {
+      const stage = timedOut ? 'model_timeout' : (sanitizeToken(error?.code, /^[a-z0-9_]{1,32}$/) || 'model_network');
+      const detail = timedOut
+        ? (baseDiag.modelHeadersMs === null ? 'fetch_timeout' : 'body_timeout')
+        : (sanitizeToken(error?.detail, /^[a-z0-9_]{1,40}$/) || 'unexpected_error');
+      emitDiagnostic({
+        status: 'error',
+        stage,
+        detail,
+        networkCode: error?.networkCode || null,
+        modelMs: modelStartedAt === null ? 0 : elapsedMs(modelStartedAt, now),
+      });
       // Không trả/log body của nhà cung cấp: có thể chứa lại bài đăng hoặc thông tin xác thực.
       return errorResult();
     } finally {
@@ -158,4 +316,4 @@ function createAiModerator({ baseUrl, apiKey, model, fetchImpl = fetch, timeoutM
   return { enabled, check };
 }
 
-module.exports = { CATEGORIES, ERROR_REASON, AUTO_REMOVE_DEFAULT_THRESHOLD, normalizeConfidence, readAiAutoRemoveConfig, moderationInput, createAiModerator };
+module.exports = { CATEGORIES, ERROR_REASON, AUTO_REMOVE_DEFAULT_THRESHOLD, normalizeConfidence, readAiAutoRemoveConfig, moderationInput, createAiModerator, defaultDiagnosticLogger };

@@ -91,13 +91,14 @@ test('AI kiểm duyệt nền: ưu tiên createdAt mới nhất và dừng ở b
   assert.equal(db.data('e-invalid').aiModeration, undefined);
 });
 
-test('AI kiểm duyệt nền: giới hạn song song và tiếp tục sau lỗi của một bài', async () => {
+test('AI kiểm duyệt nền: giới hạn song song và tiếp tục sau lỗi của một bài', async t => {
+  t.mock.method(console, 'error', () => {});
   const db = listingStore(Array.from({ length: 8 }, (_, i) => [String(i), listing(String(i), i + 1)]));
   const calls = [];
   let active = 0;
   let maxActive = 0;
-  const jobs = createAiModerationJobs({ db, concurrency: 2, moderator: { enabled: true, async check({ title }) {
-    calls.push(title);
+  const jobs = createAiModerationJobs({ db, concurrency: 2, moderator: { enabled: true, async check({ title }, meta) {
+    calls.push({ title, meta });
     active += 1;
     maxActive = Math.max(maxActive, active);
     try {
@@ -110,7 +111,8 @@ test('AI kiểm duyệt nền: giới hạn song song và tiếp tục sau lỗi
   assert.deepEqual(await jobs.runOnce(), { enabled: true, skipped: true, checked: 0 });
   assert.equal((await first).checked, 8);
   assert.equal(maxActive, 2);
-  assert.equal(new Set(calls).size, 8);
+  assert.equal(new Set(calls.map(c => c.title)).size, 8);
+  assert.ok(calls.every(c => c.meta.trigger === 'background' && typeof c.meta.listingId === 'string'));
   assert.equal(db.data('7').aiModeration.status, 'error');
   assert.equal(db.data('7').status, 'available');
   assert.equal(db.data('0').aiModeration.status, 'safe');
