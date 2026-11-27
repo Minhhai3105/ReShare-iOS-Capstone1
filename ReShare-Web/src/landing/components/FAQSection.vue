@@ -41,7 +41,7 @@ const questions = [
   },
   {
     question: 'Các điểm tiếp nhận ở đâu?',
-    answer: 'Thông tin Hub đã được xác minh sẽ được cập nhật tại khu vực Hub trên trang này. Hiện thông tin đang sắp cập nhật.',
+    answer: 'ReShare có ba Hub tiếp nhận tại Đà Nẵng: Hải Châu, Liên Chiểu và Ngũ Hành Sơn. Địa chỉ và giờ tiếp nhận sẽ được cập nhật tại khu vực Hub trên trang này khi Hub chính thức hoạt động.',
   },
   {
     question: 'Làm sao để liên hệ với ReShare?',
