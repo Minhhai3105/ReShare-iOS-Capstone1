@@ -1,6 +1,6 @@
 <script setup>
 // Khung quản trị dùng chung cho mọi trang sau đăng nhập: sidebar cố định (thu gọn được) và thanh trên cùng.
-import { computed, provide, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import AuthIcon from '../auth/components/AuthIcon.vue'
 import logoUrl from '../auth/assets/reshare-logo.png'
@@ -22,6 +22,16 @@ function readCollapsed() {
 
 const collapsed = ref(readCollapsed())
 const mobileOpen = ref(false)
+const mobileViewport = window.matchMedia('(max-width: 900px)')
+const isMobile = ref(mobileViewport.matches)
+
+function updateViewport(event) {
+  isMobile.value = event.matches
+  mobileOpen.value = false
+}
+
+onMounted(() => mobileViewport.addEventListener('change', updateViewport))
+onUnmounted(() => mobileViewport.removeEventListener('change', updateViewport))
 
 watch(collapsed, (value) => {
   try { window.localStorage.setItem(COLLAPSED_KEY, value ? '1' : '0') } catch { /* trình duyệt chặn lưu trữ: chỉ mất ghi nhớ */ }
@@ -43,21 +53,12 @@ const crumbs = computed(() => {
 const showBack = computed(() => route.name !== ADMIN_ROUTE.home)
 const roleLabel = computed(() => USER_ROLE_LABEL[role.value] ?? 'Nhân sự')
 // Trên điện thoại sidebar là menu trượt: khi mở luôn hiện đầy đủ, không phụ thuộc trạng thái thu gọn của máy tính.
-const showFull = computed(() => !collapsed.value || mobileOpen.value)
-
-function isMobile() {
-  return window.matchMedia('(max-width: 900px)').matches
-}
+const showFull = computed(() => isMobile.value ? mobileOpen.value : !collapsed.value)
 const userLabel = computed(() => currentUser.value?.displayName || currentUser.value?.email || 'Nhân sự')
 
 function toggleSidebar() {
-  if (isMobile()) mobileOpen.value = !mobileOpen.value
+  if (isMobile.value) mobileOpen.value = !mobileOpen.value
   else collapsed.value = !collapsed.value
-}
-
-function collapseSidebar() {
-  if (isMobile()) mobileOpen.value = false
-  else collapsed.value = true
 }
 
 function goBack() {
@@ -81,7 +82,7 @@ async function logout() {
     <aside id="admin-sidebar" class="admin-sidebar" aria-label="Thanh điều hướng quản trị">
       <div class="admin-sidebar__head">
         <button
-          v-if="!showFull"
+          v-if="!isMobile && collapsed"
           type="button"
           class="admin-sidebar__logo-button"
           aria-label="Mở rộng thanh điều hướng"
@@ -97,17 +98,6 @@ async function logout() {
             <img :src="logoUrl" alt="" />
             <span><strong>ReShare</strong><small>Admin Portal</small></span>
           </RouterLink>
-          <button
-            type="button"
-            class="admin-sidebar__collapse"
-            aria-label="Thu gọn thanh điều hướng"
-            title="Thu gọn"
-            :aria-expanded="true"
-            aria-controls="admin-sidebar"
-            @click="collapseSidebar"
-          >
-            <AuthIcon name="chevron-left" :size="18" />
-          </button>
         </template>
       </div>
 
@@ -141,7 +131,7 @@ async function logout() {
         <button
           type="button"
           class="admin-topbar__icon"
-          :aria-label="collapsed ? 'Mở rộng thanh điều hướng' : 'Thu gọn thanh điều hướng'"
+          :aria-label="showFull ? 'Thu gọn thanh điều hướng' : 'Mở rộng thanh điều hướng'"
           aria-controls="admin-sidebar"
           :aria-expanded="showFull"
           @click="toggleSidebar"
@@ -210,7 +200,6 @@ async function logout() {
 .admin-sidebar__brand span { display: flex; flex-direction: column; line-height: 1.2; }
 .admin-sidebar__brand strong { font-size: 18px; }
 .admin-sidebar__brand small { color: var(--auth-text-secondary); font-size: 12px; }
-.admin-sidebar__collapse,
 .admin-sidebar__logo-button,
 .admin-topbar__icon {
   display: grid;
@@ -221,8 +210,6 @@ async function logout() {
   color: var(--auth-text-secondary);
   cursor: pointer;
 }
-.admin-sidebar__collapse { width: 34px; height: 34px; }
-.admin-sidebar__collapse:hover,
 .admin-topbar__icon:hover { background: var(--auth-primary-soft); color: var(--auth-primary); }
 .admin-sidebar__logo-button { width: 48px; height: 48px; margin: 0 auto; }
 .admin-sidebar__logo-button:hover { background: var(--auth-primary-soft); }

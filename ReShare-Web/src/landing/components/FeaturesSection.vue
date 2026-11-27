@@ -4,6 +4,8 @@ const features = [
   { icon: '✳', title: 'Gợi ý danh mục bằng AI', body: 'Gợi ý danh mục từ ảnh khi quyên góp và khi đăng món ở Kho đồ 0đ.' },
   { icon: '⌕', title: 'Kiểm tra và chỉnh sửa', body: 'Xem lại thông tin, xác nhận hoặc chỉnh sửa trước khi gửi.' },
   { icon: '⌂', title: 'Tiếp nhận tại kho', body: 'Kho ghi nhận và quản lý vật phẩm sau khi được bàn giao.' },
+  { icon: '◷', title: 'Theo dõi đơn quyên góp', body: 'Xem trạng thái xử lý và phản hồi của kho trong lịch sử quyên góp.' },
+  { icon: '♧', title: 'Kho đồ 0đ', body: 'Đăng tặng, tìm món đồ và nhắn tin hẹn trao nhận trực tiếp.' },
 ]
 </script>
 
@@ -15,7 +17,7 @@ const features = [
           <span class="eyebrow"><span class="eyebrow-dot"></span> TÍNH NĂNG</span>
           <h2>Những tính năng chính của ReShare</h2>
         </div>
-        <p>Công cụ hỗ trợ quy trình quyên góp từ lúc khai báo đến khi vật phẩm được tiếp nhận.</p>
+        <p>Quyên góp qua kho hoặc trao tặng đồ trực tiếp trong cộng đồng.</p>
       </div>
       <div class="feature-grid">
         <article v-for="(feature, index) in features" :key="feature.title" class="feature-card">

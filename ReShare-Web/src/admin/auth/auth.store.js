@@ -1,31 +1,49 @@
 import { computed, reactive } from 'vue'
 import { onAuthStateChanged } from 'firebase/auth'
 import { auth } from './firebase'
-import { requestSignIn, requestSignOut, requestStaffAssignment, watchStaffAssignment } from './auth.service'
+import { requestProfileDisplayName, requestSignIn, requestSignOut, requestStaffAssignment, watchStaffAssignment } from './auth.service'
 import { ADMIN_ROLES, FORBIDDEN_REASON, USER_ROLE } from './auth.constants'
 
-const state = reactive({ user: null, staffAssignment: null, assignmentUnavailable: false, isLoading: false })
+const state = reactive({ user: null, profileDisplayName: '', staffAssignment: null, assignmentUnavailable: false, isLoading: false })
 let stopWatchingAssignment = null
+let profileRead = null
 let restorePromise = null
 let onAccessChanged = null
 
 export const currentUser = computed(() => state.user && ({
   id: state.user.uid,
   email: state.user.email,
-  displayName: state.user.displayName || state.user.email,
+  displayName: authDisplayName(state.user) || state.profileDisplayName || state.user.email,
 }))
 export const staffAssignment = computed(() => state.staffAssignment)
 export const isLoading = computed(() => state.isLoading)
 export const isAuthenticated = computed(() => Boolean(state.user))
+
+function authDisplayName(user) {
+  const name = user.displayName?.trim() || ''
+  return name.toLowerCase() === user.email?.toLowerCase() ? '' : name
+}
 
 function setUser(user) {
   if (state.user?.uid === user?.uid) return
   stopWatchingAssignment?.()
   stopWatchingAssignment = null
   state.user = user
+  state.profileDisplayName = ''
+  profileRead = null
   state.staffAssignment = null
   state.assignmentUnavailable = false
-  if (!user) onAccessChanged?.()
+  if (!user) {
+    onAccessChanged?.()
+  } else if (!authDisplayName(user)) {
+    const read = requestProfileDisplayName(user)
+    profileRead = read
+    read.then((name) => {
+      if (profileRead === read && name.toLowerCase() !== user.email?.toLowerCase()) {
+        state.profileDisplayName = name
+      }
+    }).catch(() => { /* Hồ sơ là thông tin hiển thị bổ sung. */ })
+  }
 }
 
 async function loadStaffAssignment(user) {

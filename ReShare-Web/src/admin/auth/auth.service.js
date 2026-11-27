@@ -47,6 +47,12 @@ export async function requestStaffAssignment(user) {
   }
 }
 
+export async function requestProfileDisplayName(user) {
+  const snapshot = await getDocFromServer(doc(db, 'users', user.uid))
+  const displayName = snapshot.data()?.displayName
+  return typeof displayName === 'string' ? displayName.trim() : ''
+}
+
 export function watchStaffAssignment(user, callback, onError) {
   return onSnapshot(doc(db, 'staff_assignments', user.uid), (snapshot) => {
     if (!snapshot.metadata.fromCache) callback(snapshot.exists() ? snapshot.data() : null)

@@ -19,7 +19,7 @@ const roleLabel = computed(() => {
     <div>
       <dt>Họ tên</dt>
       <dd v-if="user.displayName && user.displayName !== user.email">{{ user.displayName }}</dd>
-      <dd v-else class="auth-account-info__empty">Chưa đặt tên hiển thị</dd>
+      <dd v-else class="auth-account-info__empty">Chưa cập nhật họ tên</dd>
     </div>
     <div>
       <dt>Email</dt>

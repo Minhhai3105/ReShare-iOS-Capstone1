@@ -354,11 +354,13 @@ watch(enlarged, async (value) => {
           <template v-if="isSystemAdmin">
             <form v-if="canAssignWarehouse" @submit.prevent="assignWarehouse">
               <label for="assign-warehouse">Kho đang hoạt động</label>
-              <select id="assign-warehouse" v-model="selectedWarehouseId" required :disabled="assigningWarehouse || !warehouses.length">
-                <option value="" disabled>Chọn kho xử lý</option>
-                <option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">{{ warehouse.name }}</option>
-              </select>
-              <button type="submit" :disabled="assigningWarehouse || !selectedWarehouseId">{{ assigningWarehouse ? 'Đang gán…' : 'Gán kho cho đơn' }}</button>
+              <div class="field-actions">
+                <select id="assign-warehouse" v-model="selectedWarehouseId" required :disabled="assigningWarehouse || !warehouses.length">
+                  <option value="" disabled>Chọn kho xử lý</option>
+                  <option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">{{ warehouse.name }}</option>
+                </select>
+                <button type="submit" :disabled="assigningWarehouse || !selectedWarehouseId">{{ assigningWarehouse ? 'Đang gán…' : 'Gán kho cho đơn' }}</button>
+              </div>
             </form>
             <p v-else-if="!donation.warehouseId" class="notice">Chỉ gán được đơn chưa có kho đang chờ thẩm định hoặc đã duyệt.</p>
             <p v-if="assignmentError" role="alert" class="notice error">{{ assignmentError }}</p>
@@ -392,10 +394,12 @@ watch(enlarged, async (value) => {
               <p v-if="donation.staffConfirmedAt">Xác nhận lúc {{ formatDate(donation.staffConfirmedAt) }} bởi {{ donation.staffConfirmedByEmail || donation.staffConfirmedBy }}</p>
               <form v-if="!localPreview && donation.status !== 'cancelled'" @submit.prevent="confirmCategory">
                 <label for="staff-category">Danh mục thực tế theo nhân sự</label>
-                <select id="staff-category" v-model="staffCategory" :disabled="aiSubmitting || !allowed">
-                  <option value="clothing">Quần áo</option><option value="books">Sách vở</option><option value="household">Gia dụng</option>
-                </select>
-                <button type="submit" :disabled="aiSubmitting || !allowed || !staffCategory">{{ aiSubmitting ? 'Đang lưu…' : 'Lưu xác nhận danh mục' }}</button>
+                <div class="field-actions">
+                  <select id="staff-category" v-model="staffCategory" :disabled="aiSubmitting || !allowed">
+                    <option value="clothing">Quần áo</option><option value="books">Sách vở</option><option value="household">Gia dụng</option>
+                  </select>
+                  <button type="submit" :disabled="aiSubmitting || !allowed || !staffCategory">{{ aiSubmitting ? 'Đang lưu…' : 'Lưu xác nhận danh mục' }}</button>
+                </div>
                 <p v-if="aiError" role="alert" class="notice error">{{ aiError }}</p>
                 <p v-if="aiSuccess" role="status" class="notice success">{{ aiSuccess }}</p>
               </form>
@@ -483,6 +487,8 @@ dt { color: #596274; font-size: 13px; } dd { font-weight: 600; overflow-wrap: an
 .history p { white-space: pre-wrap; overflow-wrap: anywhere; }
 fieldset { border: 0; padding: 0; margin: 0; min-width: 0; } legend { font-weight: 600; }
 label { display: block; font-weight: 600; margin-top: 18px; } .radio { font-weight: 400; display: flex; align-items: center; gap: 8px; margin: 12px 0; }
+.field-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
+.field-actions select { min-height: 44px; max-width: 100%; }
 textarea,select,button { font: inherit; border: 1px solid #c8d0c8; border-radius: 8px; padding: 10px 12px; }
 textarea { display: block; width: 100%; resize: vertical; margin-top: 8px; } small { display: block; color: #596274; margin-top: 6px; }
 button { min-height: 44px; cursor: pointer; background: white; color: #25382b; } button:disabled { cursor: not-allowed; opacity: .6; }

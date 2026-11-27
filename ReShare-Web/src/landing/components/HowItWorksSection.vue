@@ -1,4 +1,8 @@
 <script setup>
+import { ref } from 'vue'
+
+const hoveredStep = ref(null)
+
 const steps = [
   { number: '01', icon: 'package', title: 'Mở ứng dụng', body: 'Người dùng truy cập ReShare để bắt đầu quy trình quyên góp.' },
   { number: '02', icon: 'camera', title: 'Chụp ảnh', body: 'Người dùng chụp ảnh món đồ để gửi cùng yêu cầu quyên góp.' },
@@ -26,7 +30,9 @@ const steps = [
           v-for="step in steps"
           :key="step.number"
           class="process-card"
-          :class="{ 'process-card--active': step.number === '02' }"
+          :class="{ 'process-card--active': hoveredStep === step.number }"
+          @pointerenter="hoveredStep = $event.pointerType === 'mouse' ? step.number : null"
+          @pointerleave="hoveredStep = null"
         >
           <div class="process-card__top">
             <span class="process-icon" aria-hidden="true">
