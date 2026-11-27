@@ -223,12 +223,32 @@ body:has(.landing-page) {
 }
 
 .landing-page .eyebrow-dot {
+  position: relative;
   width: 7px;
   height: 7px;
   flex: 0 0 auto;
   border-radius: 50%;
   background: #65a881;
   box-shadow: 0 0 0 4px rgba(101, 168, 129, 0.13);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .landing-page .eyebrow-dot::after {
+    position: absolute;
+    inset: -3px;
+    border-radius: inherit;
+    background: inherit;
+    opacity: 0;
+    pointer-events: none;
+    content: '';
+    animation: landing-eyebrow-glow 3s ease-out infinite;
+  }
+}
+
+@keyframes landing-eyebrow-glow {
+  0% { opacity: 0; transform: scale(0.55); }
+  18% { opacity: 0.32; transform: scale(0.9); }
+  70%, 100% { opacity: 0; transform: scale(1.9); }
 }
 
 .landing-page .hero-copy h1 {
