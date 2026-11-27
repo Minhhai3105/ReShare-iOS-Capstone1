@@ -385,7 +385,7 @@ onBeforeUnmount(() => {
             aria-haspopup="dialog"
             @click="openWarehouseSelector"
           >
-            <AuthIcon name="warehouse" :size="17" />{{ selectedWarehouseLabel }} <span aria-hidden="true">⌄</span>
+            <AuthIcon name="warehouse" :size="17" />{{ selectedWarehouseLabel }} <AuthIcon name="chevron-down" :size="16" />
           </button>
           <span class="admin-ops__topbar-role"><AuthIcon name="shield-check" :size="16" />{{ roleLabel }}</span>
           <span class="admin-ops__user"><AuthIcon name="user" :size="18" />{{ currentUser.displayName || currentUser.email }}</span>
@@ -407,7 +407,7 @@ onBeforeUnmount(() => {
                   aria-haspopup="dialog"
                   @click="openWarehouseSelector"
                 >
-                  <AuthIcon name="warehouse" :size="17" />{{ selectedWarehouseLabel }} <span aria-hidden="true">⌄</span>
+                  <AuthIcon name="warehouse" :size="17" />{{ selectedWarehouseLabel }} <AuthIcon name="chevron-down" :size="16" />
                 </button>
                 <span v-if="!inShell" class="auth-chip admin-dashboard__role"><span class="auth-dot" />{{ roleLabel }}</span>
                 <RouterLink :to="{ name: ADMIN_ROUTE.donationQueue }" class="auth-btn auth-btn--primary">

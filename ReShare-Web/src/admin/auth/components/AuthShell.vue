@@ -11,11 +11,7 @@ const currentYear = new Date().getFullYear()
   <div class="auth-shell">
     <header class="auth-shell__header">
       <div class="auth-shell__brand">
-        <span class="auth-shell__logo">
-          <img class="auth-shell__logo-mark" :src="logoUrl" alt="" />
-          ReShare
-          <span class="auth-shell__logo-tag">Portal</span>
-        </span>
+        <img class="auth-shell__logo-mark" :src="logoUrl" alt="" />
         <span class="auth-shell__title">
           <strong>ReShare</strong>
           <span>Portal quản trị hệ thống</span>
