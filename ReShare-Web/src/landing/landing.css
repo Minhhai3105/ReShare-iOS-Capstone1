@@ -4738,3 +4738,23 @@ body:has(.landing-page) {
     max-height: calc(100dvh - 70px);
   }
 }
+
+/* Hub tiếp nhận: chỉ hiện tên quận (chưa có địa chỉ chính thức). */
+.landing-page .points-grid--names {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.landing-page .point-card--name {
+  display: grid;
+  gap: 6px;
+  min-height: 0;
+  padding: 22px 20px;
+  text-align: center;
+}
+
+.landing-page .point-card--name h3,
+.landing-page .point-card--name .point-detail {
+  margin: 0;
+}
